@@ -26,6 +26,7 @@ open-mmi-canbusd = "canbusd.core:main"
 open-mmi-config = "ui.config_cli:main"
 open-mmi-dashboard = "ui.web_dashboard.server:main"
 open-mmi-launcher = "ui.launcher:main"
+open-mmi-powerd = "powerd.cli:main"
 open-mmi-status = "ui.dashboard.status_cli:main"
 open-mmi-update-coordinator = "ui.update_coordinator:main"
 open-mmi-update-installer = "ui.update_installer:main"
@@ -37,6 +38,7 @@ include = [
     "actions*",
     "bindings*",
     "canbusd*",
+    "powerd*",
     "ui*",
     "vehicles*"
 ]

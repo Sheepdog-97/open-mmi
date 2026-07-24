@@ -18,6 +18,12 @@ UPDATE_INSTALLER_UNIT="open-mmi-update-installer.service"
 VEHICLE_CONFIG_COORDINATOR_GROUP="open-mmi-config"
 VEHICLE_CONFIG_COORDINATOR_UNIT="open-mmi-vehicle-config-coordinator.service"
 VEHICLE_CAN_PROVISION_UNIT="open-mmi-vehicle-can-provision.service"
+POWERD_UNIT="open-mmi-powerd.service"
+POWER_POLICY_FILE="/etc/open-mmi/power-policy.json"
+POWERD_WAKE_UDEV_RULE="90-open-mmi-can-wake.rules"
+POWERD_WAKE_UDEV_RULE_PATH="/etc/udev/rules.d/$POWERD_WAKE_UDEV_RULE"
+OPEN_MMI_TMPFILES_CONFIG="open-mmi.conf"
+OPEN_MMI_TMPFILES_CONFIG_PATH="/usr/lib/tmpfiles.d/$OPEN_MMI_TMPFILES_CONFIG"
 VEHICLE_CONFIG_COORDINATOR_ENV="/etc/open-mmi/vehicle-config-coordinator.env"
 VEHICLE_CONFIG_UI_QUALIFICATION_GATE="/etc/open-mmi/vehicle-configuration-ui-qualification"
 VEHICLE_CONFIG_COORDINATOR_OVERRIDE_DIR="/etc/systemd/system/$VEHICLE_CONFIG_COORDINATOR_UNIT.d"
@@ -55,6 +61,7 @@ OPEN_MMI_COMMANDS=(
     open-mmi-config
     open-mmi-dashboard
     open-mmi-launcher
+    open-mmi-powerd
     open-mmi-status
     open-mmi-update-coordinator
     open-mmi-update-installer
@@ -747,6 +754,11 @@ install_update_coordinator() {
 }
 
 install_open_mmi_transaction_locks() {
+    install -d -m 0755 -o root -g root "$(dirname "$OPEN_MMI_TMPFILES_CONFIG_PATH")"
+    install -m 0644 -o root -g root \
+        "$REPO_ROOT/packaging/tmpfiles/$OPEN_MMI_TMPFILES_CONFIG" \
+        "$OPEN_MMI_TMPFILES_CONFIG_PATH"
+    systemd-tmpfiles --create "$OPEN_MMI_TMPFILES_CONFIG_PATH"
     install -d -m 0755 -o root -g root "$UPDATE_COORDINATOR_RUNTIME_DIR"
     python3 - "$UPDATE_COORDINATOR_RUNTIME_DIR" 0 0 <<'PY_OPEN_MMI_TRANSACTION_LOCKS'
 import os
@@ -953,6 +965,112 @@ remove_login_autostart() {
 }
 
 
+power_policy_enabled() {
+    python3 - "$POWER_POLICY_FILE" <<'PY_POWER_POLICY_ENABLED'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    value = json.loads(path.read_text(encoding="utf-8"))
+except (OSError, ValueError):
+    raise SystemExit(1)
+if not isinstance(value, dict) or value.get("schema_version") != 1:
+    raise SystemExit(1)
+raise SystemExit(0 if value.get("enabled") is True else 1)
+PY_POWER_POLICY_ENABLED
+}
+
+reconcile_power_manager() {
+    if [ ! -f "/etc/systemd/system/$POWERD_UNIT" ]; then
+        systemctl disable --now "$POWERD_UNIT" >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    if power_policy_enabled; then
+        systemctl enable "$POWERD_UNIT" >/dev/null
+        systemctl restart "$POWERD_UNIT"
+    else
+        systemctl disable --now "$POWERD_UNIT" >/dev/null 2>&1 || true
+    fi
+}
+
+install_power_manager() {
+    install -d -m 0755 -o root -g root \
+        /etc/open-mmi /etc/systemd/system /etc/udev/rules.d
+    if [ ! -f "$POWER_POLICY_FILE" ]; then
+        cat > "$POWER_POLICY_FILE" <<'EOF_POWER_POLICY'
+{
+  "schema_version": 1,
+  "enabled": false,
+  "trigger": "can_bus_silence",
+  "silence_seconds": 60,
+  "require_remote_wake": true,
+  "resume_guard_seconds": 30
+}
+EOF_POWER_POLICY
+    fi
+    chown root:root "$POWER_POLICY_FILE"
+    chmod 0644 "$POWER_POLICY_FILE"
+    install -m 0644 -o root -g root \
+        "$REPO_ROOT/systemd/system/$POWERD_UNIT" \
+        "/etc/systemd/system/$POWERD_UNIT"
+    install -m 0644 -o root -g root \
+        "$REPO_ROOT/packaging/udev/$POWERD_WAKE_UDEV_RULE" \
+        "$POWERD_WAKE_UDEV_RULE_PATH"
+    udevadm control --reload-rules
+    udevadm trigger \
+        --subsystem-match=net \
+        --sysname-match='can*' \
+        --action=change || true
+    systemctl daemon-reload
+    reconcile_power_manager
+}
+
+cmd_power() {
+    local subcommand="${1:-status}"
+    local seconds="${2:-60}"
+    local command="$INSTALL_DIR/venv/bin/open-mmi-powerd"
+
+    if [ ! -x "$command" ] || [ ! -f "/etc/systemd/system/$POWERD_UNIT" ]; then
+        log_error "Power management is not installed; update the nightly installation first"
+        return 1
+    fi
+
+    case "$subcommand" in
+        enable)
+            if ! [[ "$seconds" =~ ^[0-9]+$ ]] || [ "$seconds" -lt 10 ] || [ "$seconds" -gt 86400 ]; then
+                log_error "Suspend silence must be an integer from 10 to 86400 seconds"
+                return 1
+            fi
+            "$command" policy enable \
+                --policy "$POWER_POLICY_FILE" \
+                --silence-seconds "$seconds" >/dev/null
+            chown root:root "$POWER_POLICY_FILE"
+            chmod 0644 "$POWER_POLICY_FILE"
+            systemctl enable --now "$POWERD_UNIT"
+            log_success "Automatic suspend enabled after ${seconds}s of healthy CAN silence"
+            ;;
+        disable)
+            "$command" policy disable --policy "$POWER_POLICY_FILE" >/dev/null
+            chown root:root "$POWER_POLICY_FILE"
+            chmod 0644 "$POWER_POLICY_FILE"
+            systemctl disable --now "$POWERD_UNIT" >/dev/null 2>&1 || true
+            log_success "Automatic suspend disabled"
+            ;;
+        status)
+            systemctl --no-pager --full status "$POWERD_UNIT" || true
+            echo
+            "$command" policy show --policy "$POWER_POLICY_FILE" || true
+            ;;
+        *)
+            echo "Usage: sudo $0 power enable [silence-seconds] | disable | status"
+            return 1
+            ;;
+    esac
+}
+
 # =============================================================================
 # PROFILE-DRIVEN PROVISIONING
 # =============================================================================
@@ -1082,6 +1200,7 @@ cmd_install() {
     cp -r "$REPO_ROOT/vehicles" "$INSTALL_DIR/"
     cp -r "$REPO_ROOT/bindings" "$INSTALL_DIR/"
     cp -r "$REPO_ROOT/actions" "$INSTALL_DIR/"
+    cp -r "$REPO_ROOT/powerd" "$INSTALL_DIR/"
 
     if [ -d "$REPO_ROOT/ui" ]; then
         cp -r "$REPO_ROOT/ui" "$INSTALL_DIR/"
@@ -1103,6 +1222,7 @@ cmd_install() {
     fi
     install_update_coordinator
     install_vehicle_config_coordinator
+    install_power_manager
     
     # Store version and the managed source descriptor used by read-only checks.
     get_current_version > "$VERSION_FILE"
@@ -1230,12 +1350,13 @@ cmd_update() {
     # =========================================================
     log_info "Deploying to system..."
 
-    sudo rm -rf         "$INSTALL_DIR/canbusd"         "$INSTALL_DIR/vehicles"         "$INSTALL_DIR/bindings"         "$INSTALL_DIR/actions"         "$INSTALL_DIR/ui"         "$INSTALL_DIR/scripts"         "$INSTALL_DIR/packaging"
+    sudo rm -rf         "$INSTALL_DIR/canbusd"         "$INSTALL_DIR/vehicles"         "$INSTALL_DIR/bindings"         "$INSTALL_DIR/actions"         "$INSTALL_DIR/powerd"         "$INSTALL_DIR/ui"         "$INSTALL_DIR/scripts"         "$INSTALL_DIR/packaging"
 
     sudo cp -r "$REPO_ROOT/canbusd" "$INSTALL_DIR/"
     sudo cp -r "$REPO_ROOT/vehicles" "$INSTALL_DIR/"
     sudo cp -r "$REPO_ROOT/bindings" "$INSTALL_DIR/"
     sudo cp -r "$REPO_ROOT/actions" "$INSTALL_DIR/"
+    sudo cp -r "$REPO_ROOT/powerd" "$INSTALL_DIR/"
 
     if [ -d "$REPO_ROOT/ui" ]; then
         sudo cp -r "$REPO_ROOT/ui" "$INSTALL_DIR/"
@@ -1257,6 +1378,7 @@ cmd_update() {
     fi
     install_update_coordinator
     install_vehicle_config_coordinator
+    install_power_manager
 
     local user_systemd_dir="$REAL_HOME/.config/systemd/user"
     sudo install -d -m 0755 -o "$REAL_USER" -g "$REAL_USER" "$user_systemd_dir"
@@ -1315,6 +1437,10 @@ cmd_deploy_prepared() {
         log_error "Prepared commit identity changed"; return 1;
     }
 
+    # Failures before the rollback function is installed still need a
+    # user-visible, allowlisted stage instead of a generic deployment error.
+    trap 'log_error "Prepared deployment failed at stage: $deployment_stage"' ERR
+
     install -d -m 0700 -o root -g root "$rollback_root"
     if [ -e "$INSTALL_DIR" ]; then
         cp -a -- "$INSTALL_DIR" "$rollback_root/installation"
@@ -1324,7 +1450,7 @@ cmd_deploy_prepared() {
         "$rollback_root/system-units" \
         "$rollback_root/system-files" \
         "$rollback_root/user-units"
-    for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT"; do
+    for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT" "$POWERD_UNIT"; do
         if [ -e "/etc/systemd/system/$unit" ]; then
             cp -a -- "/etc/systemd/system/$unit" "$rollback_root/system-units/$unit"
         else
@@ -1342,6 +1468,24 @@ cmd_deploy_prepared() {
             "$rollback_root/system-files/vehicle-config-coordinator-sandbox.conf"
     else
         : > "$rollback_root/system-files/vehicle-config-coordinator-sandbox.conf.absent"
+    fi
+    if [ -e "$POWER_POLICY_FILE" ]; then
+        cp -a -- "$POWER_POLICY_FILE" \
+            "$rollback_root/system-files/power-policy.json"
+    else
+        : > "$rollback_root/system-files/power-policy.json.absent"
+    fi
+    if [ -e "$POWERD_WAKE_UDEV_RULE_PATH" ]; then
+        cp -a -- "$POWERD_WAKE_UDEV_RULE_PATH" \
+            "$rollback_root/system-files/$POWERD_WAKE_UDEV_RULE"
+    else
+        : > "$rollback_root/system-files/$POWERD_WAKE_UDEV_RULE.absent"
+    fi
+    if [ -e "$OPEN_MMI_TMPFILES_CONFIG_PATH" ]; then
+        cp -a -- "$OPEN_MMI_TMPFILES_CONFIG_PATH" \
+            "$rollback_root/system-files/$OPEN_MMI_TMPFILES_CONFIG"
+    else
+        : > "$rollback_root/system-files/$OPEN_MMI_TMPFILES_CONFIG.absent"
     fi
     for unit in canbusd.service open-mmi-dashboard.service; do
         if [ -e "$REAL_HOME/.config/systemd/user/$unit" ]; then
@@ -1372,7 +1516,7 @@ cmd_deploy_prepared() {
         if [ -d "${OPEN_MMI_MANAGED_REPOSITORY:-}/.git" ]; then
             sudo -u "$REAL_USER" git -C "$OPEN_MMI_MANAGED_REPOSITORY" reset --hard "$previous_commit" >/dev/null 2>&1 || true
         fi
-        for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT"; do
+        for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT" "$POWERD_UNIT"; do
             if [ -e "$rollback_root/system-units/$unit" ]; then
                 cp -a -- "$rollback_root/system-units/$unit" "/etc/systemd/system/$unit"
             elif [ -e "$rollback_root/system-units/$unit.absent" ]; then
@@ -1393,6 +1537,33 @@ cmd_deploy_prepared() {
         elif [ -e "$rollback_root/system-files/vehicle-config-coordinator-sandbox.conf.absent" ]; then
             rm -f -- "$VEHICLE_CONFIG_COORDINATOR_SANDBOX"
         fi
+        if [ -e "$rollback_root/system-files/power-policy.json" ]; then
+            install -d -m 0755 -o root -g root "$(dirname "$POWER_POLICY_FILE")"
+            cp -a -- "$rollback_root/system-files/power-policy.json" \
+                "$POWER_POLICY_FILE"
+        elif [ -e "$rollback_root/system-files/power-policy.json.absent" ]; then
+            rm -f -- "$POWER_POLICY_FILE"
+        fi
+        if [ -e "$rollback_root/system-files/$POWERD_WAKE_UDEV_RULE" ]; then
+            install -d -m 0755 -o root -g root "$(dirname "$POWERD_WAKE_UDEV_RULE_PATH")"
+            cp -a -- "$rollback_root/system-files/$POWERD_WAKE_UDEV_RULE" \
+                "$POWERD_WAKE_UDEV_RULE_PATH"
+        elif [ -e "$rollback_root/system-files/$POWERD_WAKE_UDEV_RULE.absent" ]; then
+            rm -f -- "$POWERD_WAKE_UDEV_RULE_PATH"
+        fi
+        if [ -e "$rollback_root/system-files/$OPEN_MMI_TMPFILES_CONFIG" ]; then
+            install -d -m 0755 -o root -g root "$(dirname "$OPEN_MMI_TMPFILES_CONFIG_PATH")"
+            cp -a -- "$rollback_root/system-files/$OPEN_MMI_TMPFILES_CONFIG" \
+                "$OPEN_MMI_TMPFILES_CONFIG_PATH"
+            systemd-tmpfiles --create "$OPEN_MMI_TMPFILES_CONFIG_PATH" >/dev/null 2>&1 || true
+        elif [ -e "$rollback_root/system-files/$OPEN_MMI_TMPFILES_CONFIG.absent" ]; then
+            rm -f -- "$OPEN_MMI_TMPFILES_CONFIG_PATH"
+        fi
+        udevadm control --reload-rules >/dev/null 2>&1 || true
+        udevadm trigger \
+            --subsystem-match=net \
+            --sysname-match='can*' \
+            --action=change >/dev/null 2>&1 || true
         for unit in canbusd.service open-mmi-dashboard.service; do
             if [ -e "$rollback_root/user-units/$unit" ]; then
                 cp -a -- "$rollback_root/user-units/$unit" "$REAL_HOME/.config/systemd/user/$unit"
@@ -1407,6 +1578,7 @@ cmd_deploy_prepared() {
         else
             systemctl stop "$VEHICLE_CONFIG_COORDINATOR_UNIT" >/dev/null 2>&1 || true
         fi
+        reconcile_power_manager >/dev/null 2>&1 || true
         export XDG_RUNTIME_DIR="/run/user/$USER_ID"
         sudo -u "$REAL_USER" env HOME="$REAL_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
             systemctl --user daemon-reload >/dev/null 2>&1 || true
@@ -1440,7 +1612,7 @@ cmd_deploy_prepared() {
     find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 \
         \( -name venv -o -name .version -o -name .update-source.json \) -prune \
         -o -exec rm -rf -- {} +
-    for item in canbusd vehicles bindings actions ui scripts packaging systemd; do
+    for item in canbusd vehicles bindings actions powerd ui scripts packaging systemd; do
         [ ! -e "$resolved_stage/$item" ] || cp -a -- "$resolved_stage/$item" "$INSTALL_DIR/"
     done
     for item in pyproject.toml README.md LICENSE; do
@@ -1460,6 +1632,8 @@ cmd_deploy_prepared() {
     install_update_coordinator
     deployment_stage="vehicle-config-coordinator"
     install_vehicle_config_coordinator
+    deployment_stage="power-manager"
+    install_power_manager
 
     deployment_stage="user-services"
     local user_systemd_dir="$REAL_HOME/.config/systemd/user"
@@ -1543,6 +1717,7 @@ cmd_uninstall() {
     done
     systemctl disable --now "$UPDATE_COORDINATOR_UNIT" >/dev/null 2>&1 || true
     systemctl disable --now "$VEHICLE_CONFIG_COORDINATOR_UNIT" >/dev/null 2>&1 || true
+    systemctl disable --now "$POWERD_UNIT" >/dev/null 2>&1 || true
     systemctl stop "$VEHICLE_CAN_PROVISION_UNIT" >/dev/null 2>&1 || true
     systemctl stop "$UPDATE_INSTALLER_UNIT" >/dev/null 2>&1 || true
     rm -f \
@@ -1550,9 +1725,12 @@ cmd_uninstall() {
         "/etc/systemd/system/$UPDATE_INSTALLER_UNIT" \
         "/etc/systemd/system/$VEHICLE_CONFIG_COORDINATOR_UNIT" \
         "/etc/systemd/system/$VEHICLE_CAN_PROVISION_UNIT" \
+        "/etc/systemd/system/$POWERD_UNIT" \
         "$VEHICLE_CONFIG_COORDINATOR_ENV" \
         "$VEHICLE_CONFIG_UI_QUALIFICATION_GATE" \
-        "$VEHICLE_CONFIG_COORDINATOR_SANDBOX"
+        "$VEHICLE_CONFIG_COORDINATOR_SANDBOX" \
+        "$POWER_POLICY_FILE" \
+        "$OPEN_MMI_TMPFILES_CONFIG_PATH"
     rmdir "$VEHICLE_CONFIG_COORDINATOR_OVERRIDE_DIR" >/dev/null 2>&1 || true
     systemctl daemon-reload
     rm -rf "$UPDATE_COORDINATOR_RUNTIME_DIR" "$UPDATE_COORDINATOR_STATE_DIR"
@@ -1577,9 +1755,11 @@ cmd_uninstall() {
     sudo rmdir "$(dirname "$UPDATE_POLICY_FILE")" >/dev/null 2>&1 || true
     
     # Remove udev rules
-    if [ -f /etc/udev/rules.d/80-canbus.rules ]; then
+    if [ -f /etc/udev/rules.d/80-canbus.rules ] || [ -f "$POWERD_WAKE_UDEV_RULE_PATH" ]; then
         log_info "Removing udev rules..."
-        sudo rm -f /etc/udev/rules.d/80-canbus.rules
+        sudo rm -f \
+            /etc/udev/rules.d/80-canbus.rules \
+            "$POWERD_WAKE_UDEV_RULE_PATH"
         sudo udevadm control --reload-rules
         sudo udevadm trigger
     fi
@@ -1900,6 +2080,7 @@ ${BLUE}Commands:${NC}
   status       Show installation and daemon status
   logs         View daemon logs in real-time
   config       Manage user config and service overrides
+  power        Manage CAN-silence automatic suspend
   
   help         Show this help message
 
@@ -1912,6 +2093,7 @@ ${BLUE}Examples:${NC}
   sudo ./scripts/manage.sh config init
   sudo ./scripts/manage.sh config edit-profile seat-leon-1p-pq35
   sudo ./scripts/manage.sh config edit-service
+  sudo ./scripts/manage.sh power enable 60
 
 ${BLUE}Installation Details:${NC}
   Install directory: $INSTALL_DIR
@@ -1963,6 +2145,10 @@ main() {
         config)
             check_root
             cmd_config "${@:2}"
+            ;;
+        power)
+            check_root
+            cmd_power "${@:2}"
             ;;
         help|--help|-h)
             show_help

@@ -50,6 +50,9 @@ Registry: `open-mmi.vehicle-statuses` · schema version `1`
 | `engine.coolant_temp_raw` | engine | integer · 0…255 | diagnostic | Unscaled source byte for coolant temperature. |
 | `engine.speed_raw` | engine | integer · 0…65535 | diagnostic | Unscaled source value for engine speed. |
 | `engine.speed_rpm` | engine | number · rpm · 0…∞ | stable | Decoded engine rotational speed. |
+| `fuel.level_l_candidate` | fuel | number · L · 0…127 | experimental | Experimental decoded quantity of fuel remaining. |
+| `fuel.level_raw_candidate` | fuel | integer · 0…255 | diagnostic | Raw source byte for the experimental fuel-level candidate. |
+| `fuel.low_level_warning_candidate` | fuel | boolean | experimental | Experimental indication that the vehicle fuel-reserve warning is active. |
 | `fuel.range_km_candidate` | fuel | number · km · 0…∞ | experimental | Experimental decoded driving-range candidate. |
 | `fuel.range_km_rounded_candidate` | fuel | number · km · 0…∞ | experimental | Experimental rounded driving-range candidate. |
 | `fuel.range_raw_candidate` | fuel | integer · 0…65535 | diagnostic | Raw source value for the experimental range candidate. |

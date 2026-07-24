@@ -29,11 +29,11 @@ class ProfileReplayTests(unittest.TestCase):
             expected_profile_id="seat-leon-1p-pq35",
         )
         self.assertTrue(report["valid"], report)
-        self.assertEqual(report["case_count"], 25)
+        self.assertEqual(report["case_count"], 26)
         self.assertEqual(report["coverage"]["events"], 11)
         self.assertEqual(report["coverage"]["event_total"], 11)
-        self.assertEqual(report["coverage"]["statuses"], 65)
-        self.assertEqual(report["coverage"]["status_total"], 65)
+        self.assertEqual(report["coverage"]["statuses"], 68)
+        self.assertEqual(report["coverage"]["status_total"], 68)
 
     def test_changed_mapping_fails_the_existing_fixture(self) -> None:
         changed = copy.deepcopy(self.profile)

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
-import socket
 import shlex
+import shutil
+import socket
 import subprocess
 import tempfile
 import unittest
@@ -60,6 +61,65 @@ class ManageScriptLifecycleTests(unittest.TestCase):
         start = self.text.index(marker) + len(marker)
         end = self.text.index("\nPY_OPEN_MMI_TRANSACTION_LOCKS", start)
         return self.text[start:end]
+
+    def test_transaction_lock_tmpfiles_config_is_complete(self) -> None:
+        config = (
+            ROOT / "packaging/tmpfiles/open-mmi.conf"
+        ).read_text(encoding="utf-8")
+        self.assertIn("d /run/open-mmi 0755 root root - -", config)
+        for name in (
+            "lifecycle.lock",
+            "update.lock",
+            "vehicle-configuration.lock",
+        ):
+            self.assertIn(
+                f"f /run/open-mmi/{name} 0644 root root - -",
+                config,
+            )
+
+    def test_transaction_lock_tmpfiles_config_creates_boot_files(self) -> None:
+        executable = shutil.which("systemd-tmpfiles")
+        if executable is None:
+            self.skipTest("systemd-tmpfiles is unavailable")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config_dir = root / "usr/lib/tmpfiles.d"
+            config_dir.mkdir(parents=True)
+            config = config_dir / "open-mmi.conf"
+            production_config = (
+                ROOT / "packaging/tmpfiles/open-mmi.conf"
+            ).read_text(encoding="utf-8")
+            # The separate completeness test verifies the production root:root
+            # ownership contract. Omit ownership in the isolated fixture so
+            # systemd-tmpfiles does not issue chown calls in unprivileged CI.
+            config.write_text(
+                production_config.replace(" root root ", " - - "),
+                encoding="utf-8",
+            )
+            completed = subprocess.run(
+                [
+                    executable,
+                    f"--root={root}",
+                    "--create",
+                    str(config),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            runtime = root / "run/open-mmi"
+            self.assertEqual(runtime.stat().st_mode & 0o777, 0o755)
+            for name in (
+                "lifecycle.lock",
+                "update.lock",
+                "vehicle-configuration.lock",
+            ):
+                path = runtime / name
+                self.assertTrue(path.is_file())
+                self.assertEqual(path.stat().st_mode & 0o777, 0o644)
 
     def test_transaction_locks_python_has_valid_syntax(self) -> None:
         compile(
@@ -592,6 +652,7 @@ sudo() {{ printf '%s\\0' "$@"; }}
         block = self.text[start:end]
         self.assertIn('^prepare-[0-9a-f]{32}$', block)
         self.assertIn('/var/lib/open-mmi/staging/$transaction', block)
+        self.assertIn("trap 'log_error \"Prepared deployment failed at stage: $deployment_stage\"' ERR", block)
         self.assertIn('trap rollback_prepared_deployment ERR', block)
         self.assertIn('Prepared deployment failed at stage: $deployment_stage', block)
         self.assertIn('env -u PYTHONPATH "$rollback_root/installation/venv/bin/python" -I -c \'import ui.config_cli\'', block)
@@ -612,6 +673,7 @@ sudo() {{ printf '%s\\0' "$@"; }}
         self.assertIn('"$VEHICLE_CAN_PROVISION_UNIT"', block)
         self.assertIn('vehicle-config-coordinator.env', block)
         self.assertIn('deployment_stage="vehicle-config-coordinator"', block)
+        self.assertIn('deployment_stage="power-manager"', block)
         self.assertIn('systemctl restart "$VEHICLE_CONFIG_COORDINATOR_UNIT"', block)
         self.assertNotIn("eval ", block)
 
@@ -673,6 +735,8 @@ sleep() {{ :; }}
         self.assertIn("ProtectHome=false", unit)
         self.assertNotIn("ProtectHome=read-only", unit)
         self.assertIn("ReadWritePaths=/opt ", unit)
+        self.assertIn("/usr/lib/tmpfiles.d", unit)
+        self.assertIn("/etc/udev/rules.d", unit)
         self.assertNotIn("ReadWritePaths=/opt/open-mmi ", unit)
         self.assertNotIn("%i", unit)
         self.assertIn("ProtectSystem=strict", unit)
@@ -693,6 +757,11 @@ sleep() {{ :; }}
             unit,
         )
         self.assertIn("RuntimeDirectoryPreserve=yes", unit)
+        self.assertIn(
+            "ExecStartPre=/usr/bin/systemd-tmpfiles --create "
+            "/opt/open-mmi/packaging/tmpfiles/open-mmi.conf",
+            unit,
+        )
         start = self.text.index("install_vehicle_config_coordinator() {")
         end = self.text.index("remove_login_autostart() {", start)
         block = self.text[start:end]
@@ -760,6 +829,11 @@ sleep() {{ :; }}
         unit = (ROOT / "systemd/system/open-mmi-update-coordinator.service").read_text(encoding="utf-8")
         self.assertIn("ProtectHome=read-only", unit)
         self.assertIn("RuntimeDirectoryPreserve=yes", unit)
+        self.assertIn(
+            "ExecStartPre=/usr/bin/systemd-tmpfiles --create "
+            "/opt/open-mmi/packaging/tmpfiles/open-mmi.conf",
+            unit,
+        )
         self.assertNotIn("ProtectHome=true", unit)
         start = self.text.index("install_update_coordinator() {")
         end = self.text.index("remove_login_autostart() {", start)

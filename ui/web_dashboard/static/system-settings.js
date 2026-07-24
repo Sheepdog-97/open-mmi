@@ -160,6 +160,18 @@
       return labels[key] || key.replaceAll("-", " ");
     }
 
+    function readinessCheckMessage(check) {
+      const summary = String(check?.summary || "").trim();
+      if (!summary) return "";
+      if (String(check?.code || "") === "power" && check?.ac_online !== true) {
+        const capacity = Number(check?.capacity_percent);
+        if (Number.isFinite(capacity)) return `${summary} (battery ${Math.round(capacity)}%)`;
+      }
+      const missing = Array.isArray(check?.missing) ? check.missing.map(String).filter(Boolean) : [];
+      if (missing.length) return `${summary}: ${missing.join(", ")}`;
+      return summary;
+    }
+
     function updateControlState() {
       const transaction = updateCoordinatorSnapshot?.state || {};
       const transactionState = String(transaction.state || "unavailable");
@@ -271,6 +283,27 @@
         ...(Array.isArray(updateSnapshot?.readiness?.blockers) ? updateSnapshot.readiness.blockers : []),
         ...(Array.isArray(readiness.blockers) ? readiness.blockers : []),
       ].map(readinessBlockerLabel).filter(Boolean)));
+      const readinessUnknown = Array.from(new Set(
+        (Array.isArray(readiness.unknown) ? readiness.unknown : [])
+          .map(readinessBlockerLabel)
+          .filter(Boolean),
+      ));
+      const readinessChecks = Array.isArray(readiness.checks) ? readiness.checks : [];
+      const readinessIssues = Array.from(new Set(
+        readinessChecks
+          .filter((check) => ["block", "unknown"].includes(String(check?.state || "")))
+          .map(readinessCheckMessage)
+          .filter(Boolean),
+      ));
+      const readinessFallbackIssues = Array.from(new Set([
+        ...readinessBlockers,
+        ...readinessUnknown,
+      ]));
+      const visibleReadinessIssues = readinessIssues.length ? readinessIssues : readinessFallbackIssues;
+      const readinessIssueHtml = (!controls.readinessReady || !controls.managedSourceReady)
+        && visibleReadinessIssues.length
+        ? `<p class="openmmi-config-message warning openmmi-update-readiness-detail" data-testid="system-update-readiness-detail"><strong>Update unavailable:</strong> ${escapeHtml(visibleReadinessIssues.join(". "))}</p>`
+        : "";
       const readinessLabel = controls.readinessReady && controls.managedSourceReady
         ? "ready"
         : readinessBlockers.length
@@ -313,6 +346,7 @@
             ${targetHtml}
             ${updateError}
             ${transactionErrorHtml}
+            ${readinessIssueHtml}
             <div class="openmmi-config-actions openmmi-update-actions">
               <button type="button" class="openmmi-setting-pill" data-openmmi-update-check="true" data-testid="system-update-check" ${controls.canCheck ? "" : "disabled"}>${updateBusy === "checking" ? "Checking…" : "Check for updates"}</button>
               <button type="button" class="openmmi-setting-pill" data-openmmi-update-prepare="true" data-testid="system-update-prepare" ${controls.canPrepare ? "" : "disabled"}>${updateBusy === "preparing" ? "Preparing…" : "Prepare update"}</button>

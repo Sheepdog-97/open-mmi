@@ -10,7 +10,7 @@ not prove that the physical vehicle lacks the feature.
 
 | Profile | Vehicle | Maturity | Qualification | Last tested | Review | Recheck after | Events | Statuses |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `seat-leon-1p-pq35` | SEAT Leon 1P / Mk2 (PQ35) | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | 11 | 65 |
+| `seat-leon-1p-pq35` | SEAT Leon 1P / Mk2 (PQ35) | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | 11 | 68 |
 
 ## Canonical events
 
@@ -65,6 +65,9 @@ not prove that the physical vehicle lacks the feature.
 | `engine.coolant_temp_raw` | Yes |
 | `engine.speed_raw` | Yes |
 | `engine.speed_rpm` | Yes |
+| `fuel.level_l_candidate` | Yes |
+| `fuel.level_raw_candidate` | Yes |
+| `fuel.low_level_warning_candidate` | Yes |
 | `fuel.range_km_candidate` | Yes |
 | `fuel.range_km_rounded_candidate` | Yes |
 | `fuel.range_raw_candidate` | Yes |

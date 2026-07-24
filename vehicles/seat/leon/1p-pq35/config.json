@@ -46,7 +46,7 @@
     },
     "limitations": [
       "Only the comfort CAN bus is qualified.",
-      "Fuel-range candidates and selected climate paths remain experimental or diagnostic.",
+      "Fuel-level, fuel-range, and selected climate paths remain experimental or diagnostic.",
       "Open MMI remains passive receive-only and does not transmit vehicle CAN frames."
     ]
   },
@@ -179,6 +179,26 @@
       "false": "0x00",
       "mask": "0x20",
       "raw_path": "vehicle.handbrake_raw"
+    },
+    {
+      "id": "0x621",
+      "byte": 3,
+      "type": "scaled",
+      "path": "fuel.level_l_candidate",
+      "mask": "0x7F",
+      "scale": 1.0,
+      "offset": 0.0,
+      "round": 0,
+      "raw_path": "fuel.level_raw_candidate"
+    },
+    {
+      "id": "0x621",
+      "byte": 3,
+      "type": "bool",
+      "path": "fuel.low_level_warning_candidate",
+      "mask": "0x80",
+      "true": "0x80",
+      "false": "0x00"
     },
     {
       "id": "0x635",

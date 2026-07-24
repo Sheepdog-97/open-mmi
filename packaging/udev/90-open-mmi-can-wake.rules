@@ -1,0 +1,4 @@
+# Enable remote wake across the verified USB/PCI ancestry of physical CAN
+# adapters. The helper fails closed when the direct USB device or PCI host
+# controller does not expose a wake control.
+ACTION=="add|change", SUBSYSTEM=="net", KERNEL=="can[0-9]*", RUN+="/opt/open-mmi/venv/bin/open-mmi-powerd wake-enable --interface %k"

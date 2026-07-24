@@ -431,6 +431,47 @@
         "engine rpm revolutions"
       ]
     },
+    "fuel.level_l_candidate": {
+      "title": "Fuel level candidate",
+      "category": "fuel",
+      "description": "Experimental decoded quantity of fuel remaining.",
+      "value": {
+        "type": "number",
+        "nullable": false,
+        "unit": "L",
+        "minimum": 0,
+        "maximum": 127
+      },
+      "status": "experimental",
+      "search_terms": [
+        "fuel level quantity remaining litres liters tank"
+      ]
+    },
+    "fuel.level_raw_candidate": {
+      "title": "Fuel level candidate raw byte",
+      "category": "fuel",
+      "description": "Raw source byte for the experimental fuel-level candidate.",
+      "value": {
+        "type": "integer",
+        "nullable": false,
+        "minimum": 0,
+        "maximum": 255
+      },
+      "status": "diagnostic"
+    },
+    "fuel.low_level_warning_candidate": {
+      "title": "Low-fuel warning candidate",
+      "category": "fuel",
+      "description": "Experimental indication that the vehicle fuel-reserve warning is active.",
+      "value": {
+        "type": "boolean",
+        "nullable": false
+      },
+      "status": "experimental",
+      "search_terms": [
+        "fuel low reserve warning lamp light"
+      ]
+    },
     "fuel.range_km_candidate": {
       "title": "Range candidate",
       "category": "fuel",

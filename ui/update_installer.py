@@ -129,7 +129,8 @@ def _run_deployment(command: Sequence[str], environment: Mapping[str, str]) -> s
 _DEPLOYMENT_STAGES = {
     "backup", "repository-head", "repository-clean", "repository-fetch",
     "repository-merge", "package-build", "files", "package", "system-services",
-    "user-services", "service-health", "api-health", "version-health",
+    "user-services", "vehicle-config-coordinator", "power-manager",
+    "service-health", "api-health", "version-health",
 }
 
 

@@ -207,19 +207,42 @@
       }
     },
     {
-      "name": "handbrake",
+      "name": "handbrake-and-fuel-level",
       "bus": "comfort",
       "frames": [
         {
           "id": "0x621",
-          "data": "20 00 00 00 00 00 00 00"
+          "data": "24 4D 34 0B 02"
         }
       ],
       "expect": {
         "events": [],
         "statuses": {
-          "vehicle.handbrake_raw": 32,
-          "vehicle.handbrake": true
+          "vehicle.handbrake_raw": 36,
+          "vehicle.handbrake": true,
+          "fuel.level_raw_candidate": 11,
+          "fuel.level_l_candidate": 11.0,
+          "fuel.low_level_warning_candidate": false
+        }
+      }
+    },
+    {
+      "name": "low-fuel-warning-and-level",
+      "bus": "comfort",
+      "frames": [
+        {
+          "id": "0x621",
+          "data": "26 2D 02 84 02"
+        }
+      ],
+      "expect": {
+        "events": [],
+        "statuses": {
+          "vehicle.handbrake_raw": 38,
+          "vehicle.handbrake": true,
+          "fuel.level_raw_candidate": 132,
+          "fuel.level_l_candidate": 4.0,
+          "fuel.low_level_warning_candidate": true
         }
       }
     },

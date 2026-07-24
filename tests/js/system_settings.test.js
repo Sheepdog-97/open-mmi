@@ -265,6 +265,32 @@ test("source feedback and equivalent readiness blockers are shown only once", as
   assert.match(html, /openmmi-update-feedback warning/);
 });
 
+
+test("blocked readiness explains the low-battery policy outside technical details", async () => {
+  const state = fixture();
+  state.readinessPayload.state = "blocked";
+  state.readinessPayload.install_allowed = false;
+  state.readinessPayload.blockers = ["power"];
+  state.readinessPayload.checks = [{
+    code: "power",
+    state: "block",
+    summary: "Connect external power or charge the battery to at least 30%",
+    ac_online: false,
+    capacity_percent: 18,
+  }];
+  const controller = settings.createController(state);
+  await controller.refresh();
+  const html = controller.systemTemplate();
+  assert.match(html, /data-testid="system-update-readiness-detail"/);
+  assert.match(html, /Connect external power or charge the battery to at least 30% \(battery 18%\)/);
+  assert.ok(
+    html.indexOf('data-testid="system-update-readiness-detail"')
+      < html.indexOf('data-testid="system-update-technical"'),
+  );
+  assert.equal(controller.updateControlState().canPrepare, false);
+  assert.equal(controller.updateControlState().canInstall, false);
+});
+
 test("dashboard connection state cannot re-enable managed update controls", async () => {
   const state = fixture();
   state.document.body.dataset = { openmmiDashboardConnection: "ready" };

@@ -19,7 +19,7 @@ CSS_MODULES = (
     "styles-diagnostics.css",
     "styles-media-final.css",
 )
-EXPECTED_COMBINED_SHA256 = "e331498cc94d5b9faf5b8ee4dffc28a844fa11982601e7f2388f8fccdbe7bb49"
+EXPECTED_COMBINED_SHA256 = "0c25dfb8c9e52efa40ff9481549a5671568862d6a701229bf77718fb87c967b6"
 
 
 def combined_css() -> bytes:

@@ -271,3 +271,10 @@ python tools/generate_vehicle_catalogue_docs.py --check
 ## Licence
 
 GPL-3.0-only. See [LICENSE](LICENSE).
+
+## Host power management
+
+Optional, fail-closed automatic suspend from qualified CAN-bus silence is
+documented in [`docs/power-management.md`](docs/power-management.md). The
+standalone `open-mmi-powerd` service follows the active profile-selected
+SocketCAN interface and remains disabled by default.

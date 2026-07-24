@@ -16,7 +16,7 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 
 | Profile | Vehicle | Years | Maturity | Qualification | Last tested | Review | Recheck after | Legacy aliases | Compatible market names | Replay coverage | Evidence | Canonical capabilities |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [`seat-leon-1p-pq35`](#seat-leon-1p-pq35) | SEAT Leon 1P / Mk2 (PQ35) | 2005–2012 | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | `seat_1p` | — | 25 cases; 11/11 events; 65/65 statuses | hardware: 1, replay: 1, research: 1 | 11 events; 65 statuses |
+| [`seat-leon-1p-pq35`](#seat-leon-1p-pq35) | SEAT Leon 1P / Mk2 (PQ35) | 2005–2012 | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | `seat_1p` | — | 26 cases; 11/11 events; 68/68 statuses | hardware: 1, replay: 1, research: 1 | 11 events; 68 statuses |
 
 ## Profiles
 
@@ -35,7 +35,7 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 - Legacy aliases: `seat_1p`
 - Compatible market names: —
 - CAN buses: `comfort`
-- Replay proof: `fixtures/mappings.v1.json`; 25 cases; 11/11 events and 65/65 statuses covered
+- Replay proof: `fixtures/mappings.v1.json`; 26 cases; 11/11 events and 68/68 statuses covered
 
 #### Qualification scope
 
@@ -59,7 +59,7 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 #### Limitations
 
 - Only the comfort CAN bus is qualified.
-- Fuel-range candidates and selected climate paths remain experimental or diagnostic.
+- Fuel-level, fuel-range, and selected climate paths remain experimental or diagnostic.
 - Open MMI remains passive receive-only and does not transmit vehicle CAN frames.
 
 #### Canonical events
@@ -68,7 +68,7 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 
 #### Canonical statuses
 
-`climate.blower_load_percent`, `climate.blower_load_raw`, `climate.compressor_active`, `climate.debug_555_b1`, `climate.debug_555_b1_raw`, `climate.debug_555_b3`, `climate.debug_555_b3_raw`, `climate.debug_555_b4`, `climate.debug_555_b4_raw`, `climate.front_windscreen_heater_requested`, `climate.klima_status_raw`, `climate.outside_temp_regulation_c`, `climate.outside_temp_regulation_raw`, `climate.outside_temp_unfiltered_c`, `climate.outside_temp_unfiltered_raw`, `climate.rear_window_heater_raw`, `climate.rear_window_heater_requested`, `climate.recirculation_active`, `climate.recirculation_raw`, `doors.any_open`, `doors.bonnet`, `doors.boot`, `doors.front_left`, `doors.front_right`, `doors.raw`, `doors.rear_left`, `doors.rear_right`, `electrical.supply_voltage_raw`, `electrical.supply_voltage_v`, `engine.coolant_temp_c`, `engine.coolant_temp_raw`, `engine.speed_raw`, `engine.speed_rpm`, `fuel.range_km_candidate`, `fuel.range_km_rounded_candidate`, `fuel.range_raw_candidate`, `fuel.range_rounded_raw_candidate`, `lighting.brake`, `lighting.bulb_out`, `lighting.bulb_out_raw`, `lighting.dimmer_635_raw`, `lighting.dimmer_percent`, `lighting.dimmer_percent_mirror`, `lighting.dimmer_raw`, `lighting.hazards`, `lighting.left_indicator`, `lighting.lights_on`, `lighting.lights_on_raw`, `lighting.mode`, `lighting.mode_raw`, `lighting.right_indicator`, `lighting.secondary_raw`, `steering.angle_degrees`, `steering.angle_magnitude_raw`, `steering.angle_raw`, `steering.direction`, `vehicle.handbrake`, `vehicle.handbrake_raw`, `vehicle.odometer_km`, `vehicle.odometer_raw`, `vehicle.present`, `vehicle.reverse`, `vehicle.reverse_raw`, `vehicle.speed_kmh`, `vehicle.speed_raw`
+`climate.blower_load_percent`, `climate.blower_load_raw`, `climate.compressor_active`, `climate.debug_555_b1`, `climate.debug_555_b1_raw`, `climate.debug_555_b3`, `climate.debug_555_b3_raw`, `climate.debug_555_b4`, `climate.debug_555_b4_raw`, `climate.front_windscreen_heater_requested`, `climate.klima_status_raw`, `climate.outside_temp_regulation_c`, `climate.outside_temp_regulation_raw`, `climate.outside_temp_unfiltered_c`, `climate.outside_temp_unfiltered_raw`, `climate.rear_window_heater_raw`, `climate.rear_window_heater_requested`, `climate.recirculation_active`, `climate.recirculation_raw`, `doors.any_open`, `doors.bonnet`, `doors.boot`, `doors.front_left`, `doors.front_right`, `doors.raw`, `doors.rear_left`, `doors.rear_right`, `electrical.supply_voltage_raw`, `electrical.supply_voltage_v`, `engine.coolant_temp_c`, `engine.coolant_temp_raw`, `engine.speed_raw`, `engine.speed_rpm`, `fuel.level_l_candidate`, `fuel.level_raw_candidate`, `fuel.low_level_warning_candidate`, `fuel.range_km_candidate`, `fuel.range_km_rounded_candidate`, `fuel.range_raw_candidate`, `fuel.range_rounded_raw_candidate`, `lighting.brake`, `lighting.bulb_out`, `lighting.bulb_out_raw`, `lighting.dimmer_635_raw`, `lighting.dimmer_percent`, `lighting.dimmer_percent_mirror`, `lighting.dimmer_raw`, `lighting.hazards`, `lighting.left_indicator`, `lighting.lights_on`, `lighting.lights_on_raw`, `lighting.mode`, `lighting.mode_raw`, `lighting.right_indicator`, `lighting.secondary_raw`, `steering.angle_degrees`, `steering.angle_magnitude_raw`, `steering.angle_raw`, `steering.direction`, `vehicle.handbrake`, `vehicle.handbrake_raw`, `vehicle.odometer_km`, `vehicle.odometer_raw`, `vehicle.present`, `vehicle.reverse`, `vehicle.reverse_raw`, `vehicle.speed_kmh`, `vehicle.speed_raw`
 
 ## Regeneration
 
