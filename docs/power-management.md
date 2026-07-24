@@ -41,6 +41,13 @@ A missing adapter, failed interface, BUS-OFF controller, invalid runtime status,
 untrusted transaction lock, or unverified wake path fails closed and is not
 interpreted as vehicle sleep.
 
+The installer also deploys `open-mmi.conf` under
+`/usr/lib/tmpfiles.d`. systemd-tmpfiles recreates `/run/open-mmi` and the
+lifecycle, update, and vehicle-configuration lock files during every boot.
+The installer still validates their ownership, type, link count, and
+permissions before using them. Missing or untrusted lock files fail closed and
+inhibit automatic suspend.
+
 The installer also deploys `90-open-mmi-can-wake.rules`. When a physical
 `canN` interface is added or changed, udev runs the packaged
 `open-mmi-powerd wake-enable` helper. The helper validates that the topology

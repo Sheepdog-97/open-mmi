@@ -19,6 +19,9 @@ class PowerdIntegrationTests(unittest.TestCase):
         cls.wake_rule = (
             ROOT / "packaging/udev/90-open-mmi-can-wake.rules"
         ).read_text(encoding="utf-8")
+        cls.tmpfiles = (
+            ROOT / "packaging/tmpfiles/open-mmi.conf"
+        ).read_text(encoding="utf-8")
 
     def test_daemon_is_not_an_action_module(self) -> None:
         self.assertFalse((ROOT / "actions/power.py").exists())
@@ -56,6 +59,28 @@ class PowerdIntegrationTests(unittest.TestCase):
             '        "$POWER_POLICY_FILE"'
         )
         self.assertNotIn(malformed, self.manage)
+
+    def test_transaction_locks_are_recreated_by_systemd_tmpfiles(self) -> None:
+        self.assertIn("d /run/open-mmi 0755 root root - -", self.tmpfiles)
+        for name in (
+            "lifecycle.lock",
+            "update.lock",
+            "vehicle-configuration.lock",
+        ):
+            self.assertIn(
+                f"f /run/open-mmi/{name} 0644 root root - -",
+                self.tmpfiles,
+            )
+        self.assertIn(
+            '"$REPO_ROOT/packaging/tmpfiles/$OPEN_MMI_TMPFILES_CONFIG"',
+            self.manage,
+        )
+        self.assertIn(
+            'systemd-tmpfiles --create "$OPEN_MMI_TMPFILES_CONFIG_PATH"',
+            self.manage,
+        )
+        self.assertIn("$OPEN_MMI_TMPFILES_CONFIG.absent", self.manage)
+        self.assertIn('"$OPEN_MMI_TMPFILES_CONFIG_PATH"', self.manage)
 
     def test_wake_rule_is_installed_and_uses_the_packaged_helper(self) -> None:
         self.assertIn(

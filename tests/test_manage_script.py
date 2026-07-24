@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
-import socket
 import shlex
+import shutil
+import socket
 import subprocess
 import tempfile
 import unittest
@@ -60,6 +61,61 @@ class ManageScriptLifecycleTests(unittest.TestCase):
         start = self.text.index(marker) + len(marker)
         end = self.text.index("\nPY_OPEN_MMI_TRANSACTION_LOCKS", start)
         return self.text[start:end]
+
+    def test_transaction_lock_tmpfiles_config_is_complete(self) -> None:
+        config = (
+            ROOT / "packaging/tmpfiles/open-mmi.conf"
+        ).read_text(encoding="utf-8")
+        self.assertIn("d /run/open-mmi 0755 root root - -", config)
+        for name in (
+            "lifecycle.lock",
+            "update.lock",
+            "vehicle-configuration.lock",
+        ):
+            self.assertIn(
+                f"f /run/open-mmi/{name} 0644 root root - -",
+                config,
+            )
+
+    def test_transaction_lock_tmpfiles_config_creates_boot_files(self) -> None:
+        executable = shutil.which("systemd-tmpfiles")
+        if executable is None:
+            self.skipTest("systemd-tmpfiles is unavailable")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config_dir = root / "usr/lib/tmpfiles.d"
+            config_dir.mkdir(parents=True)
+            config = config_dir / "open-mmi.conf"
+            config.write_text(
+                (
+                    ROOT / "packaging/tmpfiles/open-mmi.conf"
+                ).read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            completed = subprocess.run(
+                [
+                    executable,
+                    f"--root={root}",
+                    "--create",
+                    str(config),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            runtime = root / "run/open-mmi"
+            self.assertEqual(runtime.stat().st_mode & 0o777, 0o755)
+            for name in (
+                "lifecycle.lock",
+                "update.lock",
+                "vehicle-configuration.lock",
+            ):
+                path = runtime / name
+                self.assertTrue(path.is_file())
+                self.assertEqual(path.stat().st_mode & 0o777, 0o644)
 
     def test_transaction_locks_python_has_valid_syntax(self) -> None:
         compile(

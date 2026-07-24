@@ -22,6 +22,8 @@ POWERD_UNIT="open-mmi-powerd.service"
 POWER_POLICY_FILE="/etc/open-mmi/power-policy.json"
 POWERD_WAKE_UDEV_RULE="90-open-mmi-can-wake.rules"
 POWERD_WAKE_UDEV_RULE_PATH="/etc/udev/rules.d/$POWERD_WAKE_UDEV_RULE"
+OPEN_MMI_TMPFILES_CONFIG="open-mmi.conf"
+OPEN_MMI_TMPFILES_CONFIG_PATH="/usr/lib/tmpfiles.d/$OPEN_MMI_TMPFILES_CONFIG"
 VEHICLE_CONFIG_COORDINATOR_ENV="/etc/open-mmi/vehicle-config-coordinator.env"
 VEHICLE_CONFIG_UI_QUALIFICATION_GATE="/etc/open-mmi/vehicle-configuration-ui-qualification"
 VEHICLE_CONFIG_COORDINATOR_OVERRIDE_DIR="/etc/systemd/system/$VEHICLE_CONFIG_COORDINATOR_UNIT.d"
@@ -752,6 +754,11 @@ install_update_coordinator() {
 }
 
 install_open_mmi_transaction_locks() {
+    install -d -m 0755 -o root -g root "$(dirname "$OPEN_MMI_TMPFILES_CONFIG_PATH")"
+    install -m 0644 -o root -g root \
+        "$REPO_ROOT/packaging/tmpfiles/$OPEN_MMI_TMPFILES_CONFIG" \
+        "$OPEN_MMI_TMPFILES_CONFIG_PATH"
+    systemd-tmpfiles --create "$OPEN_MMI_TMPFILES_CONFIG_PATH"
     install -d -m 0755 -o root -g root "$UPDATE_COORDINATOR_RUNTIME_DIR"
     python3 - "$UPDATE_COORDINATOR_RUNTIME_DIR" 0 0 <<'PY_OPEN_MMI_TRANSACTION_LOCKS'
 import os
@@ -1470,6 +1477,12 @@ cmd_deploy_prepared() {
     else
         : > "$rollback_root/system-files/$POWERD_WAKE_UDEV_RULE.absent"
     fi
+    if [ -e "$OPEN_MMI_TMPFILES_CONFIG_PATH" ]; then
+        cp -a -- "$OPEN_MMI_TMPFILES_CONFIG_PATH" \
+            "$rollback_root/system-files/$OPEN_MMI_TMPFILES_CONFIG"
+    else
+        : > "$rollback_root/system-files/$OPEN_MMI_TMPFILES_CONFIG.absent"
+    fi
     for unit in canbusd.service open-mmi-dashboard.service; do
         if [ -e "$REAL_HOME/.config/systemd/user/$unit" ]; then
             cp -a -- "$REAL_HOME/.config/systemd/user/$unit" "$rollback_root/user-units/$unit"
@@ -1533,6 +1546,14 @@ cmd_deploy_prepared() {
                 "$POWERD_WAKE_UDEV_RULE_PATH"
         elif [ -e "$rollback_root/system-files/$POWERD_WAKE_UDEV_RULE.absent" ]; then
             rm -f -- "$POWERD_WAKE_UDEV_RULE_PATH"
+        fi
+        if [ -e "$rollback_root/system-files/$OPEN_MMI_TMPFILES_CONFIG" ]; then
+            install -d -m 0755 -o root -g root "$(dirname "$OPEN_MMI_TMPFILES_CONFIG_PATH")"
+            cp -a -- "$rollback_root/system-files/$OPEN_MMI_TMPFILES_CONFIG" \
+                "$OPEN_MMI_TMPFILES_CONFIG_PATH"
+            systemd-tmpfiles --create "$OPEN_MMI_TMPFILES_CONFIG_PATH" >/dev/null 2>&1 || true
+        elif [ -e "$rollback_root/system-files/$OPEN_MMI_TMPFILES_CONFIG.absent" ]; then
+            rm -f -- "$OPEN_MMI_TMPFILES_CONFIG_PATH"
         fi
         udevadm control --reload-rules >/dev/null 2>&1 || true
         udevadm trigger \
@@ -1703,7 +1724,8 @@ cmd_uninstall() {
         "$VEHICLE_CONFIG_COORDINATOR_ENV" \
         "$VEHICLE_CONFIG_UI_QUALIFICATION_GATE" \
         "$VEHICLE_CONFIG_COORDINATOR_SANDBOX" \
-        "$POWER_POLICY_FILE"
+        "$POWER_POLICY_FILE" \
+        "$OPEN_MMI_TMPFILES_CONFIG_PATH"
     rmdir "$VEHICLE_CONFIG_COORDINATOR_OVERRIDE_DIR" >/dev/null 2>&1 || true
     systemctl daemon-reload
     rm -rf "$UPDATE_COORDINATOR_RUNTIME_DIR" "$UPDATE_COORDINATOR_STATE_DIR"
