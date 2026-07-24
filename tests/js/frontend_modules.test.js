@@ -431,6 +431,11 @@ test("vehicle view model formats representative imperial status", () => {
       vehicle: { speed_kmh: 100, odometer_km: 1000, handbrake: true, reverse: false },
       engine: { speed_rpm: 2500, coolant_temp_c: 90 },
       electrical: { supply_voltage_v: 13.8 },
+      fuel: {
+        range_km_candidate: 310,
+        range_km_rounded_candidate: 300,
+        range_km: 290,
+      },
       climate: {
         outside_temp_regulation_c: 10.5,
         outside_temp_unfiltered_c: 11,
@@ -456,6 +461,7 @@ test("vehicle view model formats representative imperial status", () => {
   assert.equal(view.health.ageText, "1.2s ago");
   assert.equal(view.fields.speed_mph, "62");
   assert.equal(view.fields.odo_mi, "621");
+  assert.equal(view.fields.range_mi, "193");
   assert.equal(view.fields.coolant_c, "194");
   assert.equal(view.fields.outside_reg_c, "50.9");
   assert.equal(view.fields.voltage_v, "13.8");

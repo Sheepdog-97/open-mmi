@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import shutil
 import socket
@@ -87,10 +88,17 @@ class ManageScriptLifecycleTests(unittest.TestCase):
             config_dir = root / "usr/lib/tmpfiles.d"
             config_dir.mkdir(parents=True)
             config = config_dir / "open-mmi.conf"
+            production_config = (
+                ROOT / "packaging/tmpfiles/open-mmi.conf"
+            ).read_text(encoding="utf-8")
+            # The separate completeness test verifies the production root:root
+            # ownership contract. Exercise tmpfiles creation with the current
+            # process IDs so this integration test also works in unprivileged CI.
             config.write_text(
-                (
-                    ROOT / "packaging/tmpfiles/open-mmi.conf"
-                ).read_text(encoding="utf-8"),
+                production_config.replace(
+                    " root root ",
+                    f" {os.getuid()} {os.getgid()} ",
+                ),
                 encoding="utf-8",
             )
             completed = subprocess.run(
