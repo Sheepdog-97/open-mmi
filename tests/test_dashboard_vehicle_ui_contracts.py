@@ -69,12 +69,16 @@ class DashboardVehicleUiContracts(unittest.TestCase):
         self.assertFalse(any("front_demist" in item["data_bools"] for item in self.articles))
         self.assertFalse(any("air_intake" in item["data_fields"] for item in self.articles))
 
-    def test_range_field_is_kept_unknown_until_the_frame_is_verified(self):
-        self.assertTrue(any("range_mi" in item["data_fields"] for item in self.articles))
-        self.assertRegex(
-            self.vehicle,
-            r"range_mi:\s*['\"]--['\"]",
-        )
+    def test_fuel_remaining_field_uses_the_verified_litre_candidate(self):
+        fuel_articles = [
+            article for article in self.articles
+            if "fuel_l" in article["data_fields"]
+        ]
+        self.assertEqual(len(fuel_articles), 2)
+        self.assertTrue(all("Fuel remaining" in article["text"] for article in fuel_articles))
+        self.assertTrue(all(article["text"].endswith("L") for article in fuel_articles))
+        self.assertIn("fuel_l: formatNumber(fuel.level_l_candidate, 0)", self.vehicle)
+        self.assertNotIn("fuel.range_km_candidate", self.vehicle)
 
     def test_rpm_fill_clips_a_fixed_track_gradient(self):
         self.assertIn('setProperty("--rpm-fill"', self.vehicle)

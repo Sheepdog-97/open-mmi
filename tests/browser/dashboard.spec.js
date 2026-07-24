@@ -75,7 +75,7 @@ function basePayload(overrides = {}) {
         bonnet: false,
         any_open: false,
       },
-      fuel: { range_km: 310, range_km_candidate: 310 },
+      fuel: { level_l_candidate: 42 },
     },
   };
 
@@ -925,7 +925,7 @@ test("loads, renders status and navigates with buttons and keyboard", async ({ p
   await page.locator('[data-openmmi-page="2"]').click();
   await expect(page.locator("#pageDrive")).toHaveClass(/active/);
   await expect(page.locator('[data-field="speed_mph"]').first()).not.toHaveText("--");
-  await expect(page.locator('#pageDrive [data-field="range_mi"]')).toHaveText("193");
+  await expect(page.locator('#pageDrive [data-field="fuel_l"]')).toHaveText("42");
 
   await page.keyboard.press("ArrowRight");
   await expect(page.locator("#pageTitle")).toHaveText("Media");

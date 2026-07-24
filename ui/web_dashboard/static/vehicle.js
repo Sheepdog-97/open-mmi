@@ -101,13 +101,7 @@
         speed_mph: formatSpeedFromKmh(vehicle.speed_kmh, 0, resolvedSettings),
         rpm: formatNumber(engine.speed_rpm, 0),
         odo_mi: formatDistanceFromKm(vehicle.odometer_km, 0, resolvedSettings),
-        range_mi: formatDistanceFromKm(
-          fuel.range_km_candidate
-            ?? fuel.range_km_rounded_candidate
-            ?? fuel.range_km,
-          0,
-          resolvedSettings,
-        ),
+        fuel_l: formatNumber(fuel.level_l_candidate, 0),
         coolant_c: formatTempFromC(engine.coolant_temp_c, 0, resolvedSettings),
         outside_reg_c: formatTempFromC(climate.outside_temp_regulation_c, 1, resolvedSettings),
         outside_unfiltered_c: formatTempFromC(climate.outside_temp_unfiltered_c, 1, resolvedSettings),
@@ -133,7 +127,7 @@
       units: {
         speed_mph: speedUnitLabel(resolvedSettings),
         odo_mi: distanceUnitLabel(resolvedSettings),
-        range_mi: distanceUnitLabel(resolvedSettings),
+        fuel_l: "L",
         coolant_c: tempUnitLabel(resolvedSettings),
         outside_reg_c: tempUnitLabel(resolvedSettings),
         outside_unfiltered_c: tempUnitLabel(resolvedSettings),
@@ -270,10 +264,10 @@
 
       const home = query("#pageHome");
       if (home) {
-        home.querySelectorAll('[data-field="range_mi"], [data-field="rpm"], [data-field="lighting_mode"], [data-field="lights_on"]').forEach(removeContainer);
+        home.querySelectorAll('[data-field="fuel_l"], [data-field="rpm"], [data-field="lighting_mode"], [data-field="lights_on"]').forEach(removeContainer);
         home.querySelectorAll("article, .tile, .openmmi-home-tile, .openmmi-home-metric, .openmmi-home-status, .summary-tile, .summary-card").forEach((node) => {
           const label = (node.querySelector(".label, .openmmi-label, .metric-label")?.textContent || "").trim().toLowerCase();
-          if (["lights", "light state", "lighting", "range", "range est.", "range est", "rpm"].includes(label)) node.remove();
+          if (["lights", "light state", "lighting", "fuel remaining", "rpm"].includes(label)) node.remove();
         });
       }
       queryAll('#pageClimate [data-field="outside_unfiltered_c"]').forEach(removeContainer);

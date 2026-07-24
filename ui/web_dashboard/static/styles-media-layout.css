@@ -727,8 +727,7 @@ body,
 [data-field="outside_temp_c"],
 [data-field="coolant_temp_c"],
 [data-field="voltage_v"],
-[data-field="range_mi"],
-[data-field="range_km"] {
+[data-field="fuel_l"] {
   color: var(--ommi-text-strong) !important;
   opacity: 1 !important;
   text-shadow: 0 0 12px rgba(140, 190, 255, .12) !important;
