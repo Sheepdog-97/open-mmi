@@ -6,6 +6,10 @@ After=local-fs.target
 [Service]
 Type=simple
 EnvironmentFile=/etc/open-mmi/vehicle-config-coordinator.env
+# Bootstrap volatile transaction locks from the packaged tmpfiles rule.
+# This also covers a first update executed by the previous manage.sh,
+# which can deploy new payloads and units but not new shell functions.
+ExecStartPre=/usr/bin/systemd-tmpfiles --create /opt/open-mmi/packaging/tmpfiles/open-mmi.conf
 ExecStart=/opt/open-mmi/venv/bin/open-mmi-vehicle-config-coordinator serve
 Restart=on-failure
 RestartSec=2

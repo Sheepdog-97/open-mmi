@@ -44,7 +44,12 @@ interpreted as vehicle sleep.
 The installer also deploys `open-mmi.conf` under
 `/usr/lib/tmpfiles.d`. systemd-tmpfiles recreates `/run/open-mmi` and the
 lifecycle, update, and vehicle-configuration lock files during every boot.
-The installer still validates their ownership, type, link count, and
+The update coordinator, vehicle configuration coordinator, and power service
+also run the packaged rule from `/opt/open-mmi` as an `ExecStartPre` bootstrap.
+This covers the first update introducing the rule when that update is still
+running inside the previous release of `manage.sh`: the old process can copy
+the new payload and service units, but cannot execute newly added shell
+functions. The installer still validates lock ownership, type, link count, and
 permissions before using them. Missing or untrusted lock files fail closed and
 inhibit automatic suspend.
 

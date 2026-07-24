@@ -95,6 +95,21 @@ class PowerdIntegrationTests(unittest.TestCase):
         self.assertIn("--sysname-match='can*'", self.manage)
         self.assertIn("$POWERD_WAKE_UDEV_RULE.absent", self.manage)
 
+    def test_power_service_bootstraps_transaction_locks(self) -> None:
+        self.assertIn(
+            "ExecStartPre=/usr/bin/systemd-tmpfiles --create "
+            "/opt/open-mmi/packaging/tmpfiles/open-mmi.conf",
+            self.unit,
+        )
+        self.assertIn(
+            'sudo cp -r "$REPO_ROOT/packaging" "$INSTALL_DIR/"',
+            self.manage,
+        )
+        self.assertIn(
+            '"$REPO_ROOT/systemd/system/$POWERD_UNIT"',
+            self.manage,
+        )
+
     def test_system_service_runs_standalone_hardened_daemon(self) -> None:
         self.assertIn(
             "ExecStart=/opt/open-mmi/venv/bin/open-mmi-powerd run",

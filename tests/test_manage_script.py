@@ -749,6 +749,11 @@ sleep() {{ :; }}
             unit,
         )
         self.assertIn("RuntimeDirectoryPreserve=yes", unit)
+        self.assertIn(
+            "ExecStartPre=/usr/bin/systemd-tmpfiles --create "
+            "/opt/open-mmi/packaging/tmpfiles/open-mmi.conf",
+            unit,
+        )
         start = self.text.index("install_vehicle_config_coordinator() {")
         end = self.text.index("remove_login_autostart() {", start)
         block = self.text[start:end]
@@ -816,6 +821,11 @@ sleep() {{ :; }}
         unit = (ROOT / "systemd/system/open-mmi-update-coordinator.service").read_text(encoding="utf-8")
         self.assertIn("ProtectHome=read-only", unit)
         self.assertIn("RuntimeDirectoryPreserve=yes", unit)
+        self.assertIn(
+            "ExecStartPre=/usr/bin/systemd-tmpfiles --create "
+            "/opt/open-mmi/packaging/tmpfiles/open-mmi.conf",
+            unit,
+        )
         self.assertNotIn("ProtectHome=true", unit)
         start = self.text.index("install_update_coordinator() {")
         end = self.text.index("remove_login_autostart() {", start)
