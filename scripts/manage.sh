@@ -1437,6 +1437,10 @@ cmd_deploy_prepared() {
         log_error "Prepared commit identity changed"; return 1;
     }
 
+    # Failures before the rollback function is installed still need a
+    # user-visible, allowlisted stage instead of a generic deployment error.
+    trap 'log_error "Prepared deployment failed at stage: $deployment_stage"' ERR
+
     install -d -m 0700 -o root -g root "$rollback_root"
     if [ -e "$INSTALL_DIR" ]; then
         cp -a -- "$INSTALL_DIR" "$rollback_root/installation"
@@ -1628,6 +1632,7 @@ cmd_deploy_prepared() {
     install_update_coordinator
     deployment_stage="vehicle-config-coordinator"
     install_vehicle_config_coordinator
+    deployment_stage="power-manager"
     install_power_manager
 
     deployment_stage="user-services"

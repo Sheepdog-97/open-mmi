@@ -121,6 +121,18 @@ class UpdateInstallerTests(unittest.TestCase):
             update_installer._deployment_failure("Prepared deployment failed at stage: package-build"),
             "Prepared deployment failed during package-build; rollback unverified",
         )
+        self.assertEqual(
+            update_installer._deployment_failure(
+                "Prepared deployment failed at stage: vehicle-config-coordinator"
+            ),
+            "Prepared deployment failed during vehicle-config-coordinator; rollback unverified",
+        )
+        self.assertEqual(
+            update_installer._deployment_failure(
+                "Prepared deployment failed at stage: power-manager\nPrepared rollback verified"
+            ),
+            "Prepared deployment failed during power-manager; rollback verified",
+        )
 
     def test_terminal_install_cleans_staging_and_bounds_rollback_archives(self):
         for returncode in (0, 1):

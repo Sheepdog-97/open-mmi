@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shlex
 import shutil
 import socket
@@ -92,13 +91,10 @@ class ManageScriptLifecycleTests(unittest.TestCase):
                 ROOT / "packaging/tmpfiles/open-mmi.conf"
             ).read_text(encoding="utf-8")
             # The separate completeness test verifies the production root:root
-            # ownership contract. Exercise tmpfiles creation with the current
-            # process IDs so this integration test also works in unprivileged CI.
+            # ownership contract. Omit ownership in the isolated fixture so
+            # systemd-tmpfiles does not issue chown calls in unprivileged CI.
             config.write_text(
-                production_config.replace(
-                    " root root ",
-                    f" {os.getuid()} {os.getgid()} ",
-                ),
+                production_config.replace(" root root ", " - - "),
                 encoding="utf-8",
             )
             completed = subprocess.run(
@@ -656,6 +652,7 @@ sudo() {{ printf '%s\\0' "$@"; }}
         block = self.text[start:end]
         self.assertIn('^prepare-[0-9a-f]{32}$', block)
         self.assertIn('/var/lib/open-mmi/staging/$transaction', block)
+        self.assertIn("trap 'log_error \"Prepared deployment failed at stage: $deployment_stage\"' ERR", block)
         self.assertIn('trap rollback_prepared_deployment ERR', block)
         self.assertIn('Prepared deployment failed at stage: $deployment_stage', block)
         self.assertIn('env -u PYTHONPATH "$rollback_root/installation/venv/bin/python" -I -c \'import ui.config_cli\'', block)
@@ -676,6 +673,7 @@ sudo() {{ printf '%s\\0' "$@"; }}
         self.assertIn('"$VEHICLE_CAN_PROVISION_UNIT"', block)
         self.assertIn('vehicle-config-coordinator.env', block)
         self.assertIn('deployment_stage="vehicle-config-coordinator"', block)
+        self.assertIn('deployment_stage="power-manager"', block)
         self.assertIn('systemctl restart "$VEHICLE_CONFIG_COORDINATOR_UNIT"', block)
         self.assertNotIn("eval ", block)
 
@@ -737,6 +735,8 @@ sleep() {{ :; }}
         self.assertIn("ProtectHome=false", unit)
         self.assertNotIn("ProtectHome=read-only", unit)
         self.assertIn("ReadWritePaths=/opt ", unit)
+        self.assertIn("/usr/lib/tmpfiles.d", unit)
+        self.assertIn("/etc/udev/rules.d", unit)
         self.assertNotIn("ReadWritePaths=/opt/open-mmi ", unit)
         self.assertNotIn("%i", unit)
         self.assertIn("ProtectSystem=strict", unit)
