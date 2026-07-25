@@ -60,6 +60,23 @@ Only these keys and channel values are accepted:
 - `beta`
 - `nightly`
 
+### Git branches are separate from updater channels
+
+The repository also has long-lived `nightly`, `beta`, and `main` Git branches.
+Those branch names describe the development and release-promotion workflow; they
+do not change the updater's trust model or candidate-selection rules.
+
+```text
+Git branches:      nightly -> beta -> main
+Updater channels:  nightly / beta / stable
+```
+
+The Nightly updater follows the exact installer-recorded checkout and branch.
+The Beta and Stable channels select qualifying version tags from the official
+`main` branch and do not directly install the Git `beta` branch. See
+[`../../branch-workflow.md`](../../branch-workflow.md) for branch promotion and
+hotfix propagation.
+
 The policy contains no repository URL, path, remote, branch, tag pattern, commit, command, service, or environment setting. Production policy must be a root-owned regular file and must not be group- or world-writable. Symlinks, extra fields, unsupported schemas, and unsupported channels fail closed.
 
 Writes use a randomly named temporary file, `fsync`, mode `0644`, atomic replacement, and a directory `fsync`.
