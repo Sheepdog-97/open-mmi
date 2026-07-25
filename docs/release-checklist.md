@@ -1,5 +1,38 @@
 # Release checklist
 
+## Branch promotion gates
+
+Normal development moves through:
+
+```text
+feature/* -> nightly -> beta -> main
+```
+
+For a Nightly to Beta promotion:
+
+- [ ] The promotion pull request has `beta` as its base and `nightly` as its head.
+- [ ] CI is green on the exact Nightly commit being promoted.
+- [ ] Required tablet, CAN, suspend/resume, update, and vehicle checks pass on that commit.
+- [ ] Any Beta-only correction has been intentionally reconciled with Nightly.
+- [ ] The exact promoted commit is recorded in the pull request or qualification evidence.
+
+For a Beta to Main promotion:
+
+- [ ] The promotion pull request has `main` as its base and `beta` as its head.
+- [ ] The tested Beta candidate has completed its intended soak period.
+- [ ] CI remains green and no unqualified commit was added after final testing.
+- [ ] Changelog, migration notes, version information, and rollback records are current.
+- [ ] The exact Beta commit being merged is recorded.
+
+For an urgent production hotfix:
+
+- [ ] Create the hotfix from `main` and merge it into `main` first.
+- [ ] Cherry-pick the resulting fix commit into `beta` and `nightly`.
+- [ ] Resolve conflicts against each branch's newer implementation rather than discarding it.
+- [ ] Run CI on every branch receiving the hotfix.
+
+See [`branch-workflow.md`](branch-workflow.md) for the complete policy.
+
 ## Automated gates
 
 - [ ] Python 3.9 and current Python CI are green.
