@@ -120,31 +120,43 @@ open-mmi-config vehicle-setup statuses --check pdc_signal
 
 ## Branch workflow
 
-`main` is intended to stay conservative and usable.
-
-Use feature or beta branches for development:
-
-```bash
-git switch main
-git pull origin main
-git switch -c beta/my-feature
-```
-
-For real vehicle testing, keep work on a beta branch until it has been tested safely.
-
-Avoid mixing unrelated work in one branch. For example:
+Open MMI uses three long-lived branches with a one-way promotion path:
 
 ```text
-Good:
-  beta/seat-1p-lighting
-  beta/status-dashboard
-  beta/can-runtime-config
-
-Avoid:
-  beta/fix-everything
+feature/* -> nightly -> beta -> main
 ```
 
-Runtime behaviour changes, udev changes, install changes, and CAN interface setup changes should usually be developed in their own beta branches.
+- `nightly` is the active integration branch for new development.
+- `beta` is the vehicle-tested release-candidate branch.
+- `main` is the conservative production branch.
+
+Start normal feature work from an up-to-date `nightly` branch and open the pull
+request back into `nightly`:
+
+```bash
+git switch nightly
+git pull --ff-only origin nightly
+git switch -c feature/my-change
+```
+
+Avoid mixing unrelated work in one branch. Runtime behaviour, udev, installer,
+CAN setup, and dashboard changes should normally be isolated so each change can
+be tested and promoted independently.
+
+Promote tested work through pull requests from `nightly` to `beta`, then from
+`beta` to `main`. Prefer merge commits for those promotion pull requests so the
+branch ancestry remains visible. A promotion merge can leave `beta` one commit
+ahead of `nightly` even when their file contents are identical; do not merge
+`beta` back merely to remove that count.
+
+Production hotfixes start from `main` and are merged into `main` first. Propagate
+the resulting fix commit by cherry-picking it into `beta` and `nightly`. This
+copies only the hotfix and does not pull unfinished development into production.
+Resolve any cherry-pick conflict in the receiving branch so both the hotfix and
+that branch's newer implementation are preserved.
+
+See [`docs/branch-workflow.md`](docs/branch-workflow.md) for the complete
+promotion, hotfix, conflict-resolution, and branch-naming policy.
 
 ### Managed updater behaviour on development branches
 
@@ -152,28 +164,28 @@ The managed updater is intentionally bound to the branch that produced the
 installed runtime. Switching branches without deploying the new branch makes
 Settings report a branch mismatch and disables browser update actions.
 
-After a development branch contains the build to test, authorize and deploy it
-once from the terminal. For example:
+After a feature branch contains a build that must be tested directly, authorize
+and deploy it once from the terminal. For example:
 
 ```bash
-git switch beta/status-dashboard
-git pull --ff-only origin beta/status-dashboard
+git switch feature/status-dashboard
+git pull --ff-only origin feature/status-dashboard
 sudo ./scripts/manage.sh update
 ```
 
-Later forward commits on that recorded nightly branch can use **Check**,
-**Prepare**, and **Install** in Settings. To return the managed installation to
-`main`:
+Later forward commits on that recorded branch can use **Check**, **Prepare**,
+and **Install** in Settings. After the feature is merged, switch to the intended
+long-lived branch and perform one terminal deployment to record it again:
 
 ```bash
-git switch main
-git pull --ff-only origin main
+git switch nightly
+git pull --ff-only origin nightly
 sudo ./scripts/manage.sh update
 ```
 
-The terminal update records the newly deployed branch and upstream. The
-browser does not offer a branch selector and must not be used to authorize an
-arbitrary repository or ref.
+Returning an installation to `main` uses the same one-time terminal deployment.
+The browser does not offer a branch selector and must not be used to authorize
+an arbitrary repository or ref.
 
 ---
 

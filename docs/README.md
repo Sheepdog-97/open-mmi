@@ -66,6 +66,7 @@ python tools/generate_vehicle_catalogue_docs.py --check
 ## Developers and maintainers
 
 - [Contributing](../CONTRIBUTING.md)
+- [Branch workflow](branch-workflow.md) — Nightly, Beta, Main, promotions, and hotfix propagation.
 - [Project philosophy](project-philosophy.md)
 - [Performance testing](performance-testing.md)
 - [Release checklist](release-checklist.md)
