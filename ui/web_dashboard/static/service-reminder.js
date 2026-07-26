@@ -192,6 +192,27 @@
       return value === null ? "" : String(Math.round(value));
     }
 
+    function updatePanelReadouts() {
+      const host = documentRef.querySelector('[data-openmmi-service-reminder-panel="true"]');
+      if (!host || !snapshot) return false;
+      const units = dashboardSettings();
+      const evaluated = result();
+      const summary = statusSummary(evaluated, units);
+      const summaryNode = host.querySelector?.('[data-openmmi-service-summary]');
+      if (summaryNode) {
+        summaryNode.className = `openmmi-service-summary ${evaluated.state}`;
+        const label = summaryNode.querySelector?.('[data-openmmi-service-summary-label]');
+        const detail = summaryNode.querySelector?.('[data-openmmi-service-summary-detail]');
+        if (label) label.textContent = summary.label;
+        if (detail) detail.textContent = summary.detail;
+      }
+      const current = host.querySelector?.('[data-openmmi-service-current-odometer]');
+      if (current) current.textContent = formatDistance(finite(currentOdometerKm), units);
+      const resetButton = host.querySelector?.('[data-openmmi-service-reset]');
+      if (resetButton) resetButton.disabled = busy || finite(currentOdometerKm) === null;
+      return true;
+    }
+
     function renderPanel() {
       const host = documentRef.querySelector('[data-openmmi-service-reminder-panel="true"]');
       if (!host) return;
@@ -213,22 +234,22 @@
         : "";
       host.innerHTML = `
         <div class="openmmi-settings-panel-head"><span>Service</span><small>inspection reminder</small></div>
-        <div class="openmmi-service-summary ${escapeHtml(evaluated.state)}">
+        <div class="openmmi-service-summary ${escapeHtml(evaluated.state)}" data-openmmi-service-summary>
           <span class="openmmi-service-summary-icon" aria-hidden="true">🔧</span>
-          <div><strong>${escapeHtml(summary.label)}</strong><small>${escapeHtml(summary.detail)}</small></div>
+          <div><strong data-openmmi-service-summary-label>${escapeHtml(summary.label)}</strong><small data-openmmi-service-summary-detail>${escapeHtml(summary.detail)}</small></div>
         </div>
         <div class="openmmi-settings-metric"><span>Last reset</span><strong>${escapeHtml(formatDate(reset.reset_date))}${reset.odometer_km == null ? "" : ` · ${escapeHtml(formatDistance(reset.odometer_km, units))}`}</strong></div>
         <div class="openmmi-settings-metric"><span>Next inspection</span><strong>${escapeHtml(formatDate(nextDue.date))}${nextDue.odometer_km == null ? "" : ` · ${escapeHtml(formatDistance(nextDue.odometer_km, units))}`}</strong></div>
-        <div class="openmmi-settings-metric"><span>Current odometer</span><strong>${escapeHtml(formatDistance(currentOdometer, units))}</strong></div>
-        <form class="openmmi-service-form" data-openmmi-service-form>
+        <div class="openmmi-settings-metric"><span>Current odometer</span><strong data-openmmi-service-current-odometer>${escapeHtml(formatDistance(currentOdometer, units))}</strong></div>
+        <form class="openmmi-service-form openmmi-config-form" data-openmmi-service-form>
           <label class="openmmi-service-toggle"><input type="checkbox" name="enabled" ${settings.enabled !== false ? "checked" : ""}> <span>Inspection reminder enabled</span></label>
           <label><span>Distance interval</span><span class="openmmi-service-input"><input name="distance_interval" type="number" min="1" step="1" value="${escapeHtml(inputValue(settings.distance_interval_km))}" required><small>${escapeHtml(unit)}</small></span></label>
           <label><span>Time interval</span><span class="openmmi-service-input"><input name="time_interval_months" type="number" min="1" max="120" step="1" value="${escapeHtml(settings.time_interval_months)}" required><small>months</small></span></label>
           <label><span>Advance distance warning</span><span class="openmmi-service-input"><input name="warning_distance" type="number" min="0" step="1" value="${escapeHtml(inputValue(settings.warning_distance_km))}" required><small>${escapeHtml(unit)}</small></span></label>
           <label><span>Advance time warning</span><span class="openmmi-service-input"><input name="warning_days" type="number" min="0" max="3650" step="1" value="${escapeHtml(settings.warning_days)}" required><small>days</small></span></label>
-          <div class="openmmi-service-actions">
-            <button type="submit" class="openmmi-config-button primary" ${busy ? "disabled" : ""}>Save intervals</button>
-            <button type="button" class="openmmi-config-button" data-openmmi-service-reset ${resetDisabled ? "disabled" : ""}>Reset inspection interval</button>
+          <div class="openmmi-config-actions openmmi-service-actions">
+            <button type="button" class="openmmi-setting-pill is-selected" data-openmmi-service-save ${busy ? "disabled" : ""}>Save intervals</button>
+            <button type="button" class="openmmi-setting-pill" data-openmmi-service-reset ${resetDisabled ? "disabled" : ""}>Reset inspection interval</button>
           </div>
         </form>
         <p class="openmmi-config-secret-note">Reset stores the current confirmed odometer and host date. It does not change the vehicle cluster service interval.</p>
@@ -310,11 +331,32 @@
       event.preventDefault();
       save(form);
     });
+
+    function activateServiceAction(target) {
+      const saveButton = target?.closest?.("[data-openmmi-service-save]");
+      if (saveButton) {
+        const form = saveButton.closest?.("[data-openmmi-service-form]");
+        if (form) save(form);
+        return true;
+      }
+      if (target?.closest?.("[data-openmmi-service-reset]")) {
+        resetInterval();
+        return true;
+      }
+      return false;
+    }
+
     documentRef.addEventListener("click", (event) => {
-      if (!event.target?.closest?.("[data-openmmi-service-reset]")) return;
+      if (!activateServiceAction(event.target)) return;
       event.preventDefault();
-      resetInterval();
-    });
+      event.stopImmediatePropagation?.();
+    }, true);
+    documentRef.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      if (!activateServiceAction(event.target)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation?.();
+    }, true);
     windowRef.addEventListener?.("openmmi:settingsrender", renderPanel);
     windowRef.addEventListener?.("openmmi:pagechange", renderPanel);
 
@@ -322,7 +364,8 @@
     return Object.freeze({
       update(payload = {}) {
         currentOdometerKm = finite(payload?.state?.vehicle?.odometer_km);
-        render();
+        renderIndicator();
+        updatePanelReadouts();
       },
       refresh,
       snapshot: () => snapshot,

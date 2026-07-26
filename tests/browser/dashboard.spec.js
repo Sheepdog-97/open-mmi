@@ -1085,9 +1085,9 @@ test("door and reverse overlays dismiss and reactivate on lifecycle changes", as
   await expectNoRuntimeFailures(failures);
 });
 
-test("service reminder shows MIB-style due-soon state and settings", async ({ page }) => {
+test("service reminder shows MIB-style due-soon state and preserves active edits", async ({ page }) => {
   const failures = captureRuntimeFailures(page);
-  await loadDashboard(page, {
+  const dashboard = await loadDashboard(page, {
     serviceReminderPayload: {
       ok: true,
       api_version: 1,
@@ -1112,8 +1112,17 @@ test("service reminder shows MIB-style due-soon state and settings", async ({ pa
   await openSettings(page);
   await page.locator('[data-openmmi-settings-section="service"]').click();
   await expect(page.locator('[data-openmmi-service-reminder-panel="true"]')).toContainText("Inspection due soon");
-  await expect(page.getByLabel("Distance interval")).toHaveValue("6214");
+  const distanceInput = page.getByLabel("Distance interval");
+  await expect(distanceInput).toHaveValue("6214");
+  await expect(page.getByRole("button", { name: "Save intervals" })).toHaveClass(/openmmi-setting-pill/);
+  await expect(page.getByRole("button", { name: "Reset inspection interval" })).toHaveClass(/openmmi-setting-pill/);
   await expect(page.getByRole("button", { name: "Reset inspection interval" })).toBeEnabled();
+
+  await distanceInput.fill("7000");
+  await dashboard.setPayload(basePayload({ state: { vehicle: { odometer_km: 12346 } } }));
+  await page.waitForTimeout(300);
+  await expect(distanceInput).toBeFocused();
+  await expect(distanceInput).toHaveValue("7000");
   await expectNoRuntimeFailures(failures);
 });
 

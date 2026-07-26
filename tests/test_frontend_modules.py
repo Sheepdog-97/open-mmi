@@ -234,6 +234,18 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertIn('data-openmmi-vehicle-setup-apply="true"', source)
         self.assertIn('data-openmmi-settings-section="vehicle-setup"', app)
 
+    def test_service_reminder_preserves_editing_state_and_uses_settings_controls(self):
+        source = SERVICE_REMINDER.read_text(encoding="utf-8")
+        update_start = source.index("      update(payload = {}) {")
+        update_end = source.index("      refresh,", update_start)
+        update_block = source[update_start:update_end]
+        self.assertIn("renderIndicator();", update_block)
+        self.assertIn("updatePanelReadouts();", update_block)
+        self.assertNotIn("render();", update_block)
+        self.assertIn('class="openmmi-setting-pill is-selected" data-openmmi-service-save', source)
+        self.assertIn('class="openmmi-setting-pill" data-openmmi-service-reset', source)
+        self.assertIn('event.stopImmediatePropagation?.();', source)
+
     def test_application_does_not_override_module_owned_control_state(self):
         source = APP.read_text(encoding="utf-8")
         self.assertNotIn(

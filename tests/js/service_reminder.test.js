@@ -61,3 +61,65 @@ test("service summary uses MIB-style remaining distance or time", () => {
     detail: "3,786 mi or 214 days",
   });
 });
+
+test("live odometer updates preserve the service form DOM and use standard settings buttons", async () => {
+  let htmlWrites = 0;
+  const summaryLabel = { textContent: "" };
+  const summaryDetail = { textContent: "" };
+  const summaryNode = {
+    className: "",
+    querySelector(selector) {
+      if (selector === "[data-openmmi-service-summary-label]") return summaryLabel;
+      if (selector === "[data-openmmi-service-summary-detail]") return summaryDetail;
+      return null;
+    },
+  };
+  const currentOdometer = { textContent: "" };
+  const resetButton = { disabled: true };
+  const host = {
+    _html: "",
+    set innerHTML(value) { this._html = String(value); htmlWrites += 1; },
+    get innerHTML() { return this._html; },
+    querySelector(selector) {
+      if (selector === "[data-openmmi-service-summary]") return summaryNode;
+      if (selector === "[data-openmmi-service-current-odometer]") return currentOdometer;
+      if (selector === "[data-openmmi-service-reset]") return resetButton;
+      return null;
+    },
+  };
+  const documentRef = {
+    querySelector(selector) {
+      if (selector === '[data-openmmi-service-reminder-panel="true"]') return host;
+      return null;
+    },
+    addEventListener() {},
+  };
+  const windowRef = {
+    document: documentRef,
+    addEventListener() {},
+    FormData: class {},
+    confirm: () => true,
+  };
+  const controller = reminder.install({
+    window: windowRef,
+    document: documentRef,
+    api: {
+      async getJson() { return snapshot(); },
+      async postJson() { return snapshot(); },
+    },
+    preferences: { readDashboardSettings: () => ({ speedUnit: "mph" }) },
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  const writesAfterInitialRender = htmlWrites;
+  assert.ok(writesAfterInitialRender >= 1);
+  assert.match(host.innerHTML, /openmmi-setting-pill is-selected" data-openmmi-service-save/);
+  assert.match(host.innerHTML, /openmmi-setting-pill" data-openmmi-service-reset/);
+
+  controller.update({ state: { vehicle: { odometer_km: 110000 } } });
+
+  assert.equal(htmlWrites, writesAfterInitialRender, "live status updates must not replace focused form controls");
+  assert.equal(currentOdometer.textContent, "68,351 mi");
+  assert.equal(resetButton.disabled, false);
+  assert.equal(summaryLabel.textContent, "Next inspection");
+});
