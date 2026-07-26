@@ -158,6 +158,7 @@ h1 {
 
 .state { text-transform: uppercase; }
 .value small { margin-left: .45rem; font-size: .43em; letter-spacing: 0; }
+.value.openmmi-fuel-low-warning { color: #ffd60a; }
 
 .full { width: 100%; min-width: 0; }
 

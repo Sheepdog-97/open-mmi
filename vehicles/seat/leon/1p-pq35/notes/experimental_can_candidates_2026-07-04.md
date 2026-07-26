@@ -51,9 +51,8 @@ Evidence:
 - The gradual post-refuel rise is consistent with tank-sender or cluster filtering.
 
 Status:
-- Strong experimental fuel-level candidate.
-- Strong experimental low-fuel-warning candidate.
-- Validate another controlled reserve-warning transition before promotion to stable.
+- Fuel-level decoding confirmed and promoted to the stable `fuel.level_l` status.
+- Low-fuel-warning decoding confirmed and promoted to the stable `fuel.low_level_warning` status.
 
 ## Rejected / not enough evidence
 

@@ -46,7 +46,7 @@
     },
     "limitations": [
       "Only the comfort CAN bus is qualified.",
-      "Fuel-level, fuel-range, and selected climate paths remain experimental or diagnostic.",
+      "Selected climate and lighting paths remain experimental or diagnostic.",
       "Open MMI remains passive receive-only and does not transmit vehicle CAN frames."
     ]
   },
@@ -184,18 +184,18 @@
       "id": "0x621",
       "byte": 3,
       "type": "scaled",
-      "path": "fuel.level_l_candidate",
+      "path": "fuel.level_l",
       "mask": "0x7F",
       "scale": 1.0,
       "offset": 0.0,
       "round": 0,
-      "raw_path": "fuel.level_raw_candidate"
+      "raw_path": "fuel.level_raw"
     },
     {
       "id": "0x621",
       "byte": 3,
       "type": "bool",
-      "path": "fuel.low_level_warning_candidate",
+      "path": "fuel.low_level_warning",
       "mask": "0x80",
       "true": "0x80",
       "false": "0x00"
@@ -423,26 +423,6 @@
       "offset": 0.0,
       "round": 0,
       "raw_path": "vehicle.odometer_raw"
-    },
-    {
-      "id": "0x655",
-      "type": "u16le",
-      "start_byte": 3,
-      "path": "fuel.range_km_candidate",
-      "scale": 0.01,
-      "offset": 0.0,
-      "round": 1,
-      "raw_path": "fuel.range_raw_candidate"
-    },
-    {
-      "id": "0x651",
-      "byte": 5,
-      "type": "scaled",
-      "path": "fuel.range_km_rounded_candidate",
-      "scale": 1.0,
-      "offset": 0.0,
-      "round": 0,
-      "raw_path": "fuel.range_rounded_raw_candidate"
     },
     {
       "id": "0x3E3",

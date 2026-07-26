@@ -431,10 +431,10 @@
         "engine rpm revolutions"
       ]
     },
-    "fuel.level_l_candidate": {
-      "title": "Fuel level candidate",
+    "fuel.level_l": {
+      "title": "Fuel level",
       "category": "fuel",
-      "description": "Experimental decoded quantity of fuel remaining.",
+      "description": "Decoded quantity of fuel remaining.",
       "value": {
         "type": "number",
         "nullable": false,
@@ -442,15 +442,15 @@
         "minimum": 0,
         "maximum": 127
       },
-      "status": "experimental",
+      "status": "stable",
       "search_terms": [
         "fuel level quantity remaining litres liters tank"
       ]
     },
-    "fuel.level_raw_candidate": {
-      "title": "Fuel level candidate raw byte",
+    "fuel.level_raw": {
+      "title": "Fuel level raw byte",
       "category": "fuel",
-      "description": "Raw source byte for the experimental fuel-level candidate.",
+      "description": "Raw source byte for the decoded fuel level.",
       "value": {
         "type": "integer",
         "nullable": false,
@@ -459,72 +459,18 @@
       },
       "status": "diagnostic"
     },
-    "fuel.low_level_warning_candidate": {
-      "title": "Low-fuel warning candidate",
+    "fuel.low_level_warning": {
+      "title": "Low-fuel warning",
       "category": "fuel",
-      "description": "Experimental indication that the vehicle fuel-reserve warning is active.",
+      "description": "Indication that the vehicle fuel-reserve warning is active.",
       "value": {
         "type": "boolean",
         "nullable": false
       },
-      "status": "experimental",
+      "status": "stable",
       "search_terms": [
         "fuel low reserve warning lamp light"
       ]
-    },
-    "fuel.range_km_candidate": {
-      "title": "Range candidate",
-      "category": "fuel",
-      "description": "Experimental decoded driving-range candidate.",
-      "value": {
-        "type": "number",
-        "nullable": false,
-        "unit": "km",
-        "minimum": 0
-      },
-      "status": "experimental",
-      "search_terms": [
-        "fuel driving range distance remaining"
-      ]
-    },
-    "fuel.range_km_rounded_candidate": {
-      "title": "Rounded range candidate",
-      "category": "fuel",
-      "description": "Experimental rounded driving-range candidate.",
-      "value": {
-        "type": "number",
-        "nullable": false,
-        "unit": "km",
-        "minimum": 0
-      },
-      "status": "experimental",
-      "search_terms": [
-        "fuel driving range rounded"
-      ]
-    },
-    "fuel.range_raw_candidate": {
-      "title": "Range candidate raw value",
-      "category": "fuel",
-      "description": "Raw source value for the experimental range candidate.",
-      "value": {
-        "type": "integer",
-        "nullable": false,
-        "minimum": 0,
-        "maximum": 65535
-      },
-      "status": "diagnostic"
-    },
-    "fuel.range_rounded_raw_candidate": {
-      "title": "Rounded range candidate raw byte",
-      "category": "fuel",
-      "description": "Raw source byte for the rounded range candidate.",
-      "value": {
-        "type": "integer",
-        "nullable": false,
-        "minimum": 0,
-        "maximum": 255
-      },
-      "status": "diagnostic"
     },
     "lighting.brake": {
       "title": "Brake lights",

@@ -75,7 +75,7 @@ function basePayload(overrides = {}) {
         bonnet: false,
         any_open: false,
       },
-      fuel: { level_l_candidate: 42 },
+      fuel: { level_l: 42 },
     },
   };
 

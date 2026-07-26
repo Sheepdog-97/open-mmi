@@ -9,9 +9,9 @@
       "odometer_km": 318088
     },
     "fuel": {
-      "range_km_candidate": 72.3,
-      "range_raw_candidate": 7231,
-      "range_km_rounded_candidate": 72
+      "level_l": 11.0,
+      "level_raw": 11,
+      "low_level_warning": false
     },
     "engine": {
       "speed_rpm": 800,

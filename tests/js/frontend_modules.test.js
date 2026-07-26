@@ -424,6 +424,42 @@ test("vehicle renderer skips unchanged non-health DOM work", () => {
   assert.equal(metrics.unchanged_renders_skipped, 1);
 });
 
+test("vehicle renderer colours the fuel value only while the low-fuel warning is active", () => {
+  const fuelValueClasses = fakeClassList();
+  const fuelUnit = { textContent: "L" };
+  const fuelValue = {
+    classList: fuelValueClasses,
+    querySelector(selector) { return selector === "small" ? fuelUnit : null; },
+  };
+  const fuelField = {
+    textContent: "--",
+    classList: fakeClassList(),
+    closest(selector) { return selector === ".value" ? fuelValue : null; },
+  };
+  const document = {
+    documentElement: {
+      style: { setProperty() {}, removeProperty() {} },
+      classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+    },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll(selector) {
+      return selector === '[data-field="fuel_l"]' ? [fuelField] : [];
+    },
+  };
+  const renderer = vehicle.createRenderer({
+    document,
+    enhancements: false,
+    preferences: { readDashboardSettings(defaults) { return defaults; } },
+  });
+
+  renderer.render({ state: { fuel: { level_l: 7, low_level_warning: true } } });
+  assert.equal(fuelValueClasses.contains("openmmi-fuel-low-warning"), true);
+
+  renderer.render({ state: { fuel: { level_l: 7, low_level_warning: false } } });
+  assert.equal(fuelValueClasses.contains("openmmi-fuel-low-warning"), false);
+});
+
 test("vehicle view model formats representative imperial status", () => {
   const view = vehicle.buildViewModel({
     health: { status: "ok", age_seconds: 1.24 },
@@ -432,7 +468,8 @@ test("vehicle view model formats representative imperial status", () => {
       engine: { speed_rpm: 2500, coolant_temp_c: 90 },
       electrical: { supply_voltage_v: 13.8 },
       fuel: {
-        level_l_candidate: 42,
+        level_l: 42,
+        low_level_warning: true,
       },
       climate: {
         outside_temp_regulation_c: 10.5,
@@ -460,6 +497,7 @@ test("vehicle view model formats representative imperial status", () => {
   assert.equal(view.fields.speed_mph, "62");
   assert.equal(view.fields.odo_mi, "621");
   assert.equal(view.fields.fuel_l, "42");
+  assert.equal(view.fuelLowWarning, true);
   assert.equal(view.fields.coolant_c, "194");
   assert.equal(view.fields.outside_reg_c, "50.9");
   assert.equal(view.fields.voltage_v, "13.8");
@@ -481,6 +519,7 @@ test("vehicle view model preserves canonical recirculation fallback and missing 
   assert.equal(legacy.fields.speed_mph, "--");
   assert.equal(legacy.fields.coolant_c, "--");
   assert.equal(legacy.fields.fuel_l, "--");
+  assert.equal(legacy.fuelLowWarning, undefined);
   assert.equal(legacy.health.status, "waiting");
   assert.equal(legacy.health.ageText, "--");
   assert.equal(legacy.units.speed_mph, "km/h");
