@@ -78,6 +78,9 @@ class DashboardVehicleUiContracts(unittest.TestCase):
         self.assertTrue(all("Fuel remaining" in article["text"] for article in fuel_articles))
         self.assertTrue(all(article["text"].endswith("L") for article in fuel_articles))
         self.assertIn("fuel_l: formatNumber(fuel.level_l, 0)", self.vehicle)
+        self.assertIn("fuelLowWarning: fuel.low_level_warning", self.vehicle)
+        self.assertIn('classList.toggle("openmmi-fuel-low-warning", warningActive)', self.vehicle)
+        self.assertIn(".value.openmmi-fuel-low-warning { color: #ffd60a; }", self.styles)
 
     def test_rpm_fill_clips_a_fixed_track_gradient(self):
         self.assertIn('setProperty("--rpm-fill"', self.vehicle)

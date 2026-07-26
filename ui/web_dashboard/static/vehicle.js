@@ -124,6 +124,7 @@
       doors: Object.fromEntries(DOORS.map((name) => [name, doors[name]])),
       anyDoorOpen: doors.any_open === true,
       tachRpm: engine.speed_rpm,
+      fuelLowWarning: fuel.low_level_warning,
       units: {
         speed_mph: speedUnitLabel(resolvedSettings),
         odo_mi: distanceUnitLabel(resolvedSettings),
@@ -198,6 +199,14 @@
 
     function setBooleanYesNo(name, value) {
       queryAll(`[data-bool-no="${name}"]`).forEach((node) => { setText(node, booleanYesNoText(value)); });
+    }
+
+    function updateFuelWarning(value) {
+      const warningActive = value === true;
+      queryAll('[data-field="fuel_l"]').forEach((node) => {
+        const valueNode = node.closest ? node.closest(".value") : null;
+        (valueNode || node).classList.toggle("openmmi-fuel-low-warning", warningActive);
+      });
     }
 
     function updateDoor(name, value) {
@@ -476,6 +485,7 @@
         doors: view.doors,
         anyDoorOpen: view.anyDoorOpen,
         tachRpm: view.tachRpm,
+        fuelLowWarning: view.fuelLowWarning,
         units: view.units,
         lighting: state.lighting || {},
         coolantTempC: state.engine?.coolant_temp_c ?? null,
@@ -491,6 +501,7 @@
       Object.entries(view.fields).forEach(([name, value]) => {
         if (!enhancementsEnabled || !enhancedFields.has(name)) setField(name, value);
       });
+      updateFuelWarning(view.fuelLowWarning);
       applyUnitLabels(view.units);
       const tellTaleTest = root && root.openMmiApplyTellTaleTest;
       if (typeof tellTaleTest === "function") tellTaleTest();
