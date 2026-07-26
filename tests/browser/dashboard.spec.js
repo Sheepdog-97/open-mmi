@@ -204,6 +204,14 @@ async function loadDashboard(page, options = {}) {
     next_due: { date: null, odometer_km: null },
   };
 
+  const tripAPayload = options.tripAPayload || {
+    ok: true,
+    api_version: 1,
+    configured: false,
+    path: "/home/test/.config/open-mmi/trip-a.json",
+    reset: { reset_at: null, odometer_km: null },
+  };
+
   const vehicleSetupPayload = options.vehicleSetupPayload || {
     api_version: 1,
     read_only: true,
@@ -417,7 +425,7 @@ async function loadDashboard(page, options = {}) {
   };
 
   await page.setContent(ASSETS.documentHtml, { waitUntil: "domcontentloaded" });
-  await page.evaluate(({ initialPayload, initialStorage, initialBluetoothPayload, initialSystemPayload, initialServiceReminderPayload, initialVehicleSetupPayload, initialVehicleSetupPreviewPayload, initialVehicleSetupCoordinatorPayload, initialVehicleSetupApplyPayload, initialUpdateStatusPayload, initialUpdateCheckPayload, initialUpdateReadinessPayload, initialUpdateCoordinatorPayload, initialVersionPayload, initialJellyfinStatusPayload, initialJellyfinSearchPayload, initialRuntimeDiagnosticsPayload, runtimeDiagnosticsIntervalMs, dashboardRetryDelaysMs }) => {
+  await page.evaluate(({ initialPayload, initialStorage, initialBluetoothPayload, initialSystemPayload, initialServiceReminderPayload, initialTripAPayload, initialVehicleSetupPayload, initialVehicleSetupPreviewPayload, initialVehicleSetupCoordinatorPayload, initialVehicleSetupApplyPayload, initialUpdateStatusPayload, initialUpdateCheckPayload, initialUpdateReadinessPayload, initialUpdateCoordinatorPayload, initialVersionPayload, initialJellyfinStatusPayload, initialJellyfinSearchPayload, initialRuntimeDiagnosticsPayload, runtimeDiagnosticsIntervalMs, dashboardRetryDelaysMs }) => {
     const values = Object.assign({}, initialStorage);
     const localStorageMock = {
       get length() { return Object.keys(values).length; },
@@ -433,6 +441,7 @@ async function loadDashboard(page, options = {}) {
     window.__openMmiBluetoothFixture = initialBluetoothPayload;
     window.__openMmiSystemFixture = initialSystemPayload;
     window.__openMmiServiceReminderFixture = initialServiceReminderPayload;
+    window.__openMmiTripAFixture = initialTripAPayload;
     window.__openMmiVehicleSetupFixture = initialVehicleSetupPayload;
     window.__openMmiVehicleSetupPreviewFixture = initialVehicleSetupPreviewPayload;
     window.__openMmiVehicleSetupCoordinatorFixture = initialVehicleSetupCoordinatorPayload;
@@ -735,6 +744,16 @@ async function loadDashboard(page, options = {}) {
         return json(window.__openMmiServiceReminderFixture);
       }
       if (url.includes("/api/system/service-reminder")) return json(window.__openMmiServiceReminderFixture);
+      if (url.includes("/api/system/trip-a/reset")) {
+        const body = JSON.parse(init.body || "{}");
+        window.__openMmiTripAFixture = {
+          ...window.__openMmiTripAFixture,
+          configured: true,
+          reset: { reset_at: "2026-07-26T20:30:00+00:00", odometer_km: body.odometer_km },
+        };
+        return json(window.__openMmiTripAFixture);
+      }
+      if (url.includes("/api/system/trip-a")) return json(window.__openMmiTripAFixture);
       if (url.includes("/api/system/settings")) return json(window.__openMmiSystemFixture);
       if (url.includes("/api/system/launcher")) {
         const body = JSON.parse(init.body || "{}");
@@ -795,6 +814,7 @@ async function loadDashboard(page, options = {}) {
     initialBluetoothPayload: bluetoothPayload,
     initialSystemPayload: systemPayload,
     initialServiceReminderPayload: serviceReminderPayload,
+    initialTripAPayload: tripAPayload,
     initialVehicleSetupPayload: vehicleSetupPayload,
     initialVehicleSetupPreviewPayload: vehicleSetupPreviewPayload,
     initialVehicleSetupCoordinatorPayload: vehicleSetupCoordinatorPayload,
@@ -1123,6 +1143,32 @@ test("service reminder shows MIB-style due-soon state and preserves active edits
   await page.waitForTimeout(300);
   await expect(distanceInput).toBeFocused();
   await expect(distanceInput).toHaveValue("7000");
+  await expectNoRuntimeFailures(failures);
+});
+
+
+test("Trip A displays live distance and resets from Settings", async ({ page }) => {
+  const failures = captureRuntimeFailures(page);
+  const dashboard = await loadDashboard(page, {
+    tripAPayload: {
+      ok: true,
+      api_version: 1,
+      configured: true,
+      path: "/home/test/.config/open-mmi/trip-a.json",
+      reset: { reset_at: "2026-07-26T20:30:00+00:00", odometer_km: 12000 },
+    },
+  });
+
+  await expect(page.locator("[data-openmmi-trip-a]").first()).toHaveText("214");
+  await expect(page.locator("[data-openmmi-trip-a-unit]").first()).toHaveText("mi");
+
+  await openSettings(page);
+  await page.locator('[data-openmmi-settings-section="trip"]').click();
+  await expect(page.locator('[data-openmmi-trip-a-panel="true"]')).toContainText("Trip A");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Reset Trip A" }).click();
+  await expect(page.locator('[data-openmmi-trip-a-summary-detail]')).toHaveText("0 mi");
+  await expect(page.locator("[data-openmmi-trip-a]").first()).toHaveText("0");
   await expectNoRuntimeFailures(failures);
 });
 

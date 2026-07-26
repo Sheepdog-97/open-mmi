@@ -27,7 +27,7 @@ try:
         restart_dashboard,
         write_environment_file,
     )
-    from ui.web_dashboard import jellyfin, service_reminder, update_status
+    from ui.web_dashboard import jellyfin, service_reminder, trip_a, update_status
 except ModuleNotFoundError as exc:  # pragma: no cover - direct script fallback
     if exc.name != "ui":
         raise
@@ -43,7 +43,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - direct script fallback
         restart_dashboard,
         write_environment_file,
     )
-    from ui.web_dashboard import jellyfin, service_reminder, update_status
+    from ui.web_dashboard import jellyfin, service_reminder, trip_a, update_status
 
 SYSTEM_MAX_BODY_BYTES = 16 * 1024
 SYSTEM_CUSTOM_EDIT_MAX_BODY_BYTES = vehicle_setup.MAX_PROFILE_BYTES * 6 + SYSTEM_MAX_BODY_BYTES
@@ -206,6 +206,7 @@ def _handle_get(handler: Any, path: str) -> bool:
         "/api/system/update-readiness": lambda: update_readiness.readiness_payload(update_status.status_payload()),
         "/api/system/update-coordinator": update_coordinator.client_status,
         "/api/system/service-reminder": service_reminder.status_payload,
+        "/api/system/trip-a": trip_a.status_payload,
     }
     if path not in routes:
         return False
@@ -247,6 +248,7 @@ def _handle_post(handler: Any, path: str) -> bool:
         "/api/system/update-install",
         "/api/system/service-reminder/settings",
         "/api/system/service-reminder/reset",
+        "/api/system/trip-a/reset",
     }:
         return False
     if not _request_allowed(handler):
@@ -281,6 +283,8 @@ def _handle_post(handler: Any, path: str) -> bool:
             result = service_reminder.update_settings(_json_body(handler))
         elif path == "/api/system/service-reminder/reset":
             result = service_reminder.reset_interval(_json_body(handler))
+        elif path == "/api/system/trip-a/reset":
+            result = trip_a.reset_trip(_json_body(handler))
         elif path == "/api/system/update-check":
             payload = _json_body(handler)
             if payload not in ({}, {"confirm": True}):

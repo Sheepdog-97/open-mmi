@@ -14,7 +14,8 @@ const openMmiSystemSettingsClient = window.openMmiSystemSettings;
 const openMmiVehicleSetupSettingsClient = window.openMmiVehicleSetupSettings;
 const openMmiRuntimeDiagnosticsClient = window.openMmiRuntimeDiagnostics;
 const openMmiServiceReminderClient = window.openMmiServiceReminder;
-if (!openMmiApiClient || !openMmiDashboardConnectionClient || !openMmiPrefs || !openMmiStatusClient || !openMmiNavigationClient || !openMmiOverlaysClient || !openMmiVehicleClient || !openMmiMediaClient || !openMmiRadioMediaClient || !openMmiUsbMediaClient || !openMmiJellyfinMediaClient || !openMmiBluetoothMediaClient || !openMmiSystemSettingsClient || !openMmiVehicleSetupSettingsClient || !openMmiRuntimeDiagnosticsClient || !openMmiServiceReminderClient) {
+const openMmiTripAClient = window.openMmiTripA;
+if (!openMmiApiClient || !openMmiDashboardConnectionClient || !openMmiPrefs || !openMmiStatusClient || !openMmiNavigationClient || !openMmiOverlaysClient || !openMmiVehicleClient || !openMmiMediaClient || !openMmiRadioMediaClient || !openMmiUsbMediaClient || !openMmiJellyfinMediaClient || !openMmiBluetoothMediaClient || !openMmiSystemSettingsClient || !openMmiVehicleSetupSettingsClient || !openMmiRuntimeDiagnosticsClient || !openMmiServiceReminderClient || !openMmiTripAClient) {
   throw new Error("Open MMI frontend modules did not load");
 }
 
@@ -28,6 +29,7 @@ const openMmiSystemSettingsController = openMmiSystemSettingsClient.install({ ap
 const openMmiVehicleSetupSettingsController = openMmiVehicleSetupSettingsClient.install({ api: openMmiApiClient });
 const openMmiRuntimeDiagnosticsController = openMmiRuntimeDiagnosticsClient.install({ api: openMmiApiClient });
 const openMmiServiceReminderController = openMmiServiceReminderClient.install({ api: openMmiApiClient, preferences: openMmiPrefs });
+const openMmiTripAController = openMmiTripAClient.install({ api: openMmiApiClient, preferences: openMmiPrefs });
 openMmiRadioMediaClient.installPrivacy({ preferences: openMmiPrefs });
 window.openMmiStatusStore = openMmiStatusStore;
 window.openMmiDashboardConnectionController = openMmiDashboardConnectionController;
@@ -39,6 +41,7 @@ window.openMmiSystemSettingsController = openMmiSystemSettingsController;
 window.openMmiVehicleSetupSettingsController = openMmiVehicleSetupSettingsController;
 window.openMmiRuntimeDiagnosticsController = openMmiRuntimeDiagnosticsController;
 window.openMmiServiceReminderController = openMmiServiceReminderController;
+window.openMmiTripAController = openMmiTripAController;
 window.openMmiApplyInlineDataTelltales = openMmiVehicleRenderer.applyInlineDataTelltales;
 window.openMmiApplyCoolantAndVoltageFixes = openMmiVehicleRenderer.applyCoolantAndVoltageFixes;
 window.setPage = (index) => openMmiNavigationController.setPage(index);
@@ -98,6 +101,7 @@ function openMmiApplyDriverDashboardCleanupV2() {
 let render = function openMmiRenderVehicleStatus(payload) {
   const rendered = openMmiVehicleRenderer.render(payload);
   openMmiServiceReminderController.update(payload);
+  openMmiTripAController.update(payload);
   return rendered;
 };
 
@@ -852,6 +856,14 @@ openMmiNavigationController.init();
       `;
     }
 
+    if (section === "trip") {
+      return `
+        <div data-openmmi-trip-a-panel="true">
+          <div class="openmmi-settings-panel-head"><span>Trip A</span><small>loading trip state</small></div>
+        </div>
+      `;
+    }
+
     if (section === "service") {
       return `
         <div data-openmmi-service-reminder-panel="true">
@@ -984,6 +996,7 @@ openMmiNavigationController.init();
             <button type="button" data-openmmi-settings-section="system">System <small>launcher and startup</small></button>
             <button type="button" data-openmmi-settings-section="vehicle-setup">Vehicle setup <small>profile, bindings and CAN</small></button>
             <button type="button" data-openmmi-settings-section="service">Service <small>inspection interval</small></button>
+            <button type="button" data-openmmi-settings-section="trip">Trip A <small>distance and reset</small></button>
             <button type="button" data-openmmi-settings-section="units">Units <small>mph, °C, raw values</small></button>
             <button type="button" data-openmmi-settings-section="display">Display <small>dim mode, animation</small></button>
             <button type="button" data-openmmi-settings-section="diagnostics">Diagnostics <small>live decoded state</small></button>

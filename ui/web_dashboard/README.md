@@ -75,6 +75,7 @@ Static modules load before `app.js` and have explicit state ownership:
   preview/review, confirmed Apply, coordinator polling, restoration feedback;
 - `runtime-diagnostics.js` — Diagnostics-only system polling and derived state;
 - `service-reminder.js` — inspection interval settings, unit conversion, live due-state evaluation and dashboard warning;
+- `trip-a.js` — host-backed Trip A reset, live odometer subtraction and unit-aware dashboard/settings display;
 - `app.js` — Settings shell, diagnostics rendering, advanced tell-tales, and
   remaining cross-cutting integration.
 
@@ -143,6 +144,22 @@ warning thresholds. Reset requires explicit confirmation and the current decoded
 `vehicle.odometer_km`; it records the host date and odometer in
 `~/.config/open-mmi/service-reminder.json` with mode `0600`. The reminder becomes
 due when either the distance or date deadline is reached.
+
+## Trip A routes
+
+Trip A is independent of the instrument-cluster trip counter and uses the
+confirmed decoded odometer:
+
+```text
+GET  /api/system/trip-a
+POST /api/system/trip-a/reset
+```
+
+Reset requires explicit confirmation and the current `vehicle.odometer_km`. The
+reset timestamp and odometer are written atomically to
+`~/.config/open-mmi/trip-a.json` with mode `0600`. The dashboard subtracts that
+saved odometer from the live value and follows the existing miles/kilometres
+preference.
 
 ## Update routes
 
