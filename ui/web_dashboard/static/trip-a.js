@@ -171,7 +171,7 @@
         </div>
         <div class="openmmi-settings-metric"><span>Last reset</span><strong>${escapeHtml(formatTimestamp(reset.reset_at))}${reset.odometer_km == null ? "" : ` · ${escapeHtml(formatDistanceWithUnit(reset.odometer_km, units))}`}</strong></div>
         <div class="openmmi-settings-metric"><span>Current odometer</span><strong data-openmmi-trip-a-current-odometer>${escapeHtml(formatDistanceWithUnit(currentOdometer, units))}</strong></div>
-        <div class="openmmi-config-actions">
+        <div class="openmmi-config-actions openmmi-service-actions">
           <button type="button" class="openmmi-setting-pill is-selected" data-openmmi-trip-a-reset ${busy || currentOdometer === null ? "disabled" : ""}>Reset Trip A</button>
         </div>
         <p class="openmmi-config-secret-note">Trip A uses the confirmed odometer. Resetting stores the current odometer on this Open MMI host and does not change the vehicle cluster.</p>

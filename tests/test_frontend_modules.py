@@ -268,6 +268,7 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertIn('const RESET_ENDPOINT = "/api/system/trip-a/reset";', source)
         self.assertIn('payload?.state?.vehicle?.odometer_km', source)
         self.assertIn('data-openmmi-trip-a-reset', source)
+        self.assertIn('openmmi-config-actions openmmi-service-actions', source)
         self.assertIn('event.stopImmediatePropagation?.();', source)
         self.assertIn('data-openmmi-settings-section="trip"', app)
         self.assertIn('data-openmmi-trip-a-panel="true"', app)
