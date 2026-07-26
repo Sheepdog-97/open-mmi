@@ -1233,7 +1233,13 @@ test("Trip B displays independently and resets manually", async ({ page }) => {
       reset: { reset_at: "2026-07-20T12:00:00+00:00", odometer_km: 11000 },
     },
   });
+  await expect(page.locator("[data-openmmi-trip-b]").first()).toBeHidden();
+  await expect(page.locator("[data-openmmi-trip-label]").first()).toHaveText("Trip A");
+  await page.getByRole("button", { name: "Show Trip B" }).first().click();
+  await expect(page.locator("[data-openmmi-trip-label]").first()).toHaveText("Trip B");
+  await expect(page.locator("[data-openmmi-trip-b]").first()).toBeVisible();
   await expect(page.locator("[data-openmmi-trip-b]").first()).toHaveText("835");
+  await expect(page.getByRole("button", { name: "Show Trip A" }).first()).toBeVisible();
   await openSettings(page);
   await page.locator('[data-openmmi-settings-section="trip"]').click();
   page.once("dialog", (dialog) => dialog.accept());

@@ -130,6 +130,47 @@ h1 {
   display: block;
 }
 
+.openmmi-trip-card {
+  position: relative;
+}
+
+.openmmi-trip-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .65rem;
+}
+
+.openmmi-trip-card .openmmi-trip-card-next {
+  appearance: none;
+  flex: 0 0 auto;
+  width: clamp(2rem, 3.6vw, 2.65rem);
+  height: clamp(2rem, 3.6vw, 2.65rem);
+  display: inline-grid;
+  place-items: center;
+  margin: -.35rem -.35rem 0 0;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .055);
+  color: #eef3fb;
+  font: inherit;
+  font-size: clamp(1.45rem, 2.3vw, 2rem);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.openmmi-trip-card .openmmi-trip-card-next:hover,
+.openmmi-trip-card .openmmi-trip-card-next:focus-visible {
+  border-color: rgba(255, 255, 255, .34);
+  background: rgba(255, 255, 255, .12);
+  outline: none;
+}
+
+.openmmi-trip-card .openmmi-trip-card-next:active {
+  transform: translateX(1px);
+}
+
 .icon {
   flex: 0 0 clamp(2.4rem, 4.2vw, 4.4rem);
   text-align: center;

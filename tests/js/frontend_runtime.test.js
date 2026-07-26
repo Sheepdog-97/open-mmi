@@ -207,7 +207,7 @@ test("dashboard scripts initialise extracted Jellyfin and Bluetooth controllers"
 
   const staticDir = path.resolve("ui/web_dashboard/static");
   const scripts = [
-    "api.js", "dashboard-connection.js", "preferences.js", "system-settings.js", "vehicle-setup-settings.js", "runtime-diagnostics.js", "service-reminder.js", "trip-a.js", "trip-b.js", "clock.js", "status.js", "navigation.js", "overlays.js", "vehicle.js",
+    "api.js", "dashboard-connection.js", "preferences.js", "system-settings.js", "vehicle-setup-settings.js", "runtime-diagnostics.js", "service-reminder.js", "trip-a.js", "trip-b.js", "trip-switcher.js", "clock.js", "status.js", "navigation.js", "overlays.js", "vehicle.js",
     "media.js", "jellyfin-reconnection.js", "media-jellyfin.js", "media-radio.js", "media-usb.js", "media-bluetooth.js", "app.js",
   ];
   for (const name of scripts) {
@@ -224,6 +224,8 @@ test("dashboard scripts initialise extracted Jellyfin and Bluetooth controllers"
   assert.equal(window.openMmiTripAController !== undefined, true);
   assert.equal(window.openMmiTripB !== undefined, true);
   assert.equal(window.openMmiTripBController !== undefined, true);
+  assert.equal(window.openMmiTripSwitcher !== undefined, true);
+  assert.equal(window.openMmiTripSwitcherController !== undefined, true);
   assert.equal(window.openMmiJellyfinReconnect !== undefined, true);
   assert.equal(window.openMmiJellyfinMedia !== undefined, true);
   assert.equal(window.openMmiJellyfinPlayer !== undefined, true);

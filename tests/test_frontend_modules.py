@@ -19,6 +19,7 @@ RUNTIME_DIAGNOSTICS = STATIC / "runtime-diagnostics.js"
 SERVICE_REMINDER = STATIC / "service-reminder.js"
 TRIP_A = STATIC / "trip-a.js"
 TRIP_B = STATIC / "trip-b.js"
+TRIP_SWITCHER = STATIC / "trip-switcher.js"
 STATUS = STATIC / "status.js"
 NAVIGATION = STATIC / "navigation.js"
 OVERLAYS = STATIC / "overlays.js"
@@ -44,6 +45,7 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         service_reminder_index = html.index('<script src="/service-reminder.js"></script>')
         trip_a_index = html.index('<script src="/trip-a.js"></script>')
         trip_b_index = html.index('<script src="/trip-b.js"></script>')
+        trip_switcher_index = html.index('<script src="/trip-switcher.js"></script>')
         status_index = html.index('<script src="/status.js"></script>')
         navigation_index = html.index('<script src="/navigation.js"></script>')
         overlays_index = html.index('<script src="/overlays.js"></script>')
@@ -64,7 +66,8 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertLess(runtime_diagnostics_index, service_reminder_index)
         self.assertLess(service_reminder_index, trip_a_index)
         self.assertLess(trip_a_index, trip_b_index)
-        self.assertLess(trip_b_index, status_index)
+        self.assertLess(trip_b_index, trip_switcher_index)
+        self.assertLess(trip_switcher_index, status_index)
         self.assertLess(status_index, navigation_index)
         self.assertLess(navigation_index, overlays_index)
         self.assertLess(overlays_index, vehicle_index)
@@ -88,6 +91,7 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertIn("window.openMmiServiceReminder", source)
         self.assertIn("window.openMmiTripA", source)
         self.assertIn("window.openMmiTripB", source)
+        self.assertIn("window.openMmiTripSwitcher", source)
         self.assertIn("window.openMmiNavigation", source)
         self.assertIn("window.openMmiOverlays", source)
         self.assertIn("window.openMmiVehicle", source)
@@ -143,6 +147,7 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
             (SERVICE_REMINDER.read_text(encoding="utf-8"), "openMmiServiceReminder"),
             (TRIP_A.read_text(encoding="utf-8"), "openMmiTripA"),
             (TRIP_B.read_text(encoding="utf-8"), "openMmiTripB"),
+            (TRIP_SWITCHER.read_text(encoding="utf-8"), "openMmiTripSwitcher"),
             (status, "openMmiStatus"),
             (navigation, "openMmiNavigation"),
             (overlays, "openMmiOverlays"),
@@ -164,6 +169,7 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
                 "openMmiServiceReminder",
                 "openMmiTripA",
                 "openMmiTripB",
+                "openMmiTripSwitcher",
                 "openMmiMediaShell",
                 "openMmiJellyfinReconnect",
                 "openMmiJellyfinMedia",
@@ -288,6 +294,12 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertIn('data-openmmi-trip-b-reset', trip_b)
         self.assertIn('data-openmmi-trip-b-panel="true"', app)
         self.assertEqual(html.count('data-openmmi-trip-b>'), 2)
+        switcher = TRIP_SWITCHER.read_text(encoding="utf-8")
+        self.assertIn('const STORAGE_KEY = "openmmi.trip.display.v1";', switcher)
+        self.assertIn('data-openmmi-trip-next', html)
+        self.assertEqual(html.count('data-openmmi-trip-card'), 2)
+        self.assertEqual(html.count('data-openmmi-trip-next'), 2)
+        self.assertNotIn('<div class="label">Trip B</div>', html)
 
     def test_application_does_not_override_module_owned_control_state(self):
         source = APP.read_text(encoding="utf-8")

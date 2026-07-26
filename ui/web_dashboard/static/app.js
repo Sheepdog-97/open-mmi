@@ -16,7 +16,8 @@ const openMmiRuntimeDiagnosticsClient = window.openMmiRuntimeDiagnostics;
 const openMmiServiceReminderClient = window.openMmiServiceReminder;
 const openMmiTripAClient = window.openMmiTripA;
 const openMmiTripBClient = window.openMmiTripB;
-if (!openMmiApiClient || !openMmiDashboardConnectionClient || !openMmiPrefs || !openMmiStatusClient || !openMmiNavigationClient || !openMmiOverlaysClient || !openMmiVehicleClient || !openMmiMediaClient || !openMmiRadioMediaClient || !openMmiUsbMediaClient || !openMmiJellyfinMediaClient || !openMmiBluetoothMediaClient || !openMmiSystemSettingsClient || !openMmiVehicleSetupSettingsClient || !openMmiRuntimeDiagnosticsClient || !openMmiServiceReminderClient || !openMmiTripAClient || !openMmiTripBClient) {
+const openMmiTripSwitcherClient = window.openMmiTripSwitcher;
+if (!openMmiApiClient || !openMmiDashboardConnectionClient || !openMmiPrefs || !openMmiStatusClient || !openMmiNavigationClient || !openMmiOverlaysClient || !openMmiVehicleClient || !openMmiMediaClient || !openMmiRadioMediaClient || !openMmiUsbMediaClient || !openMmiJellyfinMediaClient || !openMmiBluetoothMediaClient || !openMmiSystemSettingsClient || !openMmiVehicleSetupSettingsClient || !openMmiRuntimeDiagnosticsClient || !openMmiServiceReminderClient || !openMmiTripAClient || !openMmiTripBClient || !openMmiTripSwitcherClient) {
   throw new Error("Open MMI frontend modules did not load");
 }
 
@@ -32,6 +33,7 @@ const openMmiRuntimeDiagnosticsController = openMmiRuntimeDiagnosticsClient.inst
 const openMmiServiceReminderController = openMmiServiceReminderClient.install({ api: openMmiApiClient, preferences: openMmiPrefs });
 const openMmiTripAController = openMmiTripAClient.install({ api: openMmiApiClient, preferences: openMmiPrefs });
 const openMmiTripBController = openMmiTripBClient.install({ api: openMmiApiClient, preferences: openMmiPrefs });
+const openMmiTripSwitcherController = openMmiTripSwitcherClient.install({ preferences: openMmiPrefs });
 openMmiRadioMediaClient.installPrivacy({ preferences: openMmiPrefs });
 window.openMmiStatusStore = openMmiStatusStore;
 window.openMmiDashboardConnectionController = openMmiDashboardConnectionController;
@@ -45,6 +47,7 @@ window.openMmiRuntimeDiagnosticsController = openMmiRuntimeDiagnosticsController
 window.openMmiServiceReminderController = openMmiServiceReminderController;
 window.openMmiTripAController = openMmiTripAController;
 window.openMmiTripBController = openMmiTripBController;
+window.openMmiTripSwitcherController = openMmiTripSwitcherController;
 window.openMmiApplyInlineDataTelltales = openMmiVehicleRenderer.applyInlineDataTelltales;
 window.openMmiApplyCoolantAndVoltageFixes = openMmiVehicleRenderer.applyCoolantAndVoltageFixes;
 window.setPage = (index) => openMmiNavigationController.setPage(index);
