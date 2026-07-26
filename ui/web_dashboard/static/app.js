@@ -921,6 +921,133 @@ openMmiNavigationController.init();
 `;
   }
 
+  const SETTINGS_SECTION_GROUPS = Object.freeze({
+    units: "general",
+    display: "general",
+    "vehicle-setup": "vehicle",
+    service: "vehicle",
+    trip: "vehicle",
+    reverse: "vehicle",
+    system: "system",
+    media: "system",
+    diagnostics: "advanced",
+  });
+
+  function settingsGroupForSection(section) {
+    return SETTINGS_SECTION_GROUPS[section] || "general";
+  }
+
+  function settingsGroupNode(groupId) {
+    return one(`[data-openmmi-settings-group="${groupId}"]`);
+  }
+
+  function setSettingsGroupExpanded(groupId, expanded, exclusive = true) {
+    const group = settingsGroupNode(groupId);
+    const tree = one(".openmmi-settings-tree");
+    if (!group) return false;
+    if (expanded && exclusive) {
+      many("[data-openmmi-settings-group]").forEach((candidate) => {
+        if (candidate === group) return;
+        const candidateToggle = candidate.querySelector?.("[data-openmmi-settings-group-toggle]");
+        const candidateChildren = candidate.querySelector?.("[data-openmmi-settings-group-children]");
+        candidate.classList.remove("is-expanded");
+        candidateToggle?.setAttribute?.("aria-expanded", "false");
+        if (candidateChildren) candidateChildren.hidden = true;
+      });
+    }
+    const toggle = group.querySelector?.("[data-openmmi-settings-group-toggle]");
+    const children = group.querySelector?.("[data-openmmi-settings-group-children]");
+    const chevron = group.querySelector?.(".openmmi-settings-tree-chevron");
+    const label = toggle?.dataset?.openmmiSettingsGroupLabel || "settings";
+    group.classList.toggle("is-expanded", Boolean(expanded));
+    toggle?.setAttribute?.("aria-expanded", expanded ? "true" : "false");
+    toggle?.setAttribute?.(
+      "aria-label",
+      expanded ? `Back to settings categories from ${label}` : `Open ${label} settings`,
+    );
+    if (chevron) chevron.textContent = expanded ? "‹" : "›";
+    if (children) children.hidden = !expanded;
+    tree?.classList.toggle("is-drilled", Boolean(expanded));
+    return true;
+  }
+
+  function revealSettingsSection(section) {
+    const groupId = settingsGroupForSection(section);
+    setSettingsGroupExpanded(groupId, true);
+    many("[data-openmmi-settings-group]").forEach((group) => {
+      group.classList.toggle("has-active", group.dataset.openmmiSettingsGroup === groupId);
+    });
+  }
+
+  function visibleSettingsTreeItems(tree) {
+    return Array.from(tree?.querySelectorAll?.('[role="treeitem"]') || []).filter((item) => {
+      if (item.hidden) return false;
+      const hiddenParent = item.closest?.("[hidden]");
+      if (hiddenParent) return false;
+      return typeof item.getClientRects !== "function" || item.getClientRects().length > 0;
+    });
+  }
+
+  function focusSettingsTreeItem(item, tree) {
+    visibleSettingsTreeItems(tree).forEach((candidate) => candidate.setAttribute?.("tabindex", candidate === item ? "0" : "-1"));
+    item?.focus?.();
+  }
+
+  function bindSettingsTree(page) {
+    const tree = page?.querySelector?.(".openmmi-settings-tree");
+    if (!tree || tree.dataset.openMmiTreeBound === "true") return;
+    tree.dataset.openMmiTreeBound = "true";
+
+    many("[data-openmmi-settings-group-toggle]").forEach((toggle) => {
+      toggle.addEventListener("click", () => {
+        const group = toggle.closest?.("[data-openmmi-settings-group]");
+        const expanded = toggle.getAttribute?.("aria-expanded") === "true";
+        setSettingsGroupExpanded(group?.dataset?.openmmiSettingsGroup || "", !expanded);
+        focusSettingsTreeItem(toggle, tree);
+      });
+    });
+
+    tree.addEventListener("keydown", (event) => {
+      const current = event.target?.closest?.('[role="treeitem"]');
+      if (!current) return;
+      const items = visibleSettingsTreeItems(tree);
+      const index = items.indexOf(current);
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const delta = event.key === "ArrowDown" ? 1 : -1;
+        focusSettingsTreeItem(items[(index + delta + items.length) % items.length], tree);
+        return;
+      }
+      if (event.key === "Home" || event.key === "End") {
+        event.preventDefault();
+        focusSettingsTreeItem(event.key === "Home" ? items[0] : items[items.length - 1], tree);
+        return;
+      }
+      const groupToggle = current.matches?.("[data-openmmi-settings-group-toggle]") ? current : null;
+      if (event.key === "ArrowRight" && groupToggle) {
+        event.preventDefault();
+        const groupId = groupToggle.closest?.("[data-openmmi-settings-group]")?.dataset?.openmmiSettingsGroup || "";
+        if (groupToggle.getAttribute?.("aria-expanded") !== "true") setSettingsGroupExpanded(groupId, true);
+        else {
+          const firstChild = groupToggle.closest?.("[data-openmmi-settings-group]")?.querySelector?.("[data-openmmi-settings-section]");
+          focusSettingsTreeItem(firstChild, tree);
+        }
+        return;
+      }
+      if (event.key === "ArrowLeft") {
+        const group = current.closest?.("[data-openmmi-settings-group]");
+        const toggle = group?.querySelector?.("[data-openmmi-settings-group-toggle]");
+        if (!group || !toggle) return;
+        event.preventDefault();
+        if (current === toggle && toggle.getAttribute?.("aria-expanded") === "true") {
+          setSettingsGroupExpanded(group.dataset.openmmiSettingsGroup || "", false, false);
+        } else {
+          focusSettingsTreeItem(toggle, tree);
+        }
+      }
+    });
+  }
+
   function diagnosticsScroller() {
     return one("#pageSettings .openmmi-settings-panel-card");
   }
@@ -951,7 +1078,16 @@ openMmiNavigationController.init();
     }
 
     many("[data-openmmi-settings-section]").forEach((button) => {
-      button.classList.toggle("active", button.dataset.openmmiSettingsSection === state.section);
+      const active = button.dataset.openmmiSettingsSection === state.section;
+      button.classList.toggle("active", active);
+      button.setAttribute?.("aria-selected", active ? "true" : "false");
+      button.setAttribute?.("tabindex", active ? "0" : "-1");
+    });
+    many("[data-openmmi-settings-group]").forEach((group) => {
+      group.classList.toggle(
+        "has-active",
+        group.dataset.openmmiSettingsGroup === settingsGroupForSection(state.section),
+      );
     });
     window.dispatchEvent(new CustomEvent("openmmi:settingsrender"));
   }
@@ -1003,16 +1139,44 @@ openMmiNavigationController.init();
           <div class="openmmi-settings-kicker">V1 roadmap</div>
           <h2>Settings</h2>
           <p>Preferences and diagnostics live here so Drive and Media stay clean.</p>
-          <nav class="openmmi-settings-tree" aria-label="Settings tree">
-            <button type="button" data-openmmi-settings-section="system">System <small>launcher and startup</small></button>
-            <button type="button" data-openmmi-settings-section="vehicle-setup">Vehicle setup <small>profile, bindings and CAN</small></button>
-            <button type="button" data-openmmi-settings-section="service">Service <small>inspection interval</small></button>
-            <button type="button" data-openmmi-settings-section="trip">Trips <small>A, B and automatic reset</small></button>
-            <button type="button" data-openmmi-settings-section="units">Units <small>mph, °C, raw values</small></button>
-            <button type="button" data-openmmi-settings-section="display">Display <small>dim mode, animation</small></button>
-            <button type="button" data-openmmi-settings-section="diagnostics">Diagnostics <small>live decoded state</small></button>
-            <button type="button" data-openmmi-settings-section="media">Media <small>Jellyfin and keys</small></button>
-            <button type="button" data-openmmi-settings-section="reverse">Reverse assist <small>PDC/camera path</small></button>
+          <nav class="openmmi-settings-tree" aria-label="Settings tree" role="tree">
+            <div class="openmmi-settings-tree-group" data-openmmi-settings-group="general">
+              <button type="button" class="openmmi-settings-tree-branch" role="treeitem" data-openmmi-settings-group-toggle data-openmmi-settings-group-label="General" aria-expanded="false" aria-controls="openmmiSettingsGeneral">
+                <span><span class="openmmi-settings-tree-chevron" aria-hidden="true">›</span>General</span><small>units and display</small>
+              </button>
+              <div id="openmmiSettingsGeneral" class="openmmi-settings-tree-children" role="group" data-openmmi-settings-group-children hidden>
+                <button type="button" role="treeitem" data-openmmi-settings-parent="general" data-openmmi-settings-section="units">Units <small>mph, °C, raw values</small></button>
+                <button type="button" role="treeitem" data-openmmi-settings-parent="general" data-openmmi-settings-section="display">Display <small>dim mode and animation</small></button>
+              </div>
+            </div>
+            <div class="openmmi-settings-tree-group" data-openmmi-settings-group="vehicle">
+              <button type="button" class="openmmi-settings-tree-branch" role="treeitem" data-openmmi-settings-group-toggle data-openmmi-settings-group-label="Vehicle" aria-expanded="false" aria-controls="openmmiSettingsVehicle">
+                <span><span class="openmmi-settings-tree-chevron" aria-hidden="true">›</span>Vehicle</span><small>profile and maintenance</small>
+              </button>
+              <div id="openmmiSettingsVehicle" class="openmmi-settings-tree-children" role="group" data-openmmi-settings-group-children hidden>
+                <button type="button" role="treeitem" data-openmmi-settings-parent="vehicle" data-openmmi-settings-section="vehicle-setup">Vehicle setup <small>profile, bindings and CAN</small></button>
+                <button type="button" role="treeitem" data-openmmi-settings-parent="vehicle" data-openmmi-settings-section="service">Service <small>inspection interval</small></button>
+                <button type="button" role="treeitem" data-openmmi-settings-parent="vehicle" data-openmmi-settings-section="trip">Trips <small>A, B and automatic reset</small></button>
+                <button type="button" role="treeitem" data-openmmi-settings-parent="vehicle" data-openmmi-settings-section="reverse">Reverse assist <small>PDC and camera path</small></button>
+              </div>
+            </div>
+            <div class="openmmi-settings-tree-group" data-openmmi-settings-group="system">
+              <button type="button" class="openmmi-settings-tree-branch" role="treeitem" data-openmmi-settings-group-toggle data-openmmi-settings-group-label="System" aria-expanded="false" aria-controls="openmmiSettingsSystem">
+                <span><span class="openmmi-settings-tree-chevron" aria-hidden="true">›</span>System</span><small>launcher and media</small>
+              </button>
+              <div id="openmmiSettingsSystem" class="openmmi-settings-tree-children" role="group" data-openmmi-settings-group-children hidden>
+                <button type="button" role="treeitem" data-openmmi-settings-parent="system" data-openmmi-settings-section="system">System <small>launcher and startup</small></button>
+                <button type="button" role="treeitem" data-openmmi-settings-parent="system" data-openmmi-settings-section="media">Media <small>Jellyfin and keys</small></button>
+              </div>
+            </div>
+            <div class="openmmi-settings-tree-group" data-openmmi-settings-group="advanced">
+              <button type="button" class="openmmi-settings-tree-branch" role="treeitem" data-openmmi-settings-group-toggle data-openmmi-settings-group-label="Advanced" aria-expanded="false" aria-controls="openmmiSettingsAdvanced">
+                <span><span class="openmmi-settings-tree-chevron" aria-hidden="true">›</span>Advanced</span><small>live diagnostics</small>
+              </button>
+              <div id="openmmiSettingsAdvanced" class="openmmi-settings-tree-children" role="group" data-openmmi-settings-group-children hidden>
+                <button type="button" role="treeitem" data-openmmi-settings-parent="advanced" data-openmmi-settings-section="diagnostics">Diagnostics <small>live decoded state</small></button>
+              </div>
+            </div>
           </nav>
         </section>
         <section class="openmmi-settings-panel-card" aria-label="Selected settings"><div id="openmmiSettingsStaticControls" class="openmmi-settings-static-controls" hidden></div><div id="openmmiSettingsPanel"></div></section>
@@ -1022,10 +1186,12 @@ openMmiNavigationController.init();
     many("[data-openmmi-settings-section]").forEach((button) => {
       button.addEventListener("click", () => {
         state.section = button.dataset.openmmiSettingsSection || "units";
+        revealSettingsSection(state.section);
         renderSettingsPanel();
       });
     });
 
+    bindSettingsTree(page);
     bindDiagnosticsScrollGuard(page);
     renderSettingsPanel();
   }

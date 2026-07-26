@@ -34,11 +34,15 @@
 - Local same-origin JSON import for new custom profiles and bindings. The server validates strict UTF-8 JSON and the complete profile/bindings schema before a private no-overwrite creation, records import provenance, selects the new item only as a draft, and never applies or restarts the CAN service.
 
 ### Changed
+- Settings now uses a four-branch drill-down tree so categories and nested pages fit the 800×480 sidebar without a scrollbar.
 - Dashboard trip readouts now share one compact Trip A/B card with an arrow control and a persisted selection.
 - Maintained default bindings now use canonical action identifiers instead of Python module/function names. Existing custom legacy bindings remain supported with a migration warning.
 - Settings → Vehicle setup now distinguishes configured catalogue content, page-local draft selection and exact loaded-runtime evidence. Saved active custom revisions are labelled as awaiting review and Apply instead of appearing already loaded.
 - Technical details render compact SHA-256 fingerprints with the full exact value retained in accessible metadata, preventing long revisions from widening the 800×480 panel or the cards above it.
 - CAN summary labels now describe the selected draft bus, adapter and compatibility rather than implying those draft values are already active.
+
+### Fixed
+- Playwright Trip B coverage now opens the visible Drive card before using the A/B selector instead of waiting on a hidden duplicate.
 
 ### Security
 - Privileged rendering reopens catalogue files through descriptor-relative no-follow traversal, verifies maintained/custom ownership and non-writable modes, and rechecks the reviewed content revisions immediately before installation.

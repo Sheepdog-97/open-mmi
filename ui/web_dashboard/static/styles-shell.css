@@ -437,9 +437,20 @@ footer.openmmi-footer-black,
 }
 
 .openmmi-settings-tree {
-  display: grid;
-  gap: .55rem;
+  display: flex;
+  flex-direction: column;
+  gap: .38rem;
   margin-top: auto;
+  min-height: 0;
+}
+
+.openmmi-settings-tree-group {
+  display: grid;
+  gap: .3rem;
+}
+
+.openmmi-settings-tree.is-drilled > .openmmi-settings-tree-group:not(.is-expanded) {
+  display: none;
 }
 
 .openmmi-settings-tree button {
@@ -447,12 +458,12 @@ footer.openmmi-footer-black,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: .8rem;
+  gap: .72rem;
   border: 1px solid rgba(255,255,255,.09);
-  border-radius: 14px;
+  border-radius: 13px;
   background: rgba(255,255,255,.035);
   color: var(--text);
-  padding: .72rem .82rem;
+  padding: .58rem .7rem;
   text-align: left;
   font: inherit;
   font-weight: 600;
@@ -460,9 +471,60 @@ footer.openmmi-footer-black,
 
 .openmmi-settings-tree button small {
   color: var(--muted);
-  font-size: .76rem;
+  font-size: .72rem;
   font-weight: 500;
   text-align: right;
+}
+
+.openmmi-settings-tree-branch > span {
+  display: inline-flex;
+  align-items: center;
+  gap: .42rem;
+  min-width: 0;
+}
+
+.openmmi-settings-tree-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: .75rem;
+  color: var(--blue);
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.openmmi-settings-tree-group.has-active > .openmmi-settings-tree-branch {
+  border-color: rgba(85,186,255,.24);
+}
+
+.openmmi-settings-tree-children {
+  display: grid;
+  gap: .26rem;
+  padding-left: .72rem;
+}
+
+.openmmi-settings-tree-children[hidden] {
+  display: none;
+}
+
+.openmmi-settings-tree-children button {
+  position: relative;
+  min-height: 0;
+  padding: .42rem .58rem .42rem .78rem;
+  border-radius: 11px;
+  border-color: rgba(255,255,255,.065);
+  background: rgba(255,255,255,.022);
+  font-size: .9rem;
+}
+
+.openmmi-settings-tree-children button::before {
+  content: "";
+  position: absolute;
+  left: -.43rem;
+  top: 50%;
+  width: .42rem;
+  height: 1px;
+  background: rgba(85,186,255,.32);
 }
 
 .openmmi-settings-tree button.active,
@@ -576,18 +638,42 @@ footer.openmmi-footer-black,
 @media (max-height: 760px) {
   .openmmi-settings-sidebar-card,
   .openmmi-settings-panel-card {
-    padding: clamp(.72rem, 1.15vw, 1rem);
+    padding: clamp(.62rem, 1vw, .85rem);
+  }
+
+  .openmmi-settings-sidebar-card {
+    gap: .34rem;
   }
 
   .openmmi-settings-sidebar-card h2 {
-    font-size: clamp(2.45rem, 4.8vw, 4.5rem);
+    font-size: clamp(2rem, 4vw, 3.1rem);
+  }
+
+  .openmmi-settings-sidebar-card p {
+    display: none;
   }
 
   .openmmi-settings-tree {
-    gap: .42rem;
+    gap: .3rem;
+    margin-top: .2rem;
   }
 
-  .openmmi-settings-tree button,
+  .openmmi-settings-tree-group {
+    gap: .22rem;
+  }
+
+  .openmmi-settings-tree button {
+    padding: .43rem .58rem;
+  }
+
+  .openmmi-settings-tree-children {
+    gap: .2rem;
+  }
+
+  .openmmi-settings-tree-children button {
+    padding: .34rem .5rem .34rem .7rem;
+  }
+
   .openmmi-setting-row,
   .openmmi-settings-metric,
   .openmmi-settings-link {

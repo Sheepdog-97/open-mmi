@@ -78,7 +78,7 @@ Static modules load before `app.js` and have explicit state ownership:
 - `trip-a.js` — host-backed Trip A, unit-aware display and conservative parked-time automatic reset;
 - `trip-b.js` — independent host-backed long-term Trip B counter and manual reset;
 - `trip-switcher.js` — one-card Trip A/B selector with a persisted dashboard choice;
-- `app.js` — Settings shell, diagnostics rendering, advanced tell-tales, and
+- `app.js` — drill-down Settings tree, diagnostics rendering, advanced tell-tales, and
   remaining cross-cutting integration.
 
 Modules resolve `window.fetch` and `window.localStorage` at call time to preserve

@@ -253,6 +253,19 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertIn('data-openmmi-vehicle-setup-apply="true"', source)
         self.assertIn('data-openmmi-settings-section="vehicle-setup"', app)
 
+    def test_settings_sidebar_uses_a_bounded_drill_down_tree(self):
+        app = APP.read_text(encoding="utf-8")
+        styles = (ROOT / "ui/web_dashboard/static/styles-shell.css").read_text(encoding="utf-8")
+        self.assertIn('aria-label="Settings tree" role="tree"', app)
+        self.assertIn('data-openmmi-settings-group="general"', app)
+        self.assertIn('data-openmmi-settings-group="vehicle"', app)
+        self.assertIn('data-openmmi-settings-group="system"', app)
+        self.assertIn('data-openmmi-settings-group="advanced"', app)
+        self.assertIn('data-openmmi-settings-parent="vehicle" data-openmmi-settings-section="trip"', app)
+        self.assertIn('Back to settings categories from ${label}', app)
+        self.assertIn('.openmmi-settings-tree.is-drilled > .openmmi-settings-tree-group:not(.is-expanded)', styles)
+        self.assertIn('.openmmi-settings-sidebar-card p {\n    display: none;', styles)
+
     def test_service_reminder_preserves_editing_state_and_uses_settings_controls(self):
         source = SERVICE_REMINDER.read_text(encoding="utf-8")
         update_start = source.index("      update(payload = {}) {")
