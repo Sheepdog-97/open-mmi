@@ -266,6 +266,18 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertIn('.openmmi-settings-tree.is-drilled > .openmmi-settings-tree-group:not(.is-expanded)', styles)
         self.assertIn('.openmmi-settings-sidebar-card p {\n    display: none;', styles)
 
+    def test_telltale_test_is_press_and_hold_only(self):
+        app = APP.read_text(encoding="utf-8")
+        self.assertIn('data-openmmi-telltale-test-hold="true"', app)
+        self.assertIn('button.textContent = active ? "Testing…" : "Test";', app)
+        self.assertIn('document.addEventListener("pointerdown"', app)
+        self.assertIn('["pointerup", "pointercancel", "lostpointercapture"]', app)
+        self.assertIn('document.addEventListener("keyup"', app)
+        self.assertIn('window.addEventListener("blur", end);', app)
+        self.assertIn('if (document.hidden) end();', app)
+        self.assertIn('["telltaleTest", "tellTaleTest", "telltaleTestMode"]', app)
+        self.assertNotIn('row("Tell-tale test", "Frontend-only icon check; no backend or CAN state changes.", pill("off", true) + pill("on"))', app)
+
     def test_service_reminder_preserves_editing_state_and_uses_settings_controls(self):
         source = SERVICE_REMINDER.read_text(encoding="utf-8")
         update_start = source.index("      update(payload = {}) {")

@@ -54,7 +54,7 @@ preferences include:
 - clock visibility, format, and optional date;
 - diagnostics raw/debug visibility;
 - reverse-overlay mode;
-- frontend-only tell-tale test;
+- press-and-hold frontend-only tell-tale test that always releases back to live vehicle state;
 - enabled/default media sources and source-specific local preferences.
 
 Presentation settings do not alter backend decoding or vehicle state.

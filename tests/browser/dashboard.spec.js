@@ -1190,6 +1190,46 @@ test("hazards use the indicator tell-tales without a separate warning triangle",
   await expectNoRuntimeFailures(failures);
 });
 
+test("tell-tale test is active only while the Test button is held", async ({ page }) => {
+  const failures = captureRuntimeFailures(page);
+  const dashboard = await loadDashboard(page, {
+    storage: {
+      [SETTINGS_KEY]: JSON.stringify({ speedUnit: "mph", telltaleTest: "on", tellTaleTest: "on", telltaleTestMode: "on" }),
+    },
+  });
+
+  await openSettings(page);
+  await openSettingsSection(page, "display");
+
+  const button = page.getByRole("button", { name: "Test", exact: true });
+  const left = page.locator('#openMmiFooterTelltales [data-openmmi-telltale-slot="left"]');
+  await expect(button).toHaveAttribute("aria-pressed", "false");
+  await expect(left).toHaveClass(/is-inactive/);
+
+  await button.hover();
+  await page.mouse.down();
+  await expect(button).toHaveAttribute("aria-pressed", "true");
+  await expect(button).toHaveText("Testing…");
+  await expect(left).toHaveClass(/is-active/);
+  await expect(page.locator("#openMmiTelltaleTestBadge")).toHaveText("TEST");
+
+  await page.mouse.up();
+  await expect(button).toHaveAttribute("aria-pressed", "false");
+  await expect(button).toHaveText("Test");
+  await expect(left).toHaveClass(/is-inactive/);
+  await expect(page.locator("#openMmiTelltaleTestBadge")).toHaveCount(0);
+
+  await button.click();
+  await expect(button).toHaveAttribute("aria-pressed", "false");
+  await expect(left).toHaveClass(/is-inactive/);
+
+  const saved = JSON.parse((await dashboard.storage())[SETTINGS_KEY]);
+  expect(saved.telltaleTest).toBeUndefined();
+  expect(saved.tellTaleTest).toBeUndefined();
+  expect(saved.telltaleTestMode).toBeUndefined();
+  await expectNoRuntimeFailures(failures);
+});
+
 test("service reminder shows MIB-style due-soon state and preserves active edits", async ({ page }) => {
   const failures = captureRuntimeFailures(page);
   const dashboard = await loadDashboard(page, {

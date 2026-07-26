@@ -34,6 +34,7 @@
 - Local same-origin JSON import for new custom profiles and bindings. The server validates strict UTF-8 JSON and the complete profile/bindings schema before a private no-overwrite creation, records import provenance, selects the new item only as a draft, and never applies or restarts the CAN service.
 
 ### Changed
+- Settings → Display now uses a non-persistent press-and-hold tell-tale Test button; releasing, losing focus or leaving the page always restores live vehicle state.
 - Removed the obsolete SEAT 1P climate demist compatibility aliases; recirculation now publishes only canonical status paths.
 - Door-open overlays are suppressed while the Vehicle page is visible because that page already shows the full door state.
 - Hazard activation now drives the left and right indicator tell-tales without adding a separate warning triangle.
