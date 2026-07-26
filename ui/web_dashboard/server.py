@@ -149,7 +149,6 @@ def demo_status(scenario: str, started_at: float) -> Dict[str, Any]:
     outside_c = 12.2 + 0.6 * _wave(t, 60.0)
     blower_pct = 34.0 + 22.0 * (0.5 + 0.5 * _wave(t, 11.0, 0.7))
     dimmer_pct = 55.0 + 25.0 * (0.5 + 0.5 * _wave(t, 15.0, 0.9))
-    range_km = max(0.0, 402.0 - (speed_kmh * t / 3600.0) * 0.9)
     odometer_km = 214302.4 + speed_kmh * t / 3600.0
     blink_on = int(t * 2.0) % 2 == 0
 
@@ -246,8 +245,9 @@ def demo_status(scenario: str, started_at: float) -> Dict[str, Any]:
             "climate": climate,
             "lighting": lighting,
             "fuel": {
-                "range_km_candidate": round(range_km, 1),
-                "range_km_rounded_candidate": round(range_km / 10.0) * 10.0,
+                "level_l": round(max(0.0, 42.0 - (t / 900.0)), 1),
+                "level_raw": round(max(0.0, 42.0 - (t / 900.0))),
+                "low_level_warning": t % 900.0 > 840.0,
             },
             "doors": doors,
         },

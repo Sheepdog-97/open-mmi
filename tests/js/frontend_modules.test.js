@@ -432,7 +432,7 @@ test("vehicle view model formats representative imperial status", () => {
       engine: { speed_rpm: 2500, coolant_temp_c: 90 },
       electrical: { supply_voltage_v: 13.8 },
       fuel: {
-        level_l_candidate: 42,
+        level_l: 42,
       },
       climate: {
         outside_temp_regulation_c: 10.5,

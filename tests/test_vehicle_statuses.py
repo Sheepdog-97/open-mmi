@@ -16,7 +16,7 @@ class VehicleStatusRegistryTests(unittest.TestCase):
         registry = status_registry.registry_payload()
 
         self.assertEqual(registry["registry_id"], "open-mmi.vehicle-statuses")
-        self.assertGreaterEqual(len(registry["statuses"]), 70)
+        self.assertGreaterEqual(len(registry["statuses"]), 69)
         self.assertIn("doors.front_right", registry["statuses"])
         self.assertIn("parking.distance.rear_left", registry["statuses"])
 

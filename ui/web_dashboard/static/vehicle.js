@@ -101,7 +101,7 @@
         speed_mph: formatSpeedFromKmh(vehicle.speed_kmh, 0, resolvedSettings),
         rpm: formatNumber(engine.speed_rpm, 0),
         odo_mi: formatDistanceFromKm(vehicle.odometer_km, 0, resolvedSettings),
-        fuel_l: formatNumber(fuel.level_l_candidate, 0),
+        fuel_l: formatNumber(fuel.level_l, 0),
         coolant_c: formatTempFromC(engine.coolant_temp_c, 0, resolvedSettings),
         outside_reg_c: formatTempFromC(climate.outside_temp_regulation_c, 1, resolvedSettings),
         outside_unfiltered_c: formatTempFromC(climate.outside_temp_unfiltered_c, 1, resolvedSettings),

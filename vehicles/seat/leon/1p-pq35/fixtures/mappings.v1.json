@@ -220,9 +220,9 @@
         "statuses": {
           "vehicle.handbrake_raw": 36,
           "vehicle.handbrake": true,
-          "fuel.level_raw_candidate": 11,
-          "fuel.level_l_candidate": 11.0,
-          "fuel.low_level_warning_candidate": false
+          "fuel.level_raw": 11,
+          "fuel.level_l": 11.0,
+          "fuel.low_level_warning": false
         }
       }
     },
@@ -240,9 +240,9 @@
         "statuses": {
           "vehicle.handbrake_raw": 38,
           "vehicle.handbrake": true,
-          "fuel.level_raw_candidate": 132,
-          "fuel.level_l_candidate": 4.0,
-          "fuel.low_level_warning_candidate": true
+          "fuel.level_raw": 132,
+          "fuel.level_l": 4.0,
+          "fuel.low_level_warning": true
         }
       }
     },
@@ -433,40 +433,6 @@
         "statuses": {
           "vehicle.odometer_raw": 12345,
           "vehicle.odometer_km": 12345.0
-        }
-      }
-    },
-    {
-      "name": "range-candidate",
-      "bus": "comfort",
-      "frames": [
-        {
-          "id": "0x655",
-          "data": "00 00 00 D2 04 00 00 00"
-        }
-      ],
-      "expect": {
-        "events": [],
-        "statuses": {
-          "fuel.range_raw_candidate": 1234,
-          "fuel.range_km_candidate": 12.3
-        }
-      }
-    },
-    {
-      "name": "rounded-range-candidate",
-      "bus": "comfort",
-      "frames": [
-        {
-          "id": "0x651",
-          "data": "00 00 00 00 00 D2 00 00"
-        }
-      ],
-      "expect": {
-        "events": [],
-        "statuses": {
-          "fuel.range_rounded_raw_candidate": 210,
-          "fuel.range_km_rounded_candidate": 210.0
         }
       }
     },
