@@ -1182,6 +1182,9 @@ test("hazards use the indicator tell-tales without a separate warning triangle",
   await expect(footer.locator('[data-openmmi-telltale-slot="left"]')).toHaveClass(/is-active/);
   await expect(footer.locator('[data-openmmi-telltale-slot="right"]')).toHaveClass(/is-active/);
   await expect(footer.locator('[data-openmmi-telltale-slot="hazard"]')).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Vehicle" }).click();
+  await expect(page.locator("#pageVehicle")).toHaveClass(/active/);
   await expect(page.locator('#pageVehicle [data-bool="hazards"]')).toBeVisible();
 
   await expectNoRuntimeFailures(failures);
