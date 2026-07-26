@@ -144,10 +144,13 @@
   gap: 1rem;
 }
 
-.openmmi-service-toggle {
+.openmmi-service-form > .openmmi-service-toggle {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 0.65rem;
+  width: fit-content;
+  max-width: 100%;
   min-height: 2.75rem;
 }
 
