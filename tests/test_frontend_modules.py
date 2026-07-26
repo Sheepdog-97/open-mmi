@@ -15,6 +15,7 @@ PREFERENCES = STATIC / "preferences.js"
 SYSTEM_SETTINGS = STATIC / "system-settings.js"
 VEHICLE_SETUP_SETTINGS = STATIC / "vehicle-setup-settings.js"
 RUNTIME_DIAGNOSTICS = STATIC / "runtime-diagnostics.js"
+SERVICE_REMINDER = STATIC / "service-reminder.js"
 STATUS = STATIC / "status.js"
 NAVIGATION = STATIC / "navigation.js"
 OVERLAYS = STATIC / "overlays.js"
@@ -37,6 +38,7 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         system_settings_index = html.index('<script src="/system-settings.js"></script>')
         vehicle_setup_settings_index = html.index('<script src="/vehicle-setup-settings.js"></script>')
         runtime_diagnostics_index = html.index('<script src="/runtime-diagnostics.js"></script>')
+        service_reminder_index = html.index('<script src="/service-reminder.js"></script>')
         status_index = html.index('<script src="/status.js"></script>')
         navigation_index = html.index('<script src="/navigation.js"></script>')
         overlays_index = html.index('<script src="/overlays.js"></script>')
@@ -54,7 +56,8 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertLess(preferences_index, system_settings_index)
         self.assertLess(system_settings_index, vehicle_setup_settings_index)
         self.assertLess(vehicle_setup_settings_index, runtime_diagnostics_index)
-        self.assertLess(runtime_diagnostics_index, status_index)
+        self.assertLess(runtime_diagnostics_index, service_reminder_index)
+        self.assertLess(service_reminder_index, status_index)
         self.assertLess(status_index, navigation_index)
         self.assertLess(navigation_index, overlays_index)
         self.assertLess(overlays_index, vehicle_index)
@@ -75,6 +78,7 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertIn("window.openMmiSystemSettings", source)
         self.assertIn("window.openMmiVehicleSetupSettings", source)
         self.assertIn("window.openMmiRuntimeDiagnostics", source)
+        self.assertIn("window.openMmiServiceReminder", source)
         self.assertIn("window.openMmiNavigation", source)
         self.assertIn("window.openMmiOverlays", source)
         self.assertIn("window.openMmiVehicle", source)
@@ -127,6 +131,7 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
             (system_settings, "openMmiSystemSettings"),
             (vehicle_setup_settings, "openMmiVehicleSetupSettings"),
             (runtime_diagnostics, "openMmiRuntimeDiagnostics"),
+            (SERVICE_REMINDER.read_text(encoding="utf-8"), "openMmiServiceReminder"),
             (status, "openMmiStatus"),
             (navigation, "openMmiNavigation"),
             (overlays, "openMmiOverlays"),
@@ -145,6 +150,7 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
                 "openMmiFrontendVersion",
                 "openMmiVehicleSetupSettings",
                 "openMmiRuntimeDiagnostics",
+                "openMmiServiceReminder",
                 "openMmiMediaShell",
                 "openMmiJellyfinReconnect",
                 "openMmiJellyfinMedia",

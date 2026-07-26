@@ -188,6 +188,22 @@ async function loadDashboard(page, options = {}) {
     },
   };
 
+  const serviceReminderPayload = options.serviceReminderPayload || {
+    ok: true,
+    api_version: 1,
+    configured: false,
+    path: "/home/test/.config/open-mmi/service-reminder.json",
+    settings: {
+      enabled: true,
+      distance_interval_km: 16093.44,
+      time_interval_months: 12,
+      warning_distance_km: 1609.344,
+      warning_days: 30,
+    },
+    reset: { reset_date: null, odometer_km: null },
+    next_due: { date: null, odometer_km: null },
+  };
+
   const vehicleSetupPayload = options.vehicleSetupPayload || {
     api_version: 1,
     read_only: true,
@@ -401,7 +417,7 @@ async function loadDashboard(page, options = {}) {
   };
 
   await page.setContent(ASSETS.documentHtml, { waitUntil: "domcontentloaded" });
-  await page.evaluate(({ initialPayload, initialStorage, initialBluetoothPayload, initialSystemPayload, initialVehicleSetupPayload, initialVehicleSetupPreviewPayload, initialVehicleSetupCoordinatorPayload, initialVehicleSetupApplyPayload, initialUpdateStatusPayload, initialUpdateCheckPayload, initialUpdateReadinessPayload, initialUpdateCoordinatorPayload, initialVersionPayload, initialJellyfinStatusPayload, initialJellyfinSearchPayload, initialRuntimeDiagnosticsPayload, runtimeDiagnosticsIntervalMs, dashboardRetryDelaysMs }) => {
+  await page.evaluate(({ initialPayload, initialStorage, initialBluetoothPayload, initialSystemPayload, initialServiceReminderPayload, initialVehicleSetupPayload, initialVehicleSetupPreviewPayload, initialVehicleSetupCoordinatorPayload, initialVehicleSetupApplyPayload, initialUpdateStatusPayload, initialUpdateCheckPayload, initialUpdateReadinessPayload, initialUpdateCoordinatorPayload, initialVersionPayload, initialJellyfinStatusPayload, initialJellyfinSearchPayload, initialRuntimeDiagnosticsPayload, runtimeDiagnosticsIntervalMs, dashboardRetryDelaysMs }) => {
     const values = Object.assign({}, initialStorage);
     const localStorageMock = {
       get length() { return Object.keys(values).length; },
@@ -416,6 +432,7 @@ async function loadDashboard(page, options = {}) {
     window.__openMmiStatusFixture = initialPayload;
     window.__openMmiBluetoothFixture = initialBluetoothPayload;
     window.__openMmiSystemFixture = initialSystemPayload;
+    window.__openMmiServiceReminderFixture = initialServiceReminderPayload;
     window.__openMmiVehicleSetupFixture = initialVehicleSetupPayload;
     window.__openMmiVehicleSetupPreviewFixture = initialVehicleSetupPreviewPayload;
     window.__openMmiVehicleSetupCoordinatorFixture = initialVehicleSetupCoordinatorPayload;
@@ -697,6 +714,27 @@ async function loadDashboard(page, options = {}) {
         };
         return json(window.__openMmiUpdateCoordinatorFixture);
       }
+      if (url.includes("/api/system/service-reminder/settings")) {
+        const body = JSON.parse(init.body || "{}");
+        window.__openMmiServiceReminderFixture = {
+          ...window.__openMmiServiceReminderFixture,
+          settings: { ...window.__openMmiServiceReminderFixture.settings, ...body },
+        };
+        return json(window.__openMmiServiceReminderFixture);
+      }
+      if (url.includes("/api/system/service-reminder/reset")) {
+        const body = JSON.parse(init.body || "{}");
+        const resetDate = "2026-07-26";
+        const settings = window.__openMmiServiceReminderFixture.settings;
+        window.__openMmiServiceReminderFixture = {
+          ...window.__openMmiServiceReminderFixture,
+          configured: true,
+          reset: { reset_date: resetDate, odometer_km: body.odometer_km },
+          next_due: { date: "2027-07-26", odometer_km: body.odometer_km + settings.distance_interval_km },
+        };
+        return json(window.__openMmiServiceReminderFixture);
+      }
+      if (url.includes("/api/system/service-reminder")) return json(window.__openMmiServiceReminderFixture);
       if (url.includes("/api/system/settings")) return json(window.__openMmiSystemFixture);
       if (url.includes("/api/system/launcher")) {
         const body = JSON.parse(init.body || "{}");
@@ -756,6 +794,7 @@ async function loadDashboard(page, options = {}) {
     initialStorage: storage,
     initialBluetoothPayload: bluetoothPayload,
     initialSystemPayload: systemPayload,
+    initialServiceReminderPayload: serviceReminderPayload,
     initialVehicleSetupPayload: vehicleSetupPayload,
     initialVehicleSetupPreviewPayload: vehicleSetupPreviewPayload,
     initialVehicleSetupCoordinatorPayload: vehicleSetupCoordinatorPayload,
@@ -1043,6 +1082,38 @@ test("door and reverse overlays dismiss and reactivate on lifecycle changes", as
   await dashboard.setPayload(basePayload({ state: { vehicle: { reverse: true } } }));
   await expect(page.locator("#openMmiReverseOverlay")).toBeVisible();
 
+  await expectNoRuntimeFailures(failures);
+});
+
+test("service reminder shows MIB-style due-soon state and settings", async ({ page }) => {
+  const failures = captureRuntimeFailures(page);
+  await loadDashboard(page, {
+    serviceReminderPayload: {
+      ok: true,
+      api_version: 1,
+      configured: true,
+      path: "/home/test/.config/open-mmi/service-reminder.json",
+      settings: {
+        enabled: true,
+        distance_interval_km: 10000,
+        time_interval_months: 12,
+        warning_distance_km: 1000,
+        warning_days: 30,
+      },
+      reset: { reset_date: "2026-01-01", odometer_km: 3000 },
+      next_due: { date: "2027-01-01", odometer_km: 13000 },
+    },
+  });
+
+  const indicator = page.locator("#openMmiServiceReminderIndicator");
+  await expect(indicator).toBeVisible();
+  await expect(indicator).toContainText("407 mi or");
+
+  await openSettings(page);
+  await page.locator('[data-openmmi-settings-section="service"]').click();
+  await expect(page.locator('[data-openmmi-service-reminder-panel="true"]')).toContainText("Inspection due soon");
+  await expect(page.getByLabel("Distance interval")).toHaveValue("6214");
+  await expect(page.getByRole("button", { name: "Reset inspection interval" })).toBeEnabled();
   await expectNoRuntimeFailures(failures);
 });
 

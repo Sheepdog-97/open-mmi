@@ -74,6 +74,7 @@ Static modules load before `app.js` and have explicit state ownership:
 - `vehicle-setup-settings.js` — configured/draft/loaded state, custom operations,
   preview/review, confirmed Apply, coordinator polling, restoration feedback;
 - `runtime-diagnostics.js` — Diagnostics-only system polling and derived state;
+- `service-reminder.js` — inspection interval settings, unit conversion, live due-state evaluation and dashboard warning;
 - `app.js` — Settings shell, diagnostics rendering, advanced tell-tales, and
   remaining cross-cutting integration.
 
@@ -125,6 +126,23 @@ POST /api/system/vehicle-custom/save
 POST /api/system/vehicle-custom/manage
 POST /api/system/vehicle-custom/import
 ```
+
+## Service reminder routes
+
+The inspection reminder is stored in the user configuration directory and is
+independent of the vehicle cluster service interval:
+
+```text
+GET  /api/system/service-reminder
+POST /api/system/service-reminder/settings
+POST /api/system/service-reminder/reset
+```
+
+Settings define independent distance and calendar-month intervals plus advance
+warning thresholds. Reset requires explicit confirmation and the current decoded
+`vehicle.odometer_km`; it records the host date and odometer in
+`~/.config/open-mmi/service-reminder.json` with mode `0600`. The reminder becomes
+due when either the distance or date deadline is reached.
 
 ## Update routes
 
