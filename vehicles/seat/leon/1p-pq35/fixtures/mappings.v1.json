@@ -449,9 +449,7 @@
         "events": [],
         "statuses": {
           "climate.recirculation_raw": 128,
-          "climate.front_demist_air_request_raw": 128,
-          "climate.recirculation_active": true,
-          "climate.front_demist_air_request": true
+          "climate.recirculation_active": true
         }
       }
     },

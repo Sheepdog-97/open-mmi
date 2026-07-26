@@ -362,6 +362,12 @@ test("navigation controller owns active page, pager and page-change state", () =
   assert.deepEqual(events.at(-1).detail, { id: "pageClimate", title: "Climate", quickIndex: 1 });
 });
 
+test("door overlay suppression follows the active Vehicle page", () => {
+  const page = { classList: { contains(name) { return name === "active"; } } };
+  assert.equal(overlays.vehiclePageActive({ querySelector(selector) { return selector === "#pageVehicle" ? page : null; } }), true);
+  assert.equal(overlays.vehiclePageActive({ querySelector() { return null; } }), false);
+});
+
 test("door overlay visibility survives dismissal until the open set changes", () => {
   const openDoors = overlays.collectOpenDoors({
     state: {
@@ -510,20 +516,20 @@ test("vehicle view model formats representative imperial status", () => {
   assert.equal(view.units.coolant_c, "°F");
 });
 
-test("vehicle view model preserves canonical recirculation fallback and missing data", () => {
-  const legacy = vehicle.buildViewModel({
-    state: { climate: { front_demist_air_request: false } },
+test("vehicle view model preserves canonical missing-data behavior", () => {
+  const missing = vehicle.buildViewModel({
+    state: { climate: {} },
   }, { speedUnit: "kmh", tempUnit: "c" });
 
-  assert.equal(legacy.booleans.recirculation, false);
-  assert.equal(legacy.fields.speed_mph, "--");
-  assert.equal(legacy.fields.coolant_c, "--");
-  assert.equal(legacy.fields.fuel_l, "--");
-  assert.equal(legacy.fuelLowWarning, undefined);
-  assert.equal(legacy.health.status, "waiting");
-  assert.equal(legacy.health.ageText, "--");
-  assert.equal(legacy.units.speed_mph, "km/h");
-  assert.equal(legacy.units.odo_mi, "km");
+  assert.equal(missing.booleans.recirculation, undefined);
+  assert.equal(missing.fields.speed_mph, "--");
+  assert.equal(missing.fields.coolant_c, "--");
+  assert.equal(missing.fields.fuel_l, "--");
+  assert.equal(missing.fuelLowWarning, undefined);
+  assert.equal(missing.health.status, "waiting");
+  assert.equal(missing.health.ageText, "--");
+  assert.equal(missing.units.speed_mph, "km/h");
+  assert.equal(missing.units.odo_mi, "km");
 });
 
 test("vehicle formatting utilities reject invalid values and respect units", () => {

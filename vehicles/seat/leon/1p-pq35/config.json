@@ -432,13 +432,7 @@
       "mask": "0x80",
       "true": "0x80",
       "false": "0x00",
-      "raw_path": "climate.recirculation_raw",
-      "aliases": [
-        "climate.front_demist_air_request"
-      ],
-      "raw_aliases": [
-        "climate.front_demist_air_request_raw"
-      ]
+      "raw_path": "climate.recirculation_raw"
     }
   ]
 }

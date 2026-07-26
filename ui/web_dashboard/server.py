@@ -173,9 +173,6 @@ def demo_status(scenario: str, started_at: float) -> Dict[str, Any]:
         "blower_load_percent": round(blower_pct, 1),
         "rear_window_heater_requested": 20.0 < (t % 80.0) < 35.0,
         "recirculation_active": recirculation_active,
-        # Compatibility alias for dashboard/status consumers from the alpha
-        # schema. Remove only at a documented status-schema boundary.
-        "front_demist_air_request": recirculation_active,
         "compressor_active": _wave(t, 30.0) > -0.35,
         "air_intake": "Recirc" if recirculation_active else "Normal",
     }

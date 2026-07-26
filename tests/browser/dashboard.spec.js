@@ -1146,6 +1146,15 @@ test("door and reverse overlays dismiss and reactivate on lifecycle changes", as
 
   await dashboard.setPayload(basePayload({ state: { doors: { front_left: true, rear_left: true, any_open: true } } }));
   await expect(page.locator("#openMmiVehicleOverlay")).toBeVisible();
+
+  await page.getByRole("button", { name: "Vehicle" }).click();
+  await expect(page.locator("#pageVehicle")).toHaveClass(/active/);
+  await expect(page.locator("#openMmiVehicleOverlay")).toBeHidden();
+  await dashboard.setPayload(basePayload({ state: { doors: { front_left: true, rear_left: true, any_open: true } } }));
+  await expect(page.locator("#openMmiVehicleOverlay")).toBeHidden();
+
+  await page.keyboard.press("Home");
+  await expect(page.locator("#openMmiVehicleOverlay")).toBeVisible();
   await page.locator("#openMmiDoorOverlayDismiss").click();
 
   await dashboard.setPayload(basePayload({ state: { vehicle: { reverse: true } } }));
@@ -1159,6 +1168,21 @@ test("door and reverse overlays dismiss and reactivate on lifecycle changes", as
   await page.waitForTimeout(250);
   await dashboard.setPayload(basePayload({ state: { vehicle: { reverse: true } } }));
   await expect(page.locator("#openMmiReverseOverlay")).toBeVisible();
+
+  await expectNoRuntimeFailures(failures);
+});
+
+
+test("hazards use the indicator tell-tales without a separate warning triangle", async ({ page }) => {
+  const failures = captureRuntimeFailures(page);
+  const dashboard = await loadDashboard(page);
+
+  await dashboard.setPayload(basePayload({ state: { lighting: { hazards: true, left_indicator: false, right_indicator: false } } }));
+  const footer = page.locator("#openMmiFooterTelltales");
+  await expect(footer.locator('[data-openmmi-telltale-slot="left"]')).toHaveClass(/is-active/);
+  await expect(footer.locator('[data-openmmi-telltale-slot="right"]')).toHaveClass(/is-active/);
+  await expect(footer.locator('[data-openmmi-telltale-slot="hazard"]')).toHaveCount(0);
+  await expect(page.locator('#pageVehicle [data-bool="hazards"]')).toBeVisible();
 
   await expectNoRuntimeFailures(failures);
 });
@@ -1258,7 +1282,7 @@ test("Trip B displays independently and resets manually", async ({ page }) => {
   await tripCard.getByRole("button", { name: "Show Trip B" }).click();
   await expect(tripCard.locator("[data-openmmi-trip-label]")).toHaveText("Trip B");
   await expect(tripCard.locator("[data-openmmi-trip-b]")).toBeVisible();
-  await expect(tripCard.locator("[data-openmmi-trip-b]")).toHaveText("835");
+  await expect(tripCard.locator("[data-openmmi-trip-b]")).toHaveText("836");
   await expect(tripCard.getByRole("button", { name: "Show Trip A" })).toBeVisible();
   await page.keyboard.press("Home");
   await openSettings(page);
@@ -1275,8 +1299,8 @@ test("settings categories use an expandable tree without overflowing the sidebar
   await openSettings(page);
 
   const tree = page.getByRole("tree", { name: "Settings tree" });
-  const general = tree.getByRole("treeitem", { name: /General/ });
-  const vehicle = tree.getByRole("treeitem", { name: /Vehicle/ });
+  const general = tree.locator('[data-openmmi-settings-group-toggle][data-openmmi-settings-group-label="General"]');
+  const vehicle = tree.locator('[data-openmmi-settings-group-toggle][data-openmmi-settings-group-label="Vehicle"]');
   await expect(general).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator('[data-openmmi-settings-section="units"]')).toBeHidden();
   await expect(page.locator('[data-openmmi-settings-section="service"]')).toBeHidden();

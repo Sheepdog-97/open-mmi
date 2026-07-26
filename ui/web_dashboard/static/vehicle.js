@@ -116,7 +116,7 @@
         handbrake: vehicle.handbrake,
         reverse: vehicle.reverse,
         rear_heater: climate.rear_window_heater_requested,
-        recirculation: climate.recirculation_active ?? climate.front_demist_air_request,
+        recirculation: climate.recirculation_active,
         compressor: climate.compressor_active,
         hazards: lighting.hazards,
         bulb_out: lighting.bulb_out,

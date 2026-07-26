@@ -926,16 +926,5 @@
       "status": "diagnostic"
     }
   },
-  "aliases": {
-    "climate.front_demist_air_request": {
-      "path": "climate.recirculation_active",
-      "description": "Deprecated compatibility output; the observed signal is represented canonically as recirculation state.",
-      "status": "deprecated"
-    },
-    "climate.front_demist_air_request_raw": {
-      "path": "climate.recirculation_raw",
-      "description": "Deprecated raw compatibility output for the recirculation source byte.",
-      "status": "deprecated"
-    }
-  }
+  "aliases": {}
 }

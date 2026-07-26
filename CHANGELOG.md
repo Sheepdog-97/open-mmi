@@ -34,6 +34,9 @@
 - Local same-origin JSON import for new custom profiles and bindings. The server validates strict UTF-8 JSON and the complete profile/bindings schema before a private no-overwrite creation, records import provenance, selects the new item only as a draft, and never applies or restarts the CAN service.
 
 ### Changed
+- Removed the obsolete SEAT 1P climate demist compatibility aliases; recirculation now publishes only canonical status paths.
+- Door-open overlays are suppressed while the Vehicle page is visible because that page already shows the full door state.
+- Hazard activation now drives the left and right indicator tell-tales without adding a separate warning triangle.
 - Settings now uses a four-branch drill-down tree so categories and nested pages fit the 800×480 sidebar without a scrollbar.
 - Dashboard trip readouts now share one compact Trip A/B card with an arrow control and a persisted selection.
 - Maintained default bindings now use canonical action identifiers instead of Python module/function names. Existing custom legacy bindings remain supported with a migration warning.
@@ -42,6 +45,7 @@
 - CAN summary labels now describe the selected draft bus, adapter and compatibility rather than implying those draft values are already active.
 
 ### Fixed
+- Corrected Playwright Trip B rounding and made the Settings tree locator unambiguous after drilling into Vehicle.
 - Playwright Trip B coverage now opens the visible Drive card before using the A/B selector instead of waiting on a hidden duplicate.
 
 ### Security
@@ -160,4 +164,3 @@
 - Isolated subscriber and persistence failures from CAN reception.
 
 ### Compatibility
-- The legacy `climate.front_demist_air_request` status field remains temporarily as an alias of `climate.recirculation_active`.

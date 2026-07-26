@@ -174,7 +174,6 @@ openMmiJellyfinPlayer.boot();
     { key: "left", label: "Left indicator", kind: "left-turn", src: ICONS.leftTurn },
     { key: "right", label: "Right indicator", kind: "right-turn", src: ICONS.rightTurn },
     { key: "park", label: "Parking brake", kind: "parking-brake", src: ICONS.parkingBrake },
-    { key: "hazard", label: "Hazard warning", kind: "hazard", src: ICONS.hazard },
     { key: "bulb", label: "Exterior bulb failure", kind: "bulb-failure", src: ICONS.bulbFailure },
     { key: "sidelights", label: "Side/position lights", kind: "position-lights wide", src: ICONS.positionLights },
     { key: "dipped", label: "Dipped beam", kind: "dipped-beam wide", src: ICONS.dippedBeam },
@@ -351,9 +350,9 @@ openMmiJellyfinPlayer.boot();
       strip.className = "openmmi-footer-telltales openmmi-footer-telltales-centred openmmi-stable-footer-telltales-strip";
       footer.insertBefore(strip, footer.firstChild);
     }
-    if (strip.dataset.openMmiSlotVersion !== "proper-light-v1") {
+    if (strip.dataset.openMmiSlotVersion !== "proper-light-v2") {
       strip.innerHTML = SLOT_DEFS.map(slotMarkup).join("");
-      strip.dataset.openMmiSlotVersion = "proper-light-v1";
+      strip.dataset.openMmiSlotVersion = "proper-light-v2";
     }
     return strip;
   }
@@ -383,7 +382,7 @@ openMmiJellyfinPlayer.boot();
 
   function hideMovedPageTelltales() {
     const selectors = [
-      '[data-field="indicators"]', '[data-bool="handbrake"]', '[data-bool="hazards"]', '[data-bool-no="bulb_out"]',
+      '[data-field="indicators"]', '[data-bool="handbrake"]', '[data-bool-no="bulb_out"]',
       '[data-field="lights_on"]', '[data-field="lighting_mode"]', '[data-field="lighting.mode"]',
       '[data-field="side_lights"]', '[data-field="dipped_beam"]', '[data-field="low_beam"]', '[data-field="rear_fog"]'
     ];
@@ -521,7 +520,6 @@ openMmiJellyfinPlayer.boot();
     setSlot(strip, "left", left === true, left !== undefined && left !== null, "Left indicator", { forcedBlink: testBlink && leftForced });
     setSlot(strip, "right", right === true, right !== undefined && right !== null, "Right indicator", { forcedBlink: testBlink && rightForced });
     setSlot(strip, "park", vehicle.handbrake === true, vehicle.handbrake !== undefined && vehicle.handbrake !== null, "Parking brake");
-    setSlot(strip, "hazard", hazards === true, lighting.hazards !== undefined || forced("hazard"), "Hazard warning", { forcedBlink: testBlink && forced("hazard") });
     setSlot(strip, "bulb", lighting.bulb_out === true, lighting.bulb_out !== undefined && lighting.bulb_out !== null, "Exterior bulb failure");
 
     setSlot(strip, "sidelights", sideLightsOn(lighting), knownAny(lighting, ["side_lights", "sidelights", "position_lights", "parking_lights"], "sidelights"), "Side/position lights");

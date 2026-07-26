@@ -337,10 +337,10 @@ temporary compatibility aliases. Profile rules use:
 
 ```json
 {
-  "path": "climate.recirculation_active",
-  "aliases": ["climate.front_demist_air_request"],
-  "raw_path": "climate.recirculation_raw",
-  "raw_aliases": ["climate.front_demist_air_request_raw"]
+  "path": "example.canonical_status",
+  "aliases": ["example.legacy_status"],
+  "raw_path": "example.canonical_status_raw",
+  "raw_aliases": ["example.legacy_status_raw"]
 }
 ```
 

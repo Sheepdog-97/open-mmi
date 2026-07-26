@@ -88,17 +88,14 @@ class VehicleStatusRegistryTests(unittest.TestCase):
         ):
             status_registry.require_profile_statuses(profile)
 
-    def test_deprecated_alias_is_only_allowed_explicitly(self) -> None:
-        with self.assertRaises(status_registry.VehicleStatusRegistryError):
-            status_registry.require_status(
-                "climate.front_demist_air_request",
-                value_type="boolean",
-            )
-        status_registry.require_status(
-            "climate.front_demist_air_request",
-            value_type="boolean",
-            allow_alias=True,
-        )
+    def test_removed_status_alias_is_rejected(self) -> None:
+        for allow_alias in (False, True):
+            with self.assertRaises(status_registry.VehicleStatusRegistryError):
+                status_registry.require_status(
+                    "climate.removed_legacy_alias",
+                    value_type="boolean",
+                    allow_alias=allow_alias,
+                )
 
     def test_maintained_seat_profile_conforms(self) -> None:
         profile = json.loads(
