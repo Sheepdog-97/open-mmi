@@ -13,6 +13,7 @@ DASHBOARD_CONNECTION = STATIC / "dashboard-connection.js"
 FRONTEND_VERSION = STATIC / "frontend-version.js"
 PREFERENCES = STATIC / "preferences.js"
 SYSTEM_SETTINGS = STATIC / "system-settings.js"
+SYSTEM_SETTINGS_STYLES = STATIC / "styles-system-settings.css"
 VEHICLE_SETUP_SETTINGS = STATIC / "vehicle-setup-settings.js"
 RUNTIME_DIAGNOSTICS = STATIC / "runtime-diagnostics.js"
 SERVICE_REMINDER = STATIC / "service-reminder.js"
@@ -245,6 +246,11 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertIn('class="openmmi-setting-pill is-selected" data-openmmi-service-save', source)
         self.assertIn('class="openmmi-setting-pill" data-openmmi-service-reset', source)
         self.assertIn('event.stopImmediatePropagation?.();', source)
+        styles = SYSTEM_SETTINGS_STYLES.read_text(encoding="utf-8")
+        self.assertIn('.openmmi-service-toggle input[type="checkbox"]', styles)
+        self.assertIn('width: 1rem;', styles)
+        self.assertIn('margin: 0;', styles)
+        self.assertIn('padding: 0;', styles)
 
     def test_application_does_not_override_module_owned_control_state(self):
         source = APP.read_text(encoding="utf-8")

@@ -151,6 +151,15 @@
   min-height: 2.75rem;
 }
 
+.openmmi-service-toggle input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  min-width: 1rem;
+  margin: 0;
+  padding: 0;
+}
+
 .openmmi-service-input {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
