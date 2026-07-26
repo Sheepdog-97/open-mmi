@@ -6,6 +6,9 @@
 
   const ENDPOINT = "/api/system/trip-a";
   const RESET_ENDPOINT = "/api/system/trip-a/reset";
+  const SETTINGS_ENDPOINT = "/api/system/trip-a/settings";
+  const OBSERVE_ENDPOINT = "/api/system/trip-a/observe";
+  const OBSERVE_INTERVAL_MS = 5 * 60 * 1000;
   const KM_PER_MILE = 1.609344;
   const DEFAULT_SETTINGS = Object.freeze({ speedUnit: "mph" });
 
@@ -21,17 +24,9 @@
     const currentOdometer = finite(currentOdometerKm);
     const configured = snapshot.configured === true && resetOdometer !== null;
     if (!configured) return Object.freeze({ state: "setup", configured: false, tripKm: null });
-    if (currentOdometer === null) {
-      return Object.freeze({ state: "waiting", configured: true, resetOdometerKm: resetOdometer, tripKm: null });
-    }
+    if (currentOdometer === null) return Object.freeze({ state: "waiting", configured: true, resetOdometerKm: resetOdometer, tripKm: null });
     if (currentOdometer < resetOdometer - 1) {
-      return Object.freeze({
-        state: "invalid-odometer",
-        configured: true,
-        resetOdometerKm: resetOdometer,
-        currentOdometerKm: currentOdometer,
-        tripKm: null,
-      });
+      return Object.freeze({ state: "invalid-odometer", configured: true, resetOdometerKm: resetOdometer, currentOdometerKm: currentOdometer, tripKm: null });
     }
     return Object.freeze({
       state: "ok",
@@ -67,13 +62,7 @@
     if (!value) return "--";
     const timestamp = new Date(value);
     if (Number.isNaN(timestamp.getTime())) return "--";
-    return timestamp.toLocaleString(undefined, {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return timestamp.toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   }
 
   function escapeHtml(value) {
@@ -83,6 +72,11 @@
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#39;");
+  }
+
+  function autoResetLabel(hours) {
+    const value = Math.max(0, Math.round(finite(hours) || 0));
+    return value === 0 ? "Off" : `After ${value} hour${value === 1 ? "" : "s"} parked`;
   }
 
   function statusSummary(result, settings = {}) {
@@ -97,11 +91,15 @@
     const documentRef = options.document || windowRef?.document;
     const api = options.api || windowRef?.openMmiApi;
     const preferences = options.preferences || windowRef?.openMmiPreferences;
+    const now = options.now || (() => Date.now());
     if (!documentRef || !api) return Object.freeze({ update() {}, refresh: async () => null });
 
     let snapshot = null;
     let currentOdometerKm = null;
+    let vehiclePresent = false;
     let busy = false;
+    let observing = false;
+    let lastObservedAt = 0;
     let message = "";
     let messageKind = "";
 
@@ -110,21 +108,15 @@
       return preferences.readDashboardSettings(DEFAULT_SETTINGS);
     }
 
-    function result() {
-      return evaluate(snapshot || {}, currentOdometerKm);
-    }
+    function result() { return evaluate(snapshot || {}, currentOdometerKm); }
 
     function updateDashboardReadouts() {
       const units = dashboardSettings();
       const evaluated = result();
       const value = formatDistance(evaluated.tripKm, units);
       const unit = normaliseUnits(units);
-      Array.from(documentRef.querySelectorAll?.("[data-openmmi-trip-a]") || []).forEach((node) => {
-        node.textContent = value;
-      });
-      Array.from(documentRef.querySelectorAll?.("[data-openmmi-trip-a-unit]") || []).forEach((node) => {
-        node.textContent = unit;
-      });
+      Array.from(documentRef.querySelectorAll?.("[data-openmmi-trip-a]") || []).forEach((node) => { node.textContent = value; });
+      Array.from(documentRef.querySelectorAll?.("[data-openmmi-trip-a-unit]") || []).forEach((node) => { node.textContent = unit; });
     }
 
     function updatePanelReadouts() {
@@ -159,30 +151,30 @@
       const evaluated = result();
       const summary = statusSummary(evaluated, units);
       const reset = snapshot.reset || {};
+      const autoResetHours = Math.max(0, Math.round(finite(snapshot?.settings?.auto_reset_hours) || 0));
       const currentOdometer = finite(currentOdometerKm);
-      const feedback = message
-        ? `<p class="openmmi-config-message ${escapeHtml(messageKind)}" role="status">${escapeHtml(message)}</p>`
-        : "";
+      const feedback = message ? `<p class="openmmi-config-message ${escapeHtml(messageKind)}" role="status">${escapeHtml(message)}</p>` : "";
       host.innerHTML = `
-        <div class="openmmi-settings-panel-head"><span>Trip A</span><small>odometer-based trip counter</small></div>
+        <div class="openmmi-settings-panel-head"><span>Trip A</span><small>short-term odometer-based trip counter</small></div>
         <div class="openmmi-service-summary ${escapeHtml(evaluated.state)}" data-openmmi-trip-a-summary>
           <span class="openmmi-service-summary-icon" aria-hidden="true">A</span>
           <div><strong data-openmmi-trip-a-summary-label>${escapeHtml(summary.label)}</strong><small data-openmmi-trip-a-summary-detail>${escapeHtml(summary.detail)}</small></div>
         </div>
         <div class="openmmi-settings-metric"><span>Last reset</span><strong>${escapeHtml(formatTimestamp(reset.reset_at))}${reset.odometer_km == null ? "" : ` · ${escapeHtml(formatDistanceWithUnit(reset.odometer_km, units))}`}</strong></div>
         <div class="openmmi-settings-metric"><span>Current odometer</span><strong data-openmmi-trip-a-current-odometer>${escapeHtml(formatDistanceWithUnit(currentOdometer, units))}</strong></div>
-        <div class="openmmi-config-actions openmmi-service-actions">
-          <button type="button" class="openmmi-setting-pill is-selected" data-openmmi-trip-a-reset ${busy || currentOdometer === null ? "disabled" : ""}>Reset Trip A</button>
-        </div>
-        <p class="openmmi-config-secret-note">Trip A uses the confirmed odometer. Resetting stores the current odometer on this Open MMI host and does not change the vehicle cluster.</p>
+        <form class="openmmi-service-form openmmi-config-form" data-openmmi-trip-a-settings-form>
+          <label><span>Automatic reset</span><span class="openmmi-service-input"><select name="auto_reset_hours" aria-label="Trip A automatic reset"><option value="0"${autoResetHours === 0 ? " selected" : ""}>Off</option><option value="2"${autoResetHours === 2 ? " selected" : ""}>After 2 hours parked</option><option value="4"${autoResetHours === 4 ? " selected" : ""}>After 4 hours parked</option><option value="8"${autoResetHours === 8 ? " selected" : ""}>After 8 hours parked</option><option value="12"${autoResetHours === 12 ? " selected" : ""}>After 12 hours parked</option><option value="24"${autoResetHours === 24 ? " selected" : ""}>After 24 hours parked</option></select></span></label>
+          <div class="openmmi-config-actions openmmi-service-actions">
+            <button type="button" class="openmmi-setting-pill" data-openmmi-trip-a-save ${busy ? "disabled" : ""}>Save automatic reset</button>
+            <button type="button" class="openmmi-setting-pill is-selected" data-openmmi-trip-a-reset ${busy || currentOdometer === null ? "disabled" : ""}>Reset Trip A</button>
+          </div>
+        </form>
+        <p class="openmmi-config-secret-note">${escapeHtml(autoResetLabel(autoResetHours))}. Automatic reset occurs on the next vehicle session after the parked interval; Trip B is never reset automatically.</p>
         ${feedback}
       `;
     }
 
-    function render() {
-      updateDashboardReadouts();
-      renderPanel();
-    }
+    function render() { updateDashboardReadouts(); renderPanel(); }
 
     async function refresh() {
       try {
@@ -197,6 +189,27 @@
       return snapshot;
     }
 
+    async function saveSettings(form) {
+      if (busy) return;
+      const data = new windowRef.FormData(form);
+      busy = true;
+      message = "Saving Trip A settings…";
+      messageKind = "";
+      renderPanel();
+      try {
+        snapshot = await api.postJson(SETTINGS_ENDPOINT, { auto_reset_hours: Number(data.get("auto_reset_hours")) }, { usePayloadError: true });
+        lastObservedAt = 0;
+        message = "Trip A settings saved";
+        messageKind = "success";
+      } catch (error) {
+        message = error?.message || "Trip A settings could not be saved";
+        messageKind = "error";
+      } finally {
+        busy = false;
+        render();
+      }
+    }
+
     async function resetTrip() {
       const odometer = finite(currentOdometerKm);
       if (busy || odometer === null) return;
@@ -208,6 +221,7 @@
       renderPanel();
       try {
         snapshot = await api.postJson(RESET_ENDPOINT, { confirm: true, odometer_km: odometer }, { usePayloadError: true });
+        lastObservedAt = now();
         message = "Trip A reset";
         messageKind = "success";
       } catch (error) {
@@ -219,12 +233,49 @@
       }
     }
 
-    function activateTripAction(target) {
-      if (!target?.closest?.("[data-openmmi-trip-a-reset]")) return false;
-      resetTrip();
-      return true;
+    async function observeVehicle() {
+      const odometer = finite(currentOdometerKm);
+      const autoResetHours = finite(snapshot?.settings?.auto_reset_hours) || 0;
+      const currentTime = now();
+      if (observing || !vehiclePresent || !snapshot?.configured || autoResetHours <= 0 || odometer === null) return;
+      if (currentTime - lastObservedAt < OBSERVE_INTERVAL_MS) return;
+      observing = true;
+      lastObservedAt = currentTime;
+      try {
+        const next = await api.postJson(OBSERVE_ENDPOINT, { odometer_km: odometer }, { usePayloadError: true });
+        snapshot = next;
+        if (next.auto_reset === true) {
+          message = "Trip A reset automatically after the parked interval";
+          messageKind = "success";
+        }
+        render();
+      } catch (_error) {
+        // Activity heartbeats are best effort; normal Trip A display remains usable.
+      } finally {
+        observing = false;
+      }
     }
 
+    function activateTripAction(target) {
+      const saveButton = target?.closest?.("[data-openmmi-trip-a-save]");
+      if (saveButton) {
+        const form = saveButton.closest?.("[data-openmmi-trip-a-settings-form]");
+        if (form) saveSettings(form);
+        return true;
+      }
+      if (target?.closest?.("[data-openmmi-trip-a-reset]")) {
+        resetTrip();
+        return true;
+      }
+      return false;
+    }
+
+    documentRef.addEventListener("submit", (event) => {
+      const form = event.target?.closest?.("[data-openmmi-trip-a-settings-form]");
+      if (!form) return;
+      event.preventDefault();
+      saveSettings(form);
+    });
     documentRef.addEventListener("click", (event) => {
       if (!activateTripAction(event.target)) return;
       event.preventDefault();
@@ -238,17 +289,16 @@
     }, true);
     windowRef.addEventListener?.("openmmi:settingsrender", renderPanel);
     windowRef.addEventListener?.("openmmi:pagechange", renderPanel);
-    windowRef.addEventListener?.("openmmi:settingschange", () => {
-      updateDashboardReadouts();
-      updatePanelReadouts();
-    });
+    windowRef.addEventListener?.("openmmi:settingschange", () => { updateDashboardReadouts(); updatePanelReadouts(); });
 
     refresh();
     return Object.freeze({
       update(payload = {}) {
         currentOdometerKm = finite(payload?.state?.vehicle?.odometer_km);
+        vehiclePresent = payload?.state?.vehicle?.present === true;
         updateDashboardReadouts();
         updatePanelReadouts();
+        observeVehicle();
       },
       refresh,
       snapshot: () => snapshot,
@@ -259,11 +309,15 @@
   return Object.freeze({
     ENDPOINT,
     RESET_ENDPOINT,
+    SETTINGS_ENDPOINT,
+    OBSERVE_ENDPOINT,
+    OBSERVE_INTERVAL_MS,
     KM_PER_MILE,
     evaluate,
     distanceForDisplay,
     formatDistance,
     formatDistanceWithUnit,
+    autoResetLabel,
     statusSummary,
     install,
   });

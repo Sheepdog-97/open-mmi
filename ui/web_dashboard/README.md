@@ -74,8 +74,9 @@ Static modules load before `app.js` and have explicit state ownership:
 - `vehicle-setup-settings.js` — configured/draft/loaded state, custom operations,
   preview/review, confirmed Apply, coordinator polling, restoration feedback;
 - `runtime-diagnostics.js` — Diagnostics-only system polling and derived state;
-- `service-reminder.js` — inspection interval settings, unit conversion, live due-state evaluation and dashboard warning;
-- `trip-a.js` — host-backed Trip A reset, live odometer subtraction and unit-aware dashboard/settings display;
+- `service-reminder.js` — inspection interval settings, live due-state evaluation, MIB-style detail notification and persistent acknowledgement;
+- `trip-a.js` — host-backed Trip A, unit-aware display and conservative parked-time automatic reset;
+- `trip-b.js` — independent host-backed long-term Trip B counter and manual reset;
 - `app.js` — Settings shell, diagnostics rendering, advanced tell-tales, and
   remaining cross-cutting integration.
 
@@ -137,13 +138,14 @@ independent of the vehicle cluster service interval:
 GET  /api/system/service-reminder
 POST /api/system/service-reminder/settings
 POST /api/system/service-reminder/reset
+POST /api/system/service-reminder/acknowledge
 ```
 
 Settings define independent distance and calendar-month intervals plus advance
 warning thresholds. Reset requires explicit confirmation and the current decoded
 `vehicle.odometer_km`; it records the host date and odometer in
 `~/.config/open-mmi/service-reminder.json` with mode `0600`. The reminder becomes
-due when either the distance or date deadline is reached.
+due when either the distance or date deadline is reached. Due-soon and due alerts open a dedicated inspection detail view. Acknowledgement is stored against the exact reset, deadline and alert level, so a changed interval or transition from due-soon to due is shown again.
 
 ## Trip A routes
 
@@ -153,13 +155,26 @@ confirmed decoded odometer:
 ```text
 GET  /api/system/trip-a
 POST /api/system/trip-a/reset
+POST /api/system/trip-a/settings
+POST /api/system/trip-a/observe
 ```
 
 Reset requires explicit confirmation and the current `vehicle.odometer_km`. The
 reset timestamp and odometer are written atomically to
 `~/.config/open-mmi/trip-a.json` with mode `0600`. The dashboard subtracts that
 saved odometer from the live value and follows the existing miles/kilometres
-preference.
+preference. Optional automatic reset records a low-frequency vehicle-present heartbeat and resets only after the configured parked interval when the odometer has not materially advanced during the inactive gap.
+
+## Trip B routes
+
+Trip B is an independent long-term counter and is never reset by the Trip A parked-time policy:
+
+```text
+GET  /api/system/trip-b
+POST /api/system/trip-b/reset
+```
+
+Its reset is stored privately in `~/.config/open-mmi/trip-b.json`.
 
 ## Update routes
 

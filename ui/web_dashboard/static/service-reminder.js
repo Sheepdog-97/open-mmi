@@ -7,6 +7,7 @@
   const ENDPOINT = "/api/system/service-reminder";
   const SETTINGS_ENDPOINT = "/api/system/service-reminder/settings";
   const RESET_ENDPOINT = "/api/system/service-reminder/reset";
+  const ACKNOWLEDGE_ENDPOINT = "/api/system/service-reminder/acknowledge";
   const KM_PER_MILE = 1.609344;
   const DEFAULT_SETTINGS = Object.freeze({ speedUnit: "mph" });
 
@@ -37,47 +38,24 @@
     const currentOdometer = finite(currentOdometerKm);
     const dueOdometer = finite(nextDue.odometer_km);
     const dueDate = typeof nextDue.date === "string" ? nextDue.date : "";
-    const configured = snapshot.configured === true
-      && resetOdometer !== null
-      && dueOdometer !== null
-      && dueDate !== "";
-
+    const configured = snapshot.configured === true && resetOdometer !== null && dueOdometer !== null && dueDate !== "";
     if (!enabled) return Object.freeze({ state: "disabled", configured, enabled });
     if (!configured) return Object.freeze({ state: "setup", configured: false, enabled });
-
     const daysRemaining = daysBetween(now, dueDate);
-    if (daysRemaining === null) {
-      return Object.freeze({ state: "invalid", configured: true, enabled, error: "Invalid inspection date" });
-    }
-    if (currentOdometer === null) {
-      return Object.freeze({ state: "waiting", configured: true, enabled, daysRemaining });
-    }
+    if (daysRemaining === null) return Object.freeze({ state: "invalid", configured: true, enabled, error: "Invalid inspection date" });
+    if (currentOdometer === null) return Object.freeze({ state: "waiting", configured: true, enabled, daysRemaining });
     if (currentOdometer < resetOdometer - 1) {
-      return Object.freeze({
-        state: "invalid-odometer",
-        configured: true,
-        enabled,
-        currentOdometerKm: currentOdometer,
-        resetOdometerKm: resetOdometer,
-        daysRemaining,
-      });
+      return Object.freeze({ state: "invalid-odometer", configured: true, enabled, currentOdometerKm: currentOdometer, resetOdometerKm: resetOdometer, daysRemaining });
     }
-
     const distanceRemainingKm = dueOdometer - currentOdometer;
     const warningDistanceKm = Math.max(0, finite(settings.warning_distance_km) || 0);
     const warningDays = Math.max(0, finite(settings.warning_days) || 0);
     const due = distanceRemainingKm <= 0 || daysRemaining <= 0;
     const soon = !due && (distanceRemainingKm <= warningDistanceKm || daysRemaining <= warningDays);
     return Object.freeze({
-      state: due ? "due" : (soon ? "soon" : "ok"),
-      configured: true,
-      enabled,
-      distanceRemainingKm,
-      daysRemaining,
-      dueDate,
-      dueOdometerKm: dueOdometer,
-      resetDate: reset.reset_date,
-      resetOdometerKm: resetOdometer,
+      state: due ? "due" : (soon ? "soon" : "ok"), configured: true, enabled,
+      distanceRemainingKm, daysRemaining, dueDate, dueOdometerKm: dueOdometer,
+      resetDate: reset.reset_date, resetOdometerKm: resetOdometer,
     });
   }
 
@@ -111,6 +89,13 @@
     return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
   }
 
+  function formatTimestamp(value) {
+    if (!value) return "--";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "--";
+    return date.toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+
   function statusSummary(result, settings = {}) {
     if (result.state === "disabled") return { label: "Inspection reminder off", detail: "" };
     if (result.state === "setup") return { label: "Inspection interval not set", detail: "Reset after servicing" };
@@ -123,17 +108,26 @@
       if (result.daysRemaining <= 0) overdue.push(`${Math.abs(result.daysRemaining)} days overdue`);
       return { label: "Inspection now!", detail: overdue.join(" or ") };
     }
-    const detail = `${formatDistance(Math.max(0, result.distanceRemainingKm), settings)} or ${Math.max(0, result.daysRemaining)} days`;
-    return { label: result.state === "soon" ? "Inspection due soon" : "Next inspection", detail };
+    return {
+      label: result.state === "soon" ? "Inspection due soon" : "Next inspection",
+      detail: `${formatDistance(Math.max(0, result.distanceRemainingKm), settings)} or ${Math.max(0, result.daysRemaining)} days`,
+    };
+  }
+
+  function acknowledgementMatches(snapshot = {}, result = {}) {
+    if (result.state !== "soon" && result.state !== "due") return false;
+    const acknowledgement = snapshot.acknowledgement || {};
+    const reset = snapshot.reset || {};
+    const nextDue = snapshot.next_due || {};
+    return acknowledgement.level === result.state
+      && acknowledgement.reset_date === reset.reset_date
+      && finite(acknowledgement.reset_odometer_km) === finite(reset.odometer_km)
+      && acknowledgement.due_date === nextDue.date
+      && finite(acknowledgement.due_odometer_km) === finite(nextDue.odometer_km);
   }
 
   function escapeHtml(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#39;");
+    return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
 
   function install(options = {}) {
@@ -148,29 +142,84 @@
     let busy = false;
     let message = "";
     let messageKind = "";
+    let detailManuallyOpened = false;
 
     function dashboardSettings() {
       if (!preferences || typeof preferences.readDashboardSettings !== "function") return { ...DEFAULT_SETTINGS };
       return preferences.readDashboardSettings(DEFAULT_SETTINGS);
     }
-
-    function result() {
-      return evaluate(snapshot || {}, currentOdometerKm, new Date());
-    }
+    function result() { return evaluate(snapshot || {}, currentOdometerKm, new Date()); }
 
     function ensureIndicator() {
       let node = documentRef.querySelector("#openMmiServiceReminderIndicator");
       if (node) return node;
       const footer = documentRef.querySelector("footer.status-strip");
       if (!footer || !documentRef.createElement) return null;
-      node = documentRef.createElement("div");
+      node = documentRef.createElement("button");
+      node.type = "button";
       node.id = "openMmiServiceReminderIndicator";
       node.className = "footer-item openmmi-service-reminder-indicator";
       node.hidden = true;
+      node.setAttribute("aria-label", "Open inspection reminder details");
       node.innerHTML = '<span class="openmmi-service-spanner" aria-hidden="true">🔧</span><div><span>Inspection</span><strong data-openmmi-service-indicator-text>--</strong></div>';
       const pager = footer.querySelector?.(".pager");
       footer.insertBefore(node, pager || null);
+      node.addEventListener?.("click", () => { detailManuallyOpened = true; renderDetailOverlay(); });
       return node;
+    }
+
+    function ensureDetailOverlay() {
+      let overlay = documentRef.querySelector("#openMmiServiceDetailOverlay");
+      if (overlay) return overlay;
+      if (!documentRef.createElement) return null;
+      overlay = documentRef.createElement("div");
+      overlay.id = "openMmiServiceDetailOverlay";
+      overlay.className = "openmmi-service-detail-overlay";
+      overlay.hidden = true;
+      overlay.setAttribute("aria-live", "polite");
+      documentRef.body?.appendChild?.(overlay);
+      return overlay;
+    }
+
+    function openServiceSettings() {
+      detailManuallyOpened = false;
+      const overlay = ensureDetailOverlay();
+      if (overlay) overlay.hidden = true;
+      windowRef.openMmiShowSettingsPage?.();
+      const activate = () => documentRef.querySelector?.('[data-openmmi-settings-section="service"]')?.click?.();
+      if (typeof windowRef.requestAnimationFrame === "function") windowRef.requestAnimationFrame(activate);
+      else activate();
+    }
+
+    function renderDetailOverlay() {
+      const overlay = ensureDetailOverlay();
+      if (!overlay || !snapshot) return;
+      const evaluated = result();
+      const autoVisible = (evaluated.state === "soon" || evaluated.state === "due") && !acknowledgementMatches(snapshot, evaluated);
+      const visible = detailManuallyOpened || autoVisible;
+      overlay.hidden = !visible;
+      if (!visible) return;
+      const units = dashboardSettings();
+      const summary = statusSummary(evaluated, units);
+      const canAcknowledge = evaluated.state === "soon" || evaluated.state === "due";
+      overlay.innerHTML = `
+        <div class="openmmi-service-detail-card" role="dialog" aria-modal="true" aria-label="Inspection reminder details">
+          <div class="openmmi-service-detail-icon" aria-hidden="true">🔧</div>
+          <div class="openmmi-service-detail-copy">
+            <span class="openmmi-service-detail-kicker">Inspection</span>
+            <h2>${escapeHtml(summary.label)}</h2>
+            <p>${escapeHtml(summary.detail || "No inspection warning is active.")}</p>
+            <dl>
+              <div><dt>Due date</dt><dd>${escapeHtml(formatDate(snapshot?.next_due?.date))}</dd></div>
+              <div><dt>Due odometer</dt><dd>${escapeHtml(formatDistance(snapshot?.next_due?.odometer_km, units))}</dd></div>
+              <div><dt>Last reset</dt><dd>${escapeHtml(formatDate(snapshot?.reset?.reset_date))}</dd></div>
+            </dl>
+            <div class="openmmi-config-actions openmmi-service-detail-actions">
+              ${canAcknowledge ? '<button type="button" class="openmmi-setting-pill is-selected" data-openmmi-service-acknowledge>Acknowledge</button>' : '<button type="button" class="openmmi-setting-pill is-selected" data-openmmi-service-close>Close</button>'}
+              <button type="button" class="openmmi-setting-pill" data-openmmi-service-open-settings>Service settings</button>
+            </div>
+          </div>
+        </div>`;
     }
 
     function renderIndicator() {
@@ -181,10 +230,8 @@
       node.hidden = !visible;
       node.classList?.toggle("is-due", evaluated.state === "due");
       const target = node.querySelector?.("[data-openmmi-service-indicator-text]");
-      if (!target || !visible) return;
-      target.textContent = evaluated.state === "due"
-        ? "Inspection now!"
-        : statusSummary(evaluated, dashboardSettings()).detail;
+      if (target && visible) target.textContent = evaluated.state === "due" ? "Inspection now!" : statusSummary(evaluated, dashboardSettings()).detail;
+      renderDetailOverlay();
     }
 
     function inputValue(kilometres) {
@@ -198,17 +245,17 @@
       const units = dashboardSettings();
       const evaluated = result();
       const summary = statusSummary(evaluated, units);
-      const summaryNode = host.querySelector?.('[data-openmmi-service-summary]');
+      const summaryNode = host.querySelector?.("[data-openmmi-service-summary]");
       if (summaryNode) {
         summaryNode.className = `openmmi-service-summary ${evaluated.state}`;
-        const label = summaryNode.querySelector?.('[data-openmmi-service-summary-label]');
-        const detail = summaryNode.querySelector?.('[data-openmmi-service-summary-detail]');
+        const label = summaryNode.querySelector?.("[data-openmmi-service-summary-label]");
+        const detail = summaryNode.querySelector?.("[data-openmmi-service-summary-detail]");
         if (label) label.textContent = summary.label;
         if (detail) detail.textContent = summary.detail;
       }
-      const current = host.querySelector?.('[data-openmmi-service-current-odometer]');
+      const current = host.querySelector?.("[data-openmmi-service-current-odometer]");
       if (current) current.textContent = formatDistance(finite(currentOdometerKm), units);
-      const resetButton = host.querySelector?.('[data-openmmi-service-reset]');
+      const resetButton = host.querySelector?.("[data-openmmi-service-reset]");
       if (resetButton) resetButton.disabled = busy || finite(currentOdometerKm) === null;
       return true;
     }
@@ -227,20 +274,20 @@
       const settings = snapshot.settings || {};
       const reset = snapshot.reset || {};
       const nextDue = snapshot.next_due || {};
+      const acknowledgement = snapshot.acknowledgement || {};
       const currentOdometer = finite(currentOdometerKm);
-      const resetDisabled = busy || currentOdometer === null;
-      const feedback = message
-        ? `<p class="openmmi-config-message ${escapeHtml(messageKind)}" role="status">${escapeHtml(message)}</p>`
-        : "";
+      const feedback = message ? `<p class="openmmi-config-message ${escapeHtml(messageKind)}" role="status">${escapeHtml(message)}</p>` : "";
       host.innerHTML = `
         <div class="openmmi-settings-panel-head"><span>Service</span><small>inspection reminder</small></div>
         <div class="openmmi-service-summary ${escapeHtml(evaluated.state)}" data-openmmi-service-summary>
           <span class="openmmi-service-summary-icon" aria-hidden="true">🔧</span>
           <div><strong data-openmmi-service-summary-label>${escapeHtml(summary.label)}</strong><small data-openmmi-service-summary-detail>${escapeHtml(summary.detail)}</small></div>
         </div>
+        <div class="openmmi-config-actions openmmi-service-detail-launch"><button type="button" class="openmmi-setting-pill" data-openmmi-service-details>View inspection details</button></div>
         <div class="openmmi-settings-metric"><span>Last reset</span><strong>${escapeHtml(formatDate(reset.reset_date))}${reset.odometer_km == null ? "" : ` · ${escapeHtml(formatDistance(reset.odometer_km, units))}`}</strong></div>
         <div class="openmmi-settings-metric"><span>Next inspection</span><strong>${escapeHtml(formatDate(nextDue.date))}${nextDue.odometer_km == null ? "" : ` · ${escapeHtml(formatDistance(nextDue.odometer_km, units))}`}</strong></div>
         <div class="openmmi-settings-metric"><span>Current odometer</span><strong data-openmmi-service-current-odometer>${escapeHtml(formatDistance(currentOdometer, units))}</strong></div>
+        <div class="openmmi-settings-metric"><span>Notification</span><strong>${acknowledgement.acknowledged_at ? `Acknowledged ${escapeHtml(formatTimestamp(acknowledgement.acknowledged_at))}` : "Not acknowledged"}</strong></div>
         <form class="openmmi-service-form openmmi-config-form" data-openmmi-service-form>
           <label class="openmmi-service-toggle"><input type="checkbox" name="enabled" ${settings.enabled !== false ? "checked" : ""}> <span>Inspection reminder enabled</span></label>
           <label><span>Distance interval</span><span class="openmmi-service-input"><input name="distance_interval" type="number" min="1" step="1" value="${escapeHtml(inputValue(settings.distance_interval_km))}" required><small>${escapeHtml(unit)}</small></span></label>
@@ -249,28 +296,18 @@
           <label><span>Advance time warning</span><span class="openmmi-service-input"><input name="warning_days" type="number" min="0" max="3650" step="1" value="${escapeHtml(settings.warning_days)}" required><small>days</small></span></label>
           <div class="openmmi-config-actions openmmi-service-actions">
             <button type="button" class="openmmi-setting-pill is-selected" data-openmmi-service-save ${busy ? "disabled" : ""}>Save intervals</button>
-            <button type="button" class="openmmi-setting-pill" data-openmmi-service-reset ${resetDisabled ? "disabled" : ""}>Reset inspection interval</button>
+            <button type="button" class="openmmi-setting-pill" data-openmmi-service-reset ${busy || currentOdometer === null ? "disabled" : ""}>Reset inspection interval</button>
           </div>
         </form>
-        <p class="openmmi-config-secret-note">Reset stores the current confirmed odometer and host date. It does not change the vehicle cluster service interval.</p>
-        ${feedback}
-      `;
+        <p class="openmmi-config-secret-note">Acknowledging hides the startup detail alert for the current due level. The yellow footer reminder remains until the interval is reset.</p>
+        ${feedback}`;
     }
 
-    function render() {
-      renderIndicator();
-      renderPanel();
-    }
+    function render() { renderIndicator(); renderPanel(); }
 
     async function refresh() {
-      try {
-        snapshot = await api.getJson(ENDPOINT, { usePayloadError: true });
-        message = "";
-        messageKind = "";
-      } catch (error) {
-        message = error?.message || "Inspection reminder could not be loaded";
-        messageKind = "error";
-      }
+      try { snapshot = await api.getJson(ENDPOINT, { usePayloadError: true }); message = ""; messageKind = ""; }
+      catch (error) { message = error?.message || "Inspection reminder could not be loaded"; messageKind = "error"; }
       render();
       return snapshot;
     }
@@ -278,95 +315,63 @@
     async function save(form) {
       if (busy) return;
       const data = new windowRef.FormData(form);
-      const intervalKm = distanceFromDisplay(data.get("distance_interval"), dashboardSettings());
-      const warningKm = distanceFromDisplay(data.get("warning_distance"), dashboardSettings());
-      busy = true;
-      message = "Saving inspection intervals…";
-      messageKind = "";
-      renderPanel();
+      busy = true; message = "Saving inspection intervals…"; messageKind = ""; renderPanel();
       try {
         snapshot = await api.postJson(SETTINGS_ENDPOINT, {
           enabled: data.get("enabled") === "on",
-          distance_interval_km: intervalKm,
+          distance_interval_km: distanceFromDisplay(data.get("distance_interval"), dashboardSettings()),
           time_interval_months: Number(data.get("time_interval_months")),
-          warning_distance_km: warningKm,
+          warning_distance_km: distanceFromDisplay(data.get("warning_distance"), dashboardSettings()),
           warning_days: Number(data.get("warning_days")),
         }, { usePayloadError: true });
-        message = "Inspection intervals saved";
-        messageKind = "success";
-      } catch (error) {
-        message = error?.message || "Inspection intervals could not be saved";
-        messageKind = "error";
-      } finally {
-        busy = false;
-        render();
-      }
+        message = "Inspection intervals saved"; messageKind = "success";
+      } catch (error) { message = error?.message || "Inspection intervals could not be saved"; messageKind = "error"; }
+      finally { busy = false; render(); }
     }
 
     async function resetInterval() {
       const odometer = finite(currentOdometerKm);
       if (busy || odometer === null) return;
-      const displayed = formatDistance(odometer, dashboardSettings());
-      if (!windowRef.confirm(`Reset the inspection interval using the current odometer of ${displayed}?`)) return;
-      busy = true;
-      message = "Resetting inspection interval…";
-      messageKind = "";
-      renderPanel();
-      try {
-        snapshot = await api.postJson(RESET_ENDPOINT, { confirm: true, odometer_km: odometer }, { usePayloadError: true });
-        message = "Inspection interval reset";
-        messageKind = "success";
-      } catch (error) {
-        message = error?.message || "Inspection interval could not be reset";
-        messageKind = "error";
-      } finally {
-        busy = false;
-        render();
-      }
+      if (!windowRef.confirm(`Reset the inspection interval using the current odometer of ${formatDistance(odometer, dashboardSettings())}?`)) return;
+      busy = true; message = "Resetting inspection interval…"; messageKind = ""; renderPanel();
+      try { snapshot = await api.postJson(RESET_ENDPOINT, { confirm: true, odometer_km: odometer }, { usePayloadError: true }); message = "Inspection interval reset"; messageKind = "success"; detailManuallyOpened = false; }
+      catch (error) { message = error?.message || "Inspection interval could not be reset"; messageKind = "error"; }
+      finally { busy = false; render(); }
     }
 
-    documentRef.addEventListener("submit", (event) => {
-      const form = event.target?.closest?.("[data-openmmi-service-form]");
-      if (!form) return;
-      event.preventDefault();
-      save(form);
-    });
+    async function acknowledgeReminder() {
+      const evaluated = result();
+      if (busy || (evaluated.state !== "soon" && evaluated.state !== "due")) return;
+      busy = true;
+      try {
+        snapshot = await api.postJson(ACKNOWLEDGE_ENDPOINT, { confirm: true, level: evaluated.state }, { usePayloadError: true });
+        detailManuallyOpened = false;
+        message = "Inspection notification acknowledged";
+        messageKind = "success";
+      } catch (error) { message = error?.message || "Inspection notification could not be acknowledged"; messageKind = "error"; }
+      finally { busy = false; render(); }
+    }
 
     function activateServiceAction(target) {
       const saveButton = target?.closest?.("[data-openmmi-service-save]");
-      if (saveButton) {
-        const form = saveButton.closest?.("[data-openmmi-service-form]");
-        if (form) save(form);
-        return true;
-      }
-      if (target?.closest?.("[data-openmmi-service-reset]")) {
-        resetInterval();
-        return true;
-      }
+      if (saveButton) { const form = saveButton.closest?.("[data-openmmi-service-form]"); if (form) save(form); return true; }
+      if (target?.closest?.("[data-openmmi-service-reset]")) { resetInterval(); return true; }
+      if (target?.closest?.("[data-openmmi-service-details]")) { detailManuallyOpened = true; renderDetailOverlay(); return true; }
+      if (target?.closest?.("[data-openmmi-service-acknowledge]")) { acknowledgeReminder(); return true; }
+      if (target?.closest?.("[data-openmmi-service-open-settings]")) { openServiceSettings(); return true; }
+      if (target?.closest?.("[data-openmmi-service-close]")) { detailManuallyOpened = false; ensureDetailOverlay().hidden = true; return true; }
       return false;
     }
 
-    documentRef.addEventListener("click", (event) => {
-      if (!activateServiceAction(event.target)) return;
-      event.preventDefault();
-      event.stopImmediatePropagation?.();
-    }, true);
-    documentRef.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      if (!activateServiceAction(event.target)) return;
-      event.preventDefault();
-      event.stopImmediatePropagation?.();
-    }, true);
+    documentRef.addEventListener("submit", (event) => { const form = event.target?.closest?.("[data-openmmi-service-form]"); if (!form) return; event.preventDefault(); save(form); });
+    documentRef.addEventListener("click", (event) => { if (!activateServiceAction(event.target)) return; event.preventDefault(); event.stopImmediatePropagation?.(); }, true);
+    documentRef.addEventListener("keydown", (event) => { if (event.key !== "Enter" && event.key !== " ") return; if (!activateServiceAction(event.target)) return; event.preventDefault(); event.stopImmediatePropagation?.(); }, true);
     windowRef.addEventListener?.("openmmi:settingsrender", renderPanel);
     windowRef.addEventListener?.("openmmi:pagechange", renderPanel);
 
     refresh();
     return Object.freeze({
-      update(payload = {}) {
-        currentOdometerKm = finite(payload?.state?.vehicle?.odometer_km);
-        renderIndicator();
-        updatePanelReadouts();
-      },
+      update(payload = {}) { currentOdometerKm = finite(payload?.state?.vehicle?.odometer_km); renderIndicator(); updatePanelReadouts(); },
       refresh,
       snapshot: () => snapshot,
       evaluate: () => result(),
@@ -374,15 +379,7 @@
   }
 
   return Object.freeze({
-    ENDPOINT,
-    SETTINGS_ENDPOINT,
-    RESET_ENDPOINT,
-    KM_PER_MILE,
-    evaluate,
-    distanceForDisplay,
-    distanceFromDisplay,
-    formatDistance,
-    statusSummary,
-    install,
+    ENDPOINT, SETTINGS_ENDPOINT, RESET_ENDPOINT, ACKNOWLEDGE_ENDPOINT, KM_PER_MILE,
+    evaluate, acknowledgementMatches, distanceForDisplay, distanceFromDisplay, formatDistance, statusSummary, install,
   });
 });

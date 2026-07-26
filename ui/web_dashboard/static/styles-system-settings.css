@@ -198,3 +198,112 @@
     gap: 0.35rem;
   }
 }
+
+/* Open MMI service reminder detail notification */
+button.openmmi-service-reminder-indicator {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.openmmi-service-detail-launch {
+  margin: -0.35rem 0 0.8rem;
+}
+
+.openmmi-service-detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.openmmi-service-detail-overlay[hidden] {
+  display: none !important;
+}
+
+.openmmi-service-detail-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1rem;
+  width: min(34rem, 100%);
+  max-height: calc(100vh - 2.5rem);
+  overflow: auto;
+  padding: 1.2rem;
+  border: 1px solid rgba(255, 214, 10, 0.55);
+  border-radius: 0.9rem;
+  background: rgba(7, 18, 29, 0.98);
+  box-shadow: 0 1.2rem 4rem rgba(0, 0, 0, 0.45);
+}
+
+.openmmi-service-detail-icon {
+  color: #ffd60a;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.openmmi-service-detail-copy {
+  min-width: 0;
+}
+
+.openmmi-service-detail-kicker {
+  color: #ffd60a;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.openmmi-service-detail-copy h2 {
+  margin: 0.15rem 0 0.35rem;
+  font-size: 1.45rem;
+}
+
+.openmmi-service-detail-copy p {
+  margin: 0 0 0.9rem;
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.openmmi-service-detail-copy dl {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.openmmi-service-detail-copy dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.openmmi-service-detail-copy dt {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.openmmi-service-detail-copy dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 650;
+}
+
+.openmmi-service-detail-actions {
+  margin-top: 1rem;
+}
+
+.openmmi-service-input select {
+  width: 100%;
+}
+
+@media (max-width: 520px) {
+  .openmmi-service-detail-card {
+    grid-template-columns: 1fr;
+  }
+}

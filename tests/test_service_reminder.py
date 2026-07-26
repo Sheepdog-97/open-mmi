@@ -6,7 +6,7 @@ import os
 import stat
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -39,7 +39,7 @@ class ServiceReminderTests(unittest.TestCase):
             self.assertAlmostEqual(result["next_due"]["odometer_km"], 216093.44)
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
             self.assertEqual(stat.S_IMODE(path.parent.stat().st_mode), 0o700)
-            self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["api_version"], 1)
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["api_version"], 2)
 
     def test_settings_update_preserves_last_reset_and_recalculates_due_values(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -128,8 +128,30 @@ class ServiceReminderTests(unittest.TestCase):
 
             reset_handler = Handler({"confirm": True, "odometer_km": 123456})
             self.assertTrue(system_settings._handle_post(reset_handler, "/api/system/service-reminder/reset"))
+            acknowledge_handler = Handler({"confirm": True, "level": "soon"})
+            self.assertTrue(system_settings._handle_post(acknowledge_handler, "/api/system/service-reminder/acknowledge"))
             self.assertTrue(reset_handler.responses[-1][1]["configured"])
             self.assertEqual(reset_handler.responses[-1][1]["reset"]["odometer_km"], 123456)
+
+    def test_v1_document_migrates_and_acknowledgement_tracks_current_schedule(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "service-reminder.json"
+            path.write_text(json.dumps({
+                "api_version": 1,
+                "settings": service_reminder.ReminderSettings().__dict__,
+                "reset": {"reset_date": "2026-07-26", "odometer_km": 1000},
+            }), encoding="utf-8")
+            migrated = service_reminder.status_payload(path)
+            self.assertEqual(migrated["api_version"], 2)
+            result = service_reminder.acknowledge(
+                {"confirm": True, "level": "soon"},
+                path,
+                now=datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc),
+            )
+            self.assertEqual(result["acknowledgement"]["level"], "soon")
+            self.assertEqual(result["acknowledgement"]["due_date"], result["next_due"]["date"])
+            service_reminder.reset_interval({"confirm": True, "odometer_km": 2000}, path, today=date(2026, 8, 2))
+            self.assertIsNone(service_reminder.status_payload(path)["acknowledgement"]["level"])
 
     def test_writer_refuses_symlink_destination(self):
         with tempfile.TemporaryDirectory() as temporary:

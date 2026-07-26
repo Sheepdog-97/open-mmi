@@ -123,3 +123,19 @@ test("live odometer updates preserve the service form DOM and use standard setti
   assert.equal(resetButton.disabled, false);
   assert.equal(summaryLabel.textContent, "Next inspection");
 });
+
+test("service acknowledgement matches only the current due level and schedule", () => {
+  const dueSnapshot = snapshot({
+    acknowledgement: {
+      level: "soon",
+      reset_date: "2026-01-01",
+      reset_odometer_km: 100000,
+      due_date: "2027-01-01",
+      due_odometer_km: 116093.44,
+    },
+  });
+  const soon = reminder.evaluate(dueSnapshot, 114500, new Date("2026-06-01T12:00:00"));
+  assert.equal(reminder.acknowledgementMatches(dueSnapshot, soon), true);
+  const due = reminder.evaluate(dueSnapshot, 116100, new Date("2026-06-01T12:00:00"));
+  assert.equal(reminder.acknowledgementMatches(dueSnapshot, due), false);
+});

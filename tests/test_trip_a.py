@@ -80,8 +80,34 @@ class TripATests(unittest.TestCase):
 
             reset_handler = Handler({"confirm": True, "odometer_km": 123456})
             self.assertTrue(system_settings._handle_post(reset_handler, "/api/system/trip-a/reset"))
+            settings_handler = Handler({"auto_reset_hours": 4})
+            self.assertTrue(system_settings._handle_post(settings_handler, "/api/system/trip-a/settings"))
+            observe_handler = Handler({"odometer_km": 123456})
+            self.assertTrue(system_settings._handle_post(observe_handler, "/api/system/trip-a/observe"))
             self.assertTrue(reset_handler.responses[-1][1]["configured"])
             self.assertEqual(reset_handler.responses[-1][1]["reset"]["odometer_km"], 123456)
+
+    def test_v1_documents_migrate_and_auto_reset_after_parked_interval(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "trip-a.json"
+            path.write_text('{"api_version": 1, "reset": {"reset_at": "2026-07-26T10:00:00+00:00", "odometer_km": 1000}}', encoding="utf-8")
+            migrated = trip_a.status_payload(path)
+            self.assertEqual(migrated["api_version"], 2)
+            self.assertEqual(migrated["settings"]["auto_reset_hours"], 0)
+            trip_a.update_settings({"auto_reset_hours": 2}, path)
+            trip_a.observe_vehicle({"odometer_km": 1000}, path, now=datetime(2026, 7, 26, 10, 5, tzinfo=timezone.utc))
+            result = trip_a.observe_vehicle({"odometer_km": 1000.2}, path, now=datetime(2026, 7, 26, 12, 10, tzinfo=timezone.utc))
+            self.assertTrue(result["auto_reset"])
+            self.assertEqual(result["reset"]["odometer_km"], 1000.2)
+
+    def test_auto_reset_is_conservative_when_odometer_advanced_during_gap(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "trip-a.json"
+            trip_a.reset_trip({"confirm": True, "odometer_km": 1000}, path, now=datetime(2026, 7, 26, 10, 0, tzinfo=timezone.utc))
+            trip_a.update_settings({"auto_reset_hours": 2}, path)
+            result = trip_a.observe_vehicle({"odometer_km": 1010}, path, now=datetime(2026, 7, 26, 12, 30, tzinfo=timezone.utc))
+            self.assertFalse(result["auto_reset"])
+            self.assertEqual(result["reset"]["odometer_km"], 1000)
 
     def test_writer_refuses_symlink_destination(self):
         with tempfile.TemporaryDirectory() as temporary:

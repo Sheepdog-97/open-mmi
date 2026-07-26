@@ -7,6 +7,9 @@
 - Added bounded classic-CAN capture normalization, filtering, before/after byte-and-bit comparison, and experimental candidate replay export that cannot write directly into the maintained vehicle tree.
 
 ### Added
+- Host-backed Trip B as an independent long-term odometer counter with manual reset and miles/kilometres display.
+- Configurable Trip A automatic reset after a parked interval, using a conservative vehicle-present heartbeat and odometer continuity check.
+- MIB-style inspection detail notification with persistent acknowledgement tied to the exact due level and service schedule.
 - Versioned maintained vehicle-profile schema, explicit identity/maturity/qualification metadata, reviewable evidence records and a single `vehicle-setup conform` catalogue-admission command shared by contributors and CI.
 - Canonical machine-readable vehicle-action registry with stable human-readable behavior identifiers, configured-argument contracts, event-payload compatibility, availability requirements, lifecycle status and private Python implementation mappings.
 - Action search/check CLI tooling, generated action documentation, runtime resolution and maintained-binding conformance that complete the event → action → implementation boundary without restricting same-pull-request proposals.
