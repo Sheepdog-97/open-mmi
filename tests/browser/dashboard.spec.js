@@ -1201,7 +1201,7 @@ test("tell-tale test is active only while the Test button is held", async ({ pag
   await openSettings(page);
   await openSettingsSection(page, "display");
 
-  const button = page.getByRole("button", { name: "Test", exact: true });
+  const button = page.locator("#openmmiSettingsPanel [data-openmmi-telltale-test-hold]");
   const left = page.locator('#openMmiFooterTelltales [data-openmmi-telltale-slot="left"]');
   await expect(button).toHaveAttribute("aria-pressed", "false");
   await expect(left).toHaveClass(/is-inactive/);
