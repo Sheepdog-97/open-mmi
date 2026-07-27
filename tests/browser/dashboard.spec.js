@@ -1057,6 +1057,37 @@ test("loads, renders status and navigates with buttons and keyboard", async ({ p
 });
 
 
+test("fuel remaining follows the decoded low-fuel warning state", async ({ page }) => {
+  const failures = captureRuntimeFailures(page);
+  const dashboard = await loadDashboard(page, {
+    payload: basePayload({ state: { fuel: { low_level_warning: false } } }),
+  });
+
+  await openHome(page);
+  await page.locator('[data-openmmi-page="2"]').click();
+  await expect(page.locator("#pageDrive")).toHaveClass(/active/);
+
+  const fuelValue = page.locator('#pageDrive [data-field="fuel_l"]');
+  const fuelUnit = page.locator('#pageDrive [data-field="fuel_l"] + small');
+  const warningColour = "rgb(255, 214, 10)";
+
+  await expect(page.locator("html")).not.toHaveClass(/openmmi-fuel-low-warning/);
+  expect(await fuelValue.evaluate((node) => getComputedStyle(node).color)).not.toBe(warningColour);
+  expect(await fuelUnit.evaluate((node) => getComputedStyle(node).color)).not.toBe(warningColour);
+
+  await dashboard.setPayload(basePayload({ state: { fuel: { low_level_warning: true } } }));
+  await expect(page.locator("html")).toHaveClass(/openmmi-fuel-low-warning/);
+  await expect(fuelValue).toHaveCSS("color", warningColour);
+  await expect(fuelUnit).toHaveCSS("color", warningColour);
+
+  await dashboard.setPayload(basePayload({ state: { fuel: { low_level_warning: false } } }));
+  await expect(page.locator("html")).not.toHaveClass(/openmmi-fuel-low-warning/);
+  await expect.poll(() => fuelValue.evaluate((node) => getComputedStyle(node).color)).not.toBe(warningColour);
+  await expect.poll(() => fuelUnit.evaluate((node) => getComputedStyle(node).color)).not.toBe(warningColour);
+
+  await expectNoRuntimeFailures(failures);
+});
+
 test("diagnostics renders canonical profile values and all decoded paths", async ({ page }) => {
   const failures = captureRuntimeFailures(page);
   await loadDashboard(page);

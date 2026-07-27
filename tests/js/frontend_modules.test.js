@@ -254,6 +254,8 @@ const usbMedia = require("../../ui/web_dashboard/static/media-usb.js");
 function fakeClassList() {
   const values = new Set();
   return {
+    add(...names) { names.forEach((name) => values.add(name)); },
+    remove(...names) { names.forEach((name) => values.delete(name)); },
     contains(name) { return values.has(name); },
     toggle(name, force) {
       if (force === undefined ? !values.has(name) : force) values.add(name);
@@ -430,22 +432,13 @@ test("vehicle renderer skips unchanged non-health DOM work", () => {
   assert.equal(metrics.unchanged_renders_skipped, 1);
 });
 
-test("vehicle renderer colours the fuel value only while the low-fuel warning is active", () => {
-  const fuelValueClasses = fakeClassList();
-  const fuelUnit = { textContent: "L" };
-  const fuelValue = {
-    classList: fuelValueClasses,
-    querySelector(selector) { return selector === "small" ? fuelUnit : null; },
-  };
-  const fuelField = {
-    textContent: "--",
-    classList: fakeClassList(),
-    closest(selector) { return selector === ".value" ? fuelValue : null; },
-  };
+test("vehicle renderer tracks the decoded low-fuel warning on the document root", () => {
+  const rootClasses = fakeClassList();
+  const fuelField = { textContent: "--" };
   const document = {
     documentElement: {
       style: { setProperty() {}, removeProperty() {} },
-      classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+      classList: rootClasses,
     },
     addEventListener() {},
     querySelector() { return null; },
@@ -460,10 +453,10 @@ test("vehicle renderer colours the fuel value only while the low-fuel warning is
   });
 
   renderer.render({ state: { fuel: { level_l: 7, low_level_warning: true } } });
-  assert.equal(fuelValueClasses.contains("openmmi-fuel-low-warning"), true);
+  assert.equal(rootClasses.contains("openmmi-fuel-low-warning"), true);
 
   renderer.render({ state: { fuel: { level_l: 7, low_level_warning: false } } });
-  assert.equal(fuelValueClasses.contains("openmmi-fuel-low-warning"), false);
+  assert.equal(rootClasses.contains("openmmi-fuel-low-warning"), false);
 });
 
 test("vehicle view model formats representative imperial status", () => {

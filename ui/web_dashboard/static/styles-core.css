@@ -199,7 +199,13 @@ h1 {
 
 .state { text-transform: uppercase; }
 .value small { margin-left: .45rem; font-size: .43em; letter-spacing: 0; }
-.value.openmmi-fuel-low-warning { color: #ffd60a; }
+/* Follow the canonical decoded low-fuel status at the document root. These
+   selectors intentionally outrank the later high-contrast fuel rule, which
+   forces the field back to white with !important. */
+:root.openmmi-fuel-low-warning [data-field="fuel_l"],
+:root.openmmi-fuel-low-warning [data-field="fuel_l"] + small {
+  color: #ffd60a !important;
+}
 
 .full { width: 100%; min-width: 0; }
 

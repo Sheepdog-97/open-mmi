@@ -203,10 +203,7 @@
 
     function updateFuelWarning(value) {
       const warningActive = value === true;
-      queryAll('[data-field="fuel_l"]').forEach((node) => {
-        const valueNode = node.closest ? node.closest(".value") : null;
-        (valueNode || node).classList.toggle("openmmi-fuel-low-warning", warningActive);
-      });
+      requireDocument().documentElement.classList.toggle("openmmi-fuel-low-warning", warningActive);
     }
 
     function updateDoor(name, value) {
