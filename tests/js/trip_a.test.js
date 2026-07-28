@@ -6,9 +6,9 @@ const trip = require("../../ui/web_dashboard/static/trip-a.js");
 
 function snapshot(overrides = {}) {
   return {
-    configured: true,
-    reset: { reset_at: "2026-07-26T20:30:00+00:00", odometer_km: 100000, ...(overrides.reset || {}) },
     ...overrides,
+    configured: overrides.configured ?? true,
+    reset: { reset_at: "2026-07-26T20:30:00+00:00", odometer_km: 100000, ...(overrides.reset || {}) },
   };
 }
 
@@ -24,11 +24,18 @@ test("Trip A handles setup, waiting and odometer rollback states", () => {
   assert.equal(trip.evaluate(snapshot(), 99990).state, "invalid-odometer");
 });
 
-test("Trip A display follows the existing speed unit", () => {
+test("Trip A displays trips to one decimal while keeping odometers whole", () => {
   assert.equal(trip.distanceForDisplay(1609.344, { speedUnit: "mph" }), 1000);
   assert.equal(trip.formatDistance(1609.344, { speedUnit: "mph" }), "1,000");
   assert.equal(trip.formatDistanceWithUnit(1609.344, { speedUnit: "mph" }), "1,000 mi");
-  assert.equal(trip.formatDistanceWithUnit(1609.344, { speedUnit: "kmh" }), "1,609 km");
+  assert.equal(trip.formatTripDistanceWithUnit(1609.344, { speedUnit: "mph" }), "1,000.0 mi");
+  assert.equal(trip.formatTripDistanceWithUnit(1609.344, { speedUnit: "kmh" }), "1,609.3 km");
+});
+
+test("Trip A prefers the high-resolution distance accumulator", () => {
+  const result = trip.evaluate(snapshot({ reset: { distance_total_km: 50 } }), 100000, 50.1609344);
+  assert.equal(result.precise, true);
+  assert.equal(trip.formatTripDistanceWithUnit(result.tripKm, { speedUnit: "mph" }), "0.1 mi");
 });
 
 test("live odometer updates refresh Trip A without rebuilding the settings panel", async () => {
@@ -90,10 +97,10 @@ test("live odometer updates refresh Trip A without rebuilding the settings panel
   controller.update({ state: { vehicle: { odometer_km: 100123 } } });
 
   assert.equal(htmlWrites, writesAfterInitialRender);
-  assert.equal(dashboardValue.textContent, "76");
+  assert.equal(dashboardValue.textContent, "76.4");
   assert.equal(dashboardUnit.textContent, "mi");
   assert.equal(currentOdometer.textContent, "62,214 mi");
   assert.equal(summaryLabel.textContent, "Trip A");
-  assert.equal(summaryDetail.textContent, "76 mi");
+  assert.equal(summaryDetail.textContent, "76.4 mi");
   assert.equal(resetButton.disabled, false);
 });

@@ -1,10 +1,12 @@
 """Persistent Trip A state and parked-time automatic reset support.
 
-Trip A is calculated from the confirmed vehicle odometer. The host stores the
-explicit reset point plus a low-frequency activity heartbeat used to detect a
-parked interval. Automatic reset is conservative: it only occurs when the saved
-activity is old enough and the odometer has not advanced by more than one
-kilometre while the dashboard was inactive.
+Trip A uses the shared high-resolution trip distance accumulator when available,
+with the confirmed vehicle odometer retained as a compatibility fallback and
+recovery anchor. The host stores the explicit reset point plus a low-frequency
+activity heartbeat used to detect a parked interval. Automatic reset is
+conservative: it only occurs when the saved activity is old enough and the
+odometer has not advanced by more than one kilometre while the dashboard was
+inactive.
 """
 
 from __future__ import annotations
@@ -20,8 +22,9 @@ from typing import Any, Mapping, Optional
 
 from ui.configuration import ConfigurationError, config_dir
 
-API_VERSION = 2
+API_VERSION = 3
 MAX_ODOMETER_KM = 10_000_000.0
+MAX_DISTANCE_TOTAL_KM = 100_000_000.0
 MAX_AUTO_RESET_HOURS = 168
 AUTO_RESET_ODOMETER_TOLERANCE_KM = 1.0
 
@@ -35,6 +38,7 @@ class TripSettings:
 class TripReset:
     reset_at: Optional[str] = None
     odometer_km: Optional[float] = None
+    distance_total_km: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -64,6 +68,13 @@ def _odometer(value: Any) -> float:
     number = _finite_number(value, "odometer_km")
     if not 0.0 <= number <= MAX_ODOMETER_KM:
         raise ConfigurationError("odometer_km is outside the supported range")
+    return number
+
+
+def _distance_total(value: Any) -> float:
+    number = _finite_number(value, "distance_total_km")
+    if not 0.0 <= number <= MAX_DISTANCE_TOTAL_KM:
+        raise ConfigurationError("distance_total_km is outside the supported range")
     return number
 
 
@@ -100,14 +111,19 @@ def _validate_settings(payload: Mapping[str, Any]) -> TripSettings:
 
 
 def _validate_reset(payload: Mapping[str, Any]) -> TripReset:
-    unknown = sorted(set(payload) - {"reset_at", "odometer_km"})
+    unknown = sorted(set(payload) - {"reset_at", "odometer_km", "distance_total_km"})
     if unknown:
         raise ConfigurationError(f"unsupported Trip A reset field: {unknown[0]}")
     reset_at = payload.get("reset_at")
     odometer = payload.get("odometer_km")
-    if reset_at in (None, "") and odometer in (None, ""):
+    distance_total = payload.get("distance_total_km")
+    if reset_at in (None, "") and odometer in (None, "") and distance_total in (None, ""):
         return TripReset()
-    return TripReset(reset_at=_timestamp(reset_at, "reset_at"), odometer_km=_odometer(odometer))
+    return TripReset(
+        reset_at=_timestamp(reset_at, "reset_at"),
+        odometer_km=_odometer(odometer),
+        distance_total_km=None if distance_total in (None, "") else _distance_total(distance_total),
+    )
 
 
 def _validate_activity(payload: Mapping[str, Any]) -> TripActivity:
@@ -148,6 +164,24 @@ def _migrate_v1(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _migrate_v2(payload: Mapping[str, Any]) -> dict[str, Any]:
+    unknown = sorted(set(payload) - {"api_version", "settings", "reset", "activity"})
+    if unknown:
+        raise ConfigurationError(f"unsupported Trip A configuration field: {unknown[0]}")
+    if not isinstance(payload.get("settings"), dict):
+        raise ConfigurationError("Trip A settings must be an object")
+    if not isinstance(payload.get("reset"), dict):
+        raise ConfigurationError("Trip A reset must be an object")
+    if not isinstance(payload.get("activity"), dict):
+        raise ConfigurationError("Trip A activity must be an object")
+    return {
+        "api_version": API_VERSION,
+        "settings": _validate_settings(payload["settings"]).__dict__,
+        "reset": _validate_reset(payload["reset"]).__dict__,
+        "activity": _validate_activity(payload["activity"]).__dict__,
+    }
+
+
 def read_document(path: Optional[Path] = None) -> dict[str, Any]:
     target = path or default_path()
     try:
@@ -160,6 +194,8 @@ def read_document(path: Optional[Path] = None) -> dict[str, Any]:
         raise ConfigurationError("Trip A configuration must be an object")
     if payload.get("api_version") == 1:
         return _migrate_v1(payload)
+    if payload.get("api_version") == 2:
+        return _migrate_v2(payload)
     if payload.get("api_version") != API_VERSION:
         raise ConfigurationError("unsupported Trip A configuration version")
     unknown = sorted(set(payload) - {"api_version", "settings", "reset", "activity"})
@@ -247,15 +283,22 @@ def reset_trip(
     *,
     now: Optional[datetime] = None,
 ) -> dict[str, Any]:
-    if set(payload) != {"confirm", "odometer_km"} or payload.get("confirm") is not True:
+    allowed = {"confirm", "odometer_km", "distance_total_km"}
+    if not set(payload).issubset(allowed) or {"confirm", "odometer_km"} - set(payload) or payload.get("confirm") is not True:
         raise ConfigurationError("Trip A reset requires confirmation and an odometer")
     odometer = _odometer(payload.get("odometer_km"))
+    distance_total = payload.get("distance_total_km")
+    reset_distance = None if distance_total in (None, "") else _distance_total(distance_total)
     target = path or default_path()
     if target.is_symlink():
         raise ConfigurationError(f"refusing to replace symlinked Trip A configuration: {target}")
     current = read_document(target)
     reset_time = _normalise_now(now)
-    current["reset"] = TripReset(reset_at=reset_time.isoformat(), odometer_km=odometer).__dict__
+    current["reset"] = TripReset(
+        reset_at=reset_time.isoformat(),
+        odometer_km=odometer,
+        distance_total_km=reset_distance,
+    ).__dict__
     current["activity"] = TripActivity(last_active_at=reset_time.isoformat(), odometer_km=odometer).__dict__
     _write_document(current, target)
     return status_payload(target)
@@ -267,9 +310,12 @@ def observe_vehicle(
     *,
     now: Optional[datetime] = None,
 ) -> dict[str, Any]:
-    if set(payload) != {"odometer_km"}:
+    allowed = {"odometer_km", "distance_total_km"}
+    if not set(payload).issubset(allowed) or "odometer_km" not in payload:
         raise ConfigurationError("Trip A observation requires an odometer")
     odometer = _odometer(payload.get("odometer_km"))
+    distance_total = payload.get("distance_total_km")
+    observed_distance = None if distance_total in (None, "") else _distance_total(distance_total)
     target = path or default_path()
     if target.is_symlink():
         raise ConfigurationError(f"refusing to replace symlinked Trip A configuration: {target}")
@@ -288,7 +334,11 @@ def observe_vehicle(
             inactive_for >= timedelta(hours=auto_reset_hours)
             and -AUTO_RESET_ODOMETER_TOLERANCE_KM <= odometer_advance <= AUTO_RESET_ODOMETER_TOLERANCE_KM
         ):
-            current["reset"] = TripReset(reset_at=observed_at.isoformat(), odometer_km=odometer).__dict__
+            current["reset"] = TripReset(
+                reset_at=observed_at.isoformat(),
+                odometer_km=odometer,
+                distance_total_km=observed_distance,
+            ).__dict__
             auto_reset = True
 
     current["activity"] = TripActivity(last_active_at=observed_at.isoformat(), odometer_km=odometer).__dict__

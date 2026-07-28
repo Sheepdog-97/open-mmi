@@ -13,14 +13,16 @@ from typing import Any, Mapping, Optional
 
 from ui.configuration import ConfigurationError, config_dir
 
-API_VERSION = 1
+API_VERSION = 2
 MAX_ODOMETER_KM = 10_000_000.0
+MAX_DISTANCE_TOTAL_KM = 100_000_000.0
 
 
 @dataclass(frozen=True)
 class TripReset:
     reset_at: Optional[str] = None
     odometer_km: Optional[float] = None
+    distance_total_km: Optional[float] = None
 
 
 def default_path() -> Path:
@@ -42,13 +44,28 @@ def _odometer(value: Any) -> float:
     return number
 
 
+def _distance_total(value: Any) -> float:
+    if isinstance(value, bool):
+        raise ConfigurationError("distance_total_km must be a number")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ConfigurationError("distance_total_km must be a number") from exc
+    if not math.isfinite(number):
+        raise ConfigurationError("distance_total_km must be finite")
+    if not 0.0 <= number <= MAX_DISTANCE_TOTAL_KM:
+        raise ConfigurationError("distance_total_km is outside the supported range")
+    return number
+
+
 def _validate_reset(payload: Mapping[str, Any]) -> TripReset:
-    unknown = sorted(set(payload) - {"reset_at", "odometer_km"})
+    unknown = sorted(set(payload) - {"reset_at", "odometer_km", "distance_total_km"})
     if unknown:
         raise ConfigurationError(f"unsupported Trip B reset field: {unknown[0]}")
     reset_at = payload.get("reset_at")
     odometer = payload.get("odometer_km")
-    if reset_at in (None, "") and odometer in (None, ""):
+    distance_total = payload.get("distance_total_km")
+    if reset_at in (None, "") and odometer in (None, "") and distance_total in (None, ""):
         return TripReset()
     if not isinstance(reset_at, str):
         raise ConfigurationError("reset_at must be an ISO timestamp")
@@ -58,7 +75,11 @@ def _validate_reset(payload: Mapping[str, Any]) -> TripReset:
         raise ConfigurationError("reset_at must be an ISO timestamp") from exc
     if parsed.tzinfo is None:
         raise ConfigurationError("reset_at must include a timezone")
-    return TripReset(reset_at=parsed.isoformat(), odometer_km=_odometer(odometer))
+    return TripReset(
+        reset_at=parsed.isoformat(),
+        odometer_km=_odometer(odometer),
+        distance_total_km=None if distance_total in (None, "") else _distance_total(distance_total),
+    )
 
 
 def _default_document() -> dict[str, Any]:
@@ -75,6 +96,14 @@ def read_document(path: Optional[Path] = None) -> dict[str, Any]:
         raise ConfigurationError(f"cannot read Trip B configuration: {exc}") from exc
     if not isinstance(payload, dict):
         raise ConfigurationError("Trip B configuration must be an object")
+    if payload.get("api_version") == 1:
+        unknown = sorted(set(payload) - {"api_version", "reset"})
+        if unknown:
+            raise ConfigurationError(f"unsupported Trip B configuration field: {unknown[0]}")
+        if not isinstance(payload.get("reset"), dict):
+            raise ConfigurationError("Trip B reset must be an object")
+        reset = _validate_reset(payload["reset"])
+        return {"api_version": API_VERSION, "reset": reset.__dict__}
     if payload.get("api_version") != API_VERSION:
         raise ConfigurationError("unsupported Trip B configuration version")
     unknown = sorted(set(payload) - {"api_version", "reset"})
@@ -137,9 +166,12 @@ def reset_trip(
     *,
     now: Optional[datetime] = None,
 ) -> dict[str, Any]:
-    if set(payload) != {"confirm", "odometer_km"} or payload.get("confirm") is not True:
+    allowed = {"confirm", "odometer_km", "distance_total_km"}
+    if not set(payload).issubset(allowed) or {"confirm", "odometer_km"} - set(payload) or payload.get("confirm") is not True:
         raise ConfigurationError("Trip B reset requires confirmation and an odometer")
     odometer = _odometer(payload.get("odometer_km"))
+    distance_total = payload.get("distance_total_km")
+    reset_distance = None if distance_total in (None, "") else _distance_total(distance_total)
     target = path or default_path()
     if target.is_symlink():
         raise ConfigurationError(f"refusing to replace symlinked Trip B configuration: {target}")
@@ -148,7 +180,11 @@ def reset_trip(
         reset_time = reset_time.replace(tzinfo=timezone.utc)
     document = {
         "api_version": API_VERSION,
-        "reset": TripReset(reset_at=reset_time.isoformat(), odometer_km=odometer).__dict__,
+        "reset": TripReset(
+            reset_at=reset_time.isoformat(),
+            odometer_km=odometer,
+            distance_total_km=reset_distance,
+        ).__dict__,
     }
     _write_document(document, target)
     return status_payload(target)

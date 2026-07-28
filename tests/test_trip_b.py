@@ -31,7 +31,19 @@ class TripBTests(unittest.TestCase):
             )
             self.assertTrue(result["configured"])
             self.assertEqual(result["reset"]["odometer_km"], 123456)
+            self.assertIsNone(result["reset"]["distance_total_km"])
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+
+
+    def test_reset_records_high_resolution_distance_total(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "trip-b.json"
+            result = trip_b.reset_trip(
+                {"confirm": True, "odometer_km": 123456, "distance_total_km": 84.25},
+                path,
+                now=datetime(2026, 7, 26, 20, 30, tzinfo=timezone.utc),
+            )
+            self.assertEqual(result["reset"]["distance_total_km"], 84.25)
 
     def test_route_exposes_status_and_reset(self):
         class Handler:

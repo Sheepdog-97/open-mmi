@@ -27,7 +27,7 @@ try:
         restart_dashboard,
         write_environment_file,
     )
-    from ui.web_dashboard import jellyfin, service_reminder, trip_a, trip_b, update_status
+    from ui.web_dashboard import jellyfin, service_reminder, trip_a, trip_b, trip_distance, update_status
 except ModuleNotFoundError as exc:  # pragma: no cover - direct script fallback
     if exc.name != "ui":
         raise
@@ -43,7 +43,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - direct script fallback
         restart_dashboard,
         write_environment_file,
     )
-    from ui.web_dashboard import jellyfin, service_reminder, trip_a, trip_b, update_status
+    from ui.web_dashboard import jellyfin, service_reminder, trip_a, trip_b, trip_distance, update_status
 
 SYSTEM_MAX_BODY_BYTES = 16 * 1024
 SYSTEM_CUSTOM_EDIT_MAX_BODY_BYTES = vehicle_setup.MAX_PROFILE_BYTES * 6 + SYSTEM_MAX_BODY_BYTES
@@ -206,6 +206,7 @@ def _handle_get(handler: Any, path: str) -> bool:
         "/api/system/update-readiness": lambda: update_readiness.readiness_payload(update_status.status_payload()),
         "/api/system/update-coordinator": update_coordinator.client_status,
         "/api/system/service-reminder": service_reminder.status_payload,
+        "/api/system/trip-distance": trip_distance.status_payload,
         "/api/system/trip-a": trip_a.status_payload,
         "/api/system/trip-b": trip_b.status_payload,
     }
@@ -253,6 +254,7 @@ def _handle_post(handler: Any, path: str) -> bool:
         "/api/system/trip-a/settings",
         "/api/system/trip-a/observe",
         "/api/system/trip-b/reset",
+        "/api/system/trip-distance/observe",
         "/api/system/service-reminder/acknowledge",
     }:
         return False
@@ -296,6 +298,8 @@ def _handle_post(handler: Any, path: str) -> bool:
             result = trip_a.observe_vehicle(_json_body(handler))
         elif path == "/api/system/trip-b/reset":
             result = trip_b.reset_trip(_json_body(handler))
+        elif path == "/api/system/trip-distance/observe":
+            result = trip_distance.observe(_json_body(handler))
         elif path == "/api/system/service-reminder/acknowledge":
             result = service_reminder.acknowledge(_json_body(handler))
         elif path == "/api/system/update-check":

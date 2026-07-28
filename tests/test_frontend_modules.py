@@ -17,6 +17,7 @@ SYSTEM_SETTINGS_STYLES = STATIC / "styles-system-settings.css"
 VEHICLE_SETUP_SETTINGS = STATIC / "vehicle-setup-settings.js"
 RUNTIME_DIAGNOSTICS = STATIC / "runtime-diagnostics.js"
 SERVICE_REMINDER = STATIC / "service-reminder.js"
+TRIP_DISTANCE = STATIC / "trip-distance.js"
 TRIP_A = STATIC / "trip-a.js"
 TRIP_B = STATIC / "trip-b.js"
 TRIP_SWITCHER = STATIC / "trip-switcher.js"
@@ -43,6 +44,7 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         vehicle_setup_settings_index = html.index('<script src="/vehicle-setup-settings.js"></script>')
         runtime_diagnostics_index = html.index('<script src="/runtime-diagnostics.js"></script>')
         service_reminder_index = html.index('<script src="/service-reminder.js"></script>')
+        trip_distance_index = html.index('<script src="/trip-distance.js"></script>')
         trip_a_index = html.index('<script src="/trip-a.js"></script>')
         trip_b_index = html.index('<script src="/trip-b.js"></script>')
         trip_switcher_index = html.index('<script src="/trip-switcher.js"></script>')
@@ -64,7 +66,8 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertLess(system_settings_index, vehicle_setup_settings_index)
         self.assertLess(vehicle_setup_settings_index, runtime_diagnostics_index)
         self.assertLess(runtime_diagnostics_index, service_reminder_index)
-        self.assertLess(service_reminder_index, trip_a_index)
+        self.assertLess(service_reminder_index, trip_distance_index)
+        self.assertLess(trip_distance_index, trip_a_index)
         self.assertLess(trip_a_index, trip_b_index)
         self.assertLess(trip_b_index, trip_switcher_index)
         self.assertLess(trip_switcher_index, status_index)
@@ -89,6 +92,7 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertIn("window.openMmiVehicleSetupSettings", source)
         self.assertIn("window.openMmiRuntimeDiagnostics", source)
         self.assertIn("window.openMmiServiceReminder", source)
+        self.assertIn("window.openMmiTripDistance", source)
         self.assertIn("window.openMmiTripA", source)
         self.assertIn("window.openMmiTripB", source)
         self.assertIn("window.openMmiTripSwitcher", source)
@@ -303,11 +307,17 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         source = TRIP_A.read_text(encoding="utf-8")
         app = APP.read_text(encoding="utf-8")
         html = INDEX.read_text(encoding="utf-8")
+        trip_distance = TRIP_DISTANCE.read_text(encoding="utf-8")
+        self.assertIn('const ENDPOINT = "/api/system/trip-distance";', trip_distance)
+        self.assertIn('const OBSERVE_ENDPOINT = "/api/system/trip-distance/observe";', trip_distance)
+        self.assertIn('distanceDeltaKm', trip_distance)
         self.assertIn('const ENDPOINT = "/api/system/trip-a";', source)
         self.assertIn('const RESET_ENDPOINT = "/api/system/trip-a/reset";', source)
         self.assertIn('const SETTINGS_ENDPOINT = "/api/system/trip-a/settings";', source)
         self.assertIn('const OBSERVE_ENDPOINT = "/api/system/trip-a/observe";', source)
         self.assertIn('payload?.state?.vehicle?.odometer_km', source)
+        self.assertIn('distance_total_km', source)
+        self.assertIn('formatTripDistance', source)
         self.assertIn('data-openmmi-trip-a-reset', source)
         self.assertIn('openmmi-config-actions openmmi-service-actions', source)
         self.assertIn('event.stopImmediatePropagation?.();', source)

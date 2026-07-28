@@ -18,12 +18,31 @@
     return Number.isFinite(number) ? number : null;
   }
 
-  function evaluate(snapshot = {}, currentOdometerKm) {
+  function evaluate(snapshot = {}, currentOdometerKm, currentDistanceTotalKm) {
     const reset = snapshot.reset || {};
     const resetOdometer = finite(reset.odometer_km);
+    const resetDistanceTotal = finite(reset.distance_total_km);
     const currentOdometer = finite(currentOdometerKm);
+    const currentDistanceTotal = finite(currentDistanceTotalKm);
     const configured = snapshot.configured === true && resetOdometer !== null;
     if (!configured) return Object.freeze({ state: "setup", configured: false, tripKm: null });
+
+    if (resetDistanceTotal !== null && currentDistanceTotal !== null) {
+      if (currentDistanceTotal < resetDistanceTotal - 0.01) {
+        return Object.freeze({ state: "invalid-distance", configured: true, resetDistanceTotalKm: resetDistanceTotal, currentDistanceTotalKm: currentDistanceTotal, tripKm: null });
+      }
+      return Object.freeze({
+        state: "ok",
+        configured: true,
+        precise: true,
+        resetOdometerKm: resetOdometer,
+        currentOdometerKm: currentOdometer,
+        resetDistanceTotalKm: resetDistanceTotal,
+        currentDistanceTotalKm: currentDistanceTotal,
+        tripKm: Math.max(0, currentDistanceTotal - resetDistanceTotal),
+      });
+    }
+
     if (currentOdometer === null) return Object.freeze({ state: "waiting", configured: true, resetOdometerKm: resetOdometer, tripKm: null });
     if (currentOdometer < resetOdometer - 1) {
       return Object.freeze({ state: "invalid-odometer", configured: true, resetOdometerKm: resetOdometer, currentOdometerKm: currentOdometer, tripKm: null });
@@ -31,6 +50,7 @@
     return Object.freeze({
       state: "ok",
       configured: true,
+      precise: false,
       resetOdometerKm: resetOdometer,
       currentOdometerKm: currentOdometer,
       tripKm: Math.max(0, currentOdometer - resetOdometer),
@@ -55,6 +75,17 @@
 
   function formatDistanceWithUnit(kilometres, settings = {}) {
     const value = formatDistance(kilometres, settings);
+    return value === "--" ? value : `${value} ${normaliseUnits(settings)}`;
+  }
+
+  function formatTripDistance(kilometres, settings = {}) {
+    const number = distanceForDisplay(kilometres, settings);
+    if (number === null) return "--";
+    return Math.max(0, number).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  }
+
+  function formatTripDistanceWithUnit(kilometres, settings = {}) {
+    const value = formatTripDistance(kilometres, settings);
     return value === "--" ? value : `${value} ${normaliseUnits(settings)}`;
   }
 
@@ -83,7 +114,8 @@
     if (result.state === "setup") return { label: "Trip A not set", detail: "Reset Trip A to start" };
     if (result.state === "waiting") return { label: "Waiting for odometer", detail: "Trip A will update when vehicle data is available" };
     if (result.state === "invalid-odometer") return { label: "Check Trip A reset", detail: "Odometer is below the saved reset value" };
-    return { label: "Trip A", detail: formatDistanceWithUnit(result.tripKm, settings) };
+    if (result.state === "invalid-distance") return { label: "Check Trip A reset", detail: "Trip distance is below the saved reset value" };
+    return { label: "Trip A", detail: formatTripDistanceWithUnit(result.tripKm, settings) };
   }
 
   function install(options = {}) {
@@ -91,6 +123,7 @@
     const documentRef = options.document || windowRef?.document;
     const api = options.api || windowRef?.openMmiApi;
     const preferences = options.preferences || windowRef?.openMmiPreferences;
+    const distance = options.distance || windowRef?.openMmiTripDistanceController;
     const now = options.now || (() => Date.now());
     if (!documentRef || !api) return Object.freeze({ update() {}, refresh: async () => null });
 
@@ -108,12 +141,16 @@
       return preferences.readDashboardSettings(DEFAULT_SETTINGS);
     }
 
-    function result() { return evaluate(snapshot || {}, currentOdometerKm); }
+    function currentDistanceTotalKm() {
+      return typeof distance?.currentTotalKm === "function" ? finite(distance.currentTotalKm()) : null;
+    }
+
+    function result() { return evaluate(snapshot || {}, currentOdometerKm, currentDistanceTotalKm()); }
 
     function updateDashboardReadouts() {
       const units = dashboardSettings();
       const evaluated = result();
-      const value = formatDistance(evaluated.tripKm, units);
+      const value = formatTripDistance(evaluated.tripKm, units);
       const unit = normaliseUnits(units);
       Array.from(documentRef.querySelectorAll?.("[data-openmmi-trip-a]") || []).forEach((node) => { node.textContent = value; });
       Array.from(documentRef.querySelectorAll?.("[data-openmmi-trip-a-unit]") || []).forEach((node) => { node.textContent = unit; });
@@ -155,7 +192,7 @@
       const currentOdometer = finite(currentOdometerKm);
       const feedback = message ? `<p class="openmmi-config-message ${escapeHtml(messageKind)}" role="status">${escapeHtml(message)}</p>` : "";
       host.innerHTML = `
-        <div class="openmmi-settings-panel-head"><span>Trip A</span><small>short-term odometer-based trip counter</small></div>
+        <div class="openmmi-settings-panel-head"><span>Trip A</span><small>short-term high-resolution trip counter</small></div>
         <div class="openmmi-service-summary ${escapeHtml(evaluated.state)}" data-openmmi-trip-a-summary>
           <span class="openmmi-service-summary-icon" aria-hidden="true">A</span>
           <div><strong data-openmmi-trip-a-summary-label>${escapeHtml(summary.label)}</strong><small data-openmmi-trip-a-summary-detail>${escapeHtml(summary.detail)}</small></div>
@@ -220,7 +257,10 @@
       messageKind = "";
       renderPanel();
       try {
-        snapshot = await api.postJson(RESET_ENDPOINT, { confirm: true, odometer_km: odometer }, { usePayloadError: true });
+        const payload = { confirm: true, odometer_km: odometer };
+        const distanceTotal = currentDistanceTotalKm();
+        if (distanceTotal !== null) payload.distance_total_km = distanceTotal;
+        snapshot = await api.postJson(RESET_ENDPOINT, payload, { usePayloadError: true });
         lastObservedAt = now();
         message = "Trip A reset";
         messageKind = "success";
@@ -242,7 +282,10 @@
       observing = true;
       lastObservedAt = currentTime;
       try {
-        const next = await api.postJson(OBSERVE_ENDPOINT, { odometer_km: odometer }, { usePayloadError: true });
+        const payload = { odometer_km: odometer };
+        const distanceTotal = currentDistanceTotalKm();
+        if (distanceTotal !== null) payload.distance_total_km = distanceTotal;
+        const next = await api.postJson(OBSERVE_ENDPOINT, payload, { usePayloadError: true });
         snapshot = next;
         if (next.auto_reset === true) {
           message = "Trip A reset automatically after the parked interval";
@@ -317,6 +360,8 @@
     distanceForDisplay,
     formatDistance,
     formatDistanceWithUnit,
+    formatTripDistance,
+    formatTripDistanceWithUnit,
     autoResetLabel,
     statusSummary,
     install,

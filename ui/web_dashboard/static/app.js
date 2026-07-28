@@ -14,10 +14,11 @@ const openMmiSystemSettingsClient = window.openMmiSystemSettings;
 const openMmiVehicleSetupSettingsClient = window.openMmiVehicleSetupSettings;
 const openMmiRuntimeDiagnosticsClient = window.openMmiRuntimeDiagnostics;
 const openMmiServiceReminderClient = window.openMmiServiceReminder;
+const openMmiTripDistanceClient = window.openMmiTripDistance;
 const openMmiTripAClient = window.openMmiTripA;
 const openMmiTripBClient = window.openMmiTripB;
 const openMmiTripSwitcherClient = window.openMmiTripSwitcher;
-if (!openMmiApiClient || !openMmiDashboardConnectionClient || !openMmiPrefs || !openMmiStatusClient || !openMmiNavigationClient || !openMmiOverlaysClient || !openMmiVehicleClient || !openMmiMediaClient || !openMmiRadioMediaClient || !openMmiUsbMediaClient || !openMmiJellyfinMediaClient || !openMmiBluetoothMediaClient || !openMmiSystemSettingsClient || !openMmiVehicleSetupSettingsClient || !openMmiRuntimeDiagnosticsClient || !openMmiServiceReminderClient || !openMmiTripAClient || !openMmiTripBClient || !openMmiTripSwitcherClient) {
+if (!openMmiApiClient || !openMmiDashboardConnectionClient || !openMmiPrefs || !openMmiStatusClient || !openMmiNavigationClient || !openMmiOverlaysClient || !openMmiVehicleClient || !openMmiMediaClient || !openMmiRadioMediaClient || !openMmiUsbMediaClient || !openMmiJellyfinMediaClient || !openMmiBluetoothMediaClient || !openMmiSystemSettingsClient || !openMmiVehicleSetupSettingsClient || !openMmiRuntimeDiagnosticsClient || !openMmiServiceReminderClient || !openMmiTripDistanceClient || !openMmiTripAClient || !openMmiTripBClient || !openMmiTripSwitcherClient) {
   throw new Error("Open MMI frontend modules did not load");
 }
 
@@ -31,8 +32,9 @@ const openMmiSystemSettingsController = openMmiSystemSettingsClient.install({ ap
 const openMmiVehicleSetupSettingsController = openMmiVehicleSetupSettingsClient.install({ api: openMmiApiClient });
 const openMmiRuntimeDiagnosticsController = openMmiRuntimeDiagnosticsClient.install({ api: openMmiApiClient });
 const openMmiServiceReminderController = openMmiServiceReminderClient.install({ api: openMmiApiClient, preferences: openMmiPrefs });
-const openMmiTripAController = openMmiTripAClient.install({ api: openMmiApiClient, preferences: openMmiPrefs });
-const openMmiTripBController = openMmiTripBClient.install({ api: openMmiApiClient, preferences: openMmiPrefs });
+const openMmiTripDistanceController = openMmiTripDistanceClient.install({ api: openMmiApiClient });
+const openMmiTripAController = openMmiTripAClient.install({ api: openMmiApiClient, preferences: openMmiPrefs, distance: openMmiTripDistanceController });
+const openMmiTripBController = openMmiTripBClient.install({ api: openMmiApiClient, preferences: openMmiPrefs, distance: openMmiTripDistanceController });
 const openMmiTripSwitcherController = openMmiTripSwitcherClient.install({ preferences: openMmiPrefs });
 openMmiRadioMediaClient.installPrivacy({ preferences: openMmiPrefs });
 window.openMmiStatusStore = openMmiStatusStore;
@@ -45,6 +47,7 @@ window.openMmiSystemSettingsController = openMmiSystemSettingsController;
 window.openMmiVehicleSetupSettingsController = openMmiVehicleSetupSettingsController;
 window.openMmiRuntimeDiagnosticsController = openMmiRuntimeDiagnosticsController;
 window.openMmiServiceReminderController = openMmiServiceReminderController;
+window.openMmiTripDistanceController = openMmiTripDistanceController;
 window.openMmiTripAController = openMmiTripAController;
 window.openMmiTripBController = openMmiTripBController;
 window.openMmiTripSwitcherController = openMmiTripSwitcherController;
@@ -107,6 +110,7 @@ function openMmiApplyDriverDashboardCleanupV2() {
 let render = function openMmiRenderVehicleStatus(payload) {
   const rendered = openMmiVehicleRenderer.render(payload);
   openMmiServiceReminderController.update(payload);
+  openMmiTripDistanceController.update(payload);
   openMmiTripAController.update(payload);
   openMmiTripBController.update(payload);
   return rendered;

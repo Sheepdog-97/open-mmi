@@ -34,8 +34,20 @@ class TripATests(unittest.TestCase):
             self.assertTrue(result["configured"])
             self.assertEqual(result["reset"]["reset_at"], "2026-07-26T20:30:00+00:00")
             self.assertEqual(result["reset"]["odometer_km"], 123456)
+            self.assertIsNone(result["reset"]["distance_total_km"])
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
             self.assertEqual(stat.S_IMODE(path.parent.stat().st_mode), 0o700)
+
+
+    def test_reset_records_high_resolution_distance_total(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "trip-a.json"
+            result = trip_a.reset_trip(
+                {"confirm": True, "odometer_km": 123456, "distance_total_km": 42.125},
+                path,
+                now=datetime(2026, 7, 26, 20, 30, tzinfo=timezone.utc),
+            )
+            self.assertEqual(result["reset"]["distance_total_km"], 42.125)
 
     def test_invalid_or_unconfirmed_resets_are_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -92,13 +104,18 @@ class TripATests(unittest.TestCase):
             path = Path(temporary) / "trip-a.json"
             path.write_text('{"api_version": 1, "reset": {"reset_at": "2026-07-26T10:00:00+00:00", "odometer_km": 1000}}', encoding="utf-8")
             migrated = trip_a.status_payload(path)
-            self.assertEqual(migrated["api_version"], 2)
+            self.assertEqual(migrated["api_version"], 3)
             self.assertEqual(migrated["settings"]["auto_reset_hours"], 0)
             trip_a.update_settings({"auto_reset_hours": 2}, path)
             trip_a.observe_vehicle({"odometer_km": 1000}, path, now=datetime(2026, 7, 26, 10, 5, tzinfo=timezone.utc))
-            result = trip_a.observe_vehicle({"odometer_km": 1000.2}, path, now=datetime(2026, 7, 26, 12, 10, tzinfo=timezone.utc))
+            result = trip_a.observe_vehicle(
+                {"odometer_km": 1000.2, "distance_total_km": 12.75},
+                path,
+                now=datetime(2026, 7, 26, 12, 10, tzinfo=timezone.utc),
+            )
             self.assertTrue(result["auto_reset"])
             self.assertEqual(result["reset"]["odometer_km"], 1000.2)
+            self.assertEqual(result["reset"]["distance_total_km"], 12.75)
 
     def test_auto_reset_is_conservative_when_odometer_advanced_during_gap(self):
         with tempfile.TemporaryDirectory() as temporary:

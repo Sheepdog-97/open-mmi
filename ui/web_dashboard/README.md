@@ -75,7 +75,8 @@ Static modules load before `app.js` and have explicit state ownership:
   preview/review, confirmed Apply, coordinator polling, restoration feedback;
 - `runtime-diagnostics.js` — Diagnostics-only system polling and derived state;
 - `service-reminder.js` — inspection interval settings, live due-state evaluation, MIB-style detail notification and persistent acknowledgement;
-- `trip-a.js` — host-backed Trip A, unit-aware display and conservative parked-time automatic reset;
+- `trip-distance.js` — shared speed-integrated fractional distance with periodic private checkpoints;
+- `trip-a.js` — host-backed Trip A, one-decimal unit-aware display and conservative parked-time automatic reset;
 - `trip-b.js` — independent host-backed long-term Trip B counter and manual reset;
 - `trip-switcher.js` — one-card Trip A/B selector with a persisted dashboard choice;
 - `app.js` — drill-down Settings tree, diagnostics rendering, advanced tell-tales, and
@@ -150,21 +151,29 @@ due when either the distance or date deadline is reached. Due-soon and due alert
 
 ## Trip A routes
 
-Trip A is independent of the instrument-cluster trip counter and uses the
-confirmed decoded odometer:
+Trip A is independent of the instrument-cluster trip counter. New resets use a
+shared high-resolution distance accumulator derived from decoded road speed,
+while the confirmed decoded odometer remains the fallback and recovery anchor:
 
 ```text
 GET  /api/system/trip-a
 POST /api/system/trip-a/reset
 POST /api/system/trip-a/settings
 POST /api/system/trip-a/observe
+GET  /api/system/trip-distance
+POST /api/system/trip-distance/observe
 ```
 
-Reset requires explicit confirmation and the current `vehicle.odometer_km`. The
-reset timestamp and odometer are written atomically to
-`~/.config/open-mmi/trip-a.json` with mode `0600`. The dashboard subtracts that
-saved odometer from the live value and follows the existing miles/kilometres
-preference. Optional automatic reset records a low-frequency vehicle-present heartbeat and resets only after the configured parked interval when the odometer has not materially advanced during the inactive gap.
+Reset requires explicit confirmation and the current `vehicle.odometer_km`. When
+the shared accumulator is available, its total is stored with the reset. The
+reset timestamp, odometer and optional high-resolution total are written
+atomically to `~/.config/open-mmi/trip-a.json` with mode `0600`. Fractional
+distance is checkpointed to `~/.config/open-mmi/trip-distance.json` every 30
+seconds and displayed to one decimal place. Existing reset files without an
+accumulator total continue to use odometer subtraction until the next reset.
+Optional automatic reset records a low-frequency vehicle-present heartbeat and
+resets only after the configured parked interval when the odometer has not
+materially advanced during the inactive gap.
 
 ## Trip B routes
 
@@ -175,7 +184,7 @@ GET  /api/system/trip-b
 POST /api/system/trip-b/reset
 ```
 
-Its reset is stored privately in `~/.config/open-mmi/trip-b.json`.
+Its reset is stored privately in `~/.config/open-mmi/trip-b.json`. New resets also capture the shared high-resolution distance total; older files retain the odometer-based fallback until reset.
 
 ## Update routes
 
