@@ -13,8 +13,14 @@ DASHBOARD_CONNECTION = STATIC / "dashboard-connection.js"
 FRONTEND_VERSION = STATIC / "frontend-version.js"
 PREFERENCES = STATIC / "preferences.js"
 SYSTEM_SETTINGS = STATIC / "system-settings.js"
+SYSTEM_SETTINGS_STYLES = STATIC / "styles-system-settings.css"
 VEHICLE_SETUP_SETTINGS = STATIC / "vehicle-setup-settings.js"
 RUNTIME_DIAGNOSTICS = STATIC / "runtime-diagnostics.js"
+SERVICE_REMINDER = STATIC / "service-reminder.js"
+TRIP_DISTANCE = STATIC / "trip-distance.js"
+TRIP_A = STATIC / "trip-a.js"
+TRIP_B = STATIC / "trip-b.js"
+TRIP_SWITCHER = STATIC / "trip-switcher.js"
 STATUS = STATIC / "status.js"
 NAVIGATION = STATIC / "navigation.js"
 OVERLAYS = STATIC / "overlays.js"
@@ -37,6 +43,11 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         system_settings_index = html.index('<script src="/system-settings.js"></script>')
         vehicle_setup_settings_index = html.index('<script src="/vehicle-setup-settings.js"></script>')
         runtime_diagnostics_index = html.index('<script src="/runtime-diagnostics.js"></script>')
+        service_reminder_index = html.index('<script src="/service-reminder.js"></script>')
+        trip_distance_index = html.index('<script src="/trip-distance.js"></script>')
+        trip_a_index = html.index('<script src="/trip-a.js"></script>')
+        trip_b_index = html.index('<script src="/trip-b.js"></script>')
+        trip_switcher_index = html.index('<script src="/trip-switcher.js"></script>')
         status_index = html.index('<script src="/status.js"></script>')
         navigation_index = html.index('<script src="/navigation.js"></script>')
         overlays_index = html.index('<script src="/overlays.js"></script>')
@@ -54,7 +65,12 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertLess(preferences_index, system_settings_index)
         self.assertLess(system_settings_index, vehicle_setup_settings_index)
         self.assertLess(vehicle_setup_settings_index, runtime_diagnostics_index)
-        self.assertLess(runtime_diagnostics_index, status_index)
+        self.assertLess(runtime_diagnostics_index, service_reminder_index)
+        self.assertLess(service_reminder_index, trip_distance_index)
+        self.assertLess(trip_distance_index, trip_a_index)
+        self.assertLess(trip_a_index, trip_b_index)
+        self.assertLess(trip_b_index, trip_switcher_index)
+        self.assertLess(trip_switcher_index, status_index)
         self.assertLess(status_index, navigation_index)
         self.assertLess(navigation_index, overlays_index)
         self.assertLess(overlays_index, vehicle_index)
@@ -75,6 +91,11 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertIn("window.openMmiSystemSettings", source)
         self.assertIn("window.openMmiVehicleSetupSettings", source)
         self.assertIn("window.openMmiRuntimeDiagnostics", source)
+        self.assertIn("window.openMmiServiceReminder", source)
+        self.assertIn("window.openMmiTripDistance", source)
+        self.assertIn("window.openMmiTripA", source)
+        self.assertIn("window.openMmiTripB", source)
+        self.assertIn("window.openMmiTripSwitcher", source)
         self.assertIn("window.openMmiNavigation", source)
         self.assertIn("window.openMmiOverlays", source)
         self.assertIn("window.openMmiVehicle", source)
@@ -127,6 +148,10 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
             (system_settings, "openMmiSystemSettings"),
             (vehicle_setup_settings, "openMmiVehicleSetupSettings"),
             (runtime_diagnostics, "openMmiRuntimeDiagnostics"),
+            (SERVICE_REMINDER.read_text(encoding="utf-8"), "openMmiServiceReminder"),
+            (TRIP_A.read_text(encoding="utf-8"), "openMmiTripA"),
+            (TRIP_B.read_text(encoding="utf-8"), "openMmiTripB"),
+            (TRIP_SWITCHER.read_text(encoding="utf-8"), "openMmiTripSwitcher"),
             (status, "openMmiStatus"),
             (navigation, "openMmiNavigation"),
             (overlays, "openMmiOverlays"),
@@ -145,6 +170,10 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
                 "openMmiFrontendVersion",
                 "openMmiVehicleSetupSettings",
                 "openMmiRuntimeDiagnostics",
+                "openMmiServiceReminder",
+                "openMmiTripA",
+                "openMmiTripB",
+                "openMmiTripSwitcher",
                 "openMmiMediaShell",
                 "openMmiJellyfinReconnect",
                 "openMmiJellyfinMedia",
@@ -228,6 +257,85 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertIn('data-openmmi-vehicle-setup-apply="true"', source)
         self.assertIn('data-openmmi-settings-section="vehicle-setup"', app)
 
+    def test_settings_sidebar_uses_a_bounded_drill_down_tree(self):
+        app = APP.read_text(encoding="utf-8")
+        styles = (ROOT / "ui/web_dashboard/static/styles-shell.css").read_text(encoding="utf-8")
+        self.assertIn('aria-label="Settings tree" role="tree"', app)
+        self.assertIn('data-openmmi-settings-group="general"', app)
+        self.assertIn('data-openmmi-settings-group="vehicle"', app)
+        self.assertIn('data-openmmi-settings-group="system"', app)
+        self.assertIn('data-openmmi-settings-group="advanced"', app)
+        self.assertIn('data-openmmi-settings-parent="vehicle" data-openmmi-settings-section="trip"', app)
+        self.assertIn('Back to settings categories from ${label}', app)
+        self.assertIn('.openmmi-settings-tree.is-drilled > .openmmi-settings-tree-group:not(.is-expanded)', styles)
+        self.assertIn('.openmmi-settings-sidebar-card p {\n    display: none;', styles)
+
+    def test_telltale_test_is_press_and_hold_only(self):
+        app = APP.read_text(encoding="utf-8")
+        self.assertIn('data-openmmi-telltale-test-hold="true"', app)
+        self.assertIn('button.textContent = active ? "Testing…" : "Test";', app)
+        self.assertIn('document.addEventListener("pointerdown"', app)
+        self.assertIn('["pointerup", "pointercancel", "lostpointercapture"]', app)
+        self.assertIn('document.addEventListener("keyup"', app)
+        self.assertIn('window.addEventListener("blur", end);', app)
+        self.assertIn('if (document.hidden) end();', app)
+        self.assertIn('["telltaleTest", "tellTaleTest", "telltaleTestMode"]', app)
+        self.assertNotIn('row("Tell-tale test", "Frontend-only icon check; no backend or CAN state changes.", pill("off", true) + pill("on"))', app)
+
+    def test_service_reminder_preserves_editing_state_and_uses_settings_controls(self):
+        source = SERVICE_REMINDER.read_text(encoding="utf-8")
+        update_start = source.index("      update(payload = {}) {")
+        update_end = source.index("      refresh,", update_start)
+        update_block = source[update_start:update_end]
+        self.assertIn("renderIndicator();", update_block)
+        self.assertIn("updatePanelReadouts();", update_block)
+        self.assertNotIn("render();", update_block)
+        self.assertIn('class="openmmi-setting-pill is-selected" data-openmmi-service-save', source)
+        self.assertIn('class="openmmi-setting-pill" data-openmmi-service-reset', source)
+        self.assertIn('event.stopImmediatePropagation?.();', source)
+        styles = SYSTEM_SETTINGS_STYLES.read_text(encoding="utf-8")
+        self.assertIn('.openmmi-service-form > .openmmi-service-toggle', styles)
+        self.assertIn('justify-content: flex-start;', styles)
+        self.assertIn('width: fit-content;', styles)
+        self.assertIn('.openmmi-service-toggle input[type="checkbox"]', styles)
+        self.assertIn('width: 1rem;', styles)
+        self.assertIn('margin: 0;', styles)
+        self.assertIn('padding: 0;', styles)
+
+
+    def test_trip_a_uses_host_reset_and_live_odometer(self):
+        source = TRIP_A.read_text(encoding="utf-8")
+        app = APP.read_text(encoding="utf-8")
+        html = INDEX.read_text(encoding="utf-8")
+        trip_distance = TRIP_DISTANCE.read_text(encoding="utf-8")
+        self.assertIn('const ENDPOINT = "/api/system/trip-distance";', trip_distance)
+        self.assertIn('const OBSERVE_ENDPOINT = "/api/system/trip-distance/observe";', trip_distance)
+        self.assertIn('distanceDeltaKm', trip_distance)
+        self.assertIn('const ENDPOINT = "/api/system/trip-a";', source)
+        self.assertIn('const RESET_ENDPOINT = "/api/system/trip-a/reset";', source)
+        self.assertIn('const SETTINGS_ENDPOINT = "/api/system/trip-a/settings";', source)
+        self.assertIn('const OBSERVE_ENDPOINT = "/api/system/trip-a/observe";', source)
+        self.assertIn('payload?.state?.vehicle?.odometer_km', source)
+        self.assertIn('distance_total_km', source)
+        self.assertIn('formatTripDistance', source)
+        self.assertIn('data-openmmi-trip-a-reset', source)
+        self.assertIn('openmmi-config-actions openmmi-service-actions', source)
+        self.assertIn('event.stopImmediatePropagation?.();', source)
+        self.assertIn('data-openmmi-settings-section="trip"', app)
+        self.assertIn('data-openmmi-trip-a-panel="true"', app)
+        self.assertEqual(html.count('data-openmmi-trip-a>'), 2)
+        trip_b = TRIP_B.read_text(encoding="utf-8")
+        self.assertIn('const ENDPOINT = "/api/system/trip-b";', trip_b)
+        self.assertIn('data-openmmi-trip-b-reset', trip_b)
+        self.assertIn('data-openmmi-trip-b-panel="true"', app)
+        self.assertEqual(html.count('data-openmmi-trip-b>'), 2)
+        switcher = TRIP_SWITCHER.read_text(encoding="utf-8")
+        self.assertIn('const STORAGE_KEY = "openmmi.trip.display.v1";', switcher)
+        self.assertIn('data-openmmi-trip-next', html)
+        self.assertEqual(html.count('data-openmmi-trip-card'), 2)
+        self.assertEqual(html.count('data-openmmi-trip-next'), 2)
+        self.assertNotIn('<div class="label">Trip B</div>', html)
+
     def test_application_does_not_override_module_owned_control_state(self):
         source = APP.read_text(encoding="utf-8")
         self.assertNotIn(
@@ -292,6 +400,8 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertIn("function reverseSelected(payload)", source)
         self.assertIn("function reduceDoorOverlay(state, openDoors)", source)
         self.assertIn("function reduceReverseOverlay(state, active)", source)
+        self.assertIn("function vehiclePageActive(documentRef)", source)
+        self.assertIn('windowRef.addEventListener("openmmi:pagechange", pageChangeHandler)', source)
         self.assertIn('overlay.id = "openMmiVehicleOverlay"', source)
         self.assertIn('overlay.id = "openMmiReverseOverlay"', source)
         self.assertNotIn("function collectOpenDoors(payload)", app)
@@ -303,12 +413,14 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         app = APP.read_text(encoding="utf-8")
         self.assertIn("function buildViewModel(payload = {}, settings = DEFAULT_SETTINGS)", source)
         self.assertIn("function createRenderer(options = {})", source)
-        self.assertIn("climate.recirculation_active ?? climate.front_demist_air_request", source)
+        self.assertIn("recirculation: climate.recirculation_active", source)
         self.assertIn("function updateTach(rpm)", source)
         self.assertIn("function updateCoolantGauge(payload)", source)
         self.assertNotIn("function updateTach(rpm)", app)
         self.assertNotIn("function updateDoor(name, value)", app)
         self.assertNotIn("function openMmiFormatTempFromC", app)
+        self.assertNotIn('{ key: "hazard", label: "Hazard warning"', app)
+        self.assertNotIn('setSlot(strip, "hazard"', app)
 
     def test_media_modules_own_all_frontend_controllers(self):
         app = APP.read_text(encoding="utf-8")

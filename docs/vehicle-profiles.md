@@ -370,10 +370,10 @@ Scalar status rules may define temporary aliases while a decoded field is being 
   "id": "0x3E3",
   "byte": 4,
   "type": "bool",
-  "path": "climate.recirculation_active",
-  "aliases": ["climate.front_demist_air_request"],
-  "raw_path": "climate.recirculation_raw",
-  "raw_aliases": ["climate.front_demist_air_request_raw"],
+  "path": "example.canonical_status",
+  "aliases": ["example.legacy_status"],
+  "raw_path": "example.canonical_status_raw",
+  "raw_aliases": ["example.legacy_status_raw"],
   "mask": "0x80",
   "true": "0x80",
   "false": "0x00"
@@ -384,6 +384,5 @@ Scalar status rules may define temporary aliases while a decoded field is being 
 same value to the canonical and alias paths. Use aliases only for planned schema migrations;
 new profile rules should otherwise have one canonical path.
 
-The Seat 1P `0x3E3` bit previously named `front_demist_air_request` is now identified as the
-HVAC recirculation state. `climate.recirculation_active` is the canonical field. The former
-field remains as a temporary alpha compatibility alias for existing UI/status consumers.
+The Seat 1P `0x3E3` bit is the HVAC recirculation state and publishes only the canonical
+`climate.recirculation_active` and `climate.recirculation_raw` fields.

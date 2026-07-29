@@ -2,7 +2,7 @@
 
 ## Status schema
 
-Use `climate.recirculation_active` and `climate.recirculation_raw` for new consumers. The former `climate.front_demist_air_request` names remain temporary aliases during the alpha migration window and carry identical values.
+The temporary climate compatibility aliases have been removed. Consumers must use `climate.recirculation_active` and `climate.recirculation_raw`.
 
 ## Dashboard backend imports
 

@@ -188,6 +188,50 @@ async function loadDashboard(page, options = {}) {
     },
   };
 
+  const serviceReminderPayload = options.serviceReminderPayload || {
+    ok: true,
+    api_version: 2,
+    configured: false,
+    path: "/home/test/.config/open-mmi/service-reminder.json",
+    settings: {
+      enabled: true,
+      distance_interval_km: 16093.44,
+      time_interval_months: 12,
+      warning_distance_km: 1609.344,
+      warning_days: 30,
+    },
+    reset: { reset_date: null, odometer_km: null },
+    next_due: { date: null, odometer_km: null },
+    acknowledgement: { acknowledged_at: null, level: null, reset_date: null, reset_odometer_km: null, due_date: null, due_odometer_km: null },
+  };
+
+  const tripDistancePayload = options.tripDistancePayload || {
+    ok: true,
+    api_version: 1,
+    path: "/home/test/.config/open-mmi/trip-distance.json",
+    total_km: 1000,
+    updated_at: "2026-07-27T10:00:00+00:00",
+    odometer_km: 12345,
+  };
+
+  const tripAPayload = options.tripAPayload || {
+    ok: true,
+    api_version: 3,
+    configured: false,
+    path: "/home/test/.config/open-mmi/trip-a.json",
+    settings: { auto_reset_hours: 0 },
+    reset: { reset_at: null, odometer_km: null, distance_total_km: null },
+    activity: { last_active_at: null, odometer_km: null },
+  };
+
+  const tripBPayload = options.tripBPayload || {
+    ok: true,
+    api_version: 2,
+    configured: false,
+    path: "/home/test/.config/open-mmi/trip-b.json",
+    reset: { reset_at: null, odometer_km: null, distance_total_km: null },
+  };
+
   const vehicleSetupPayload = options.vehicleSetupPayload || {
     api_version: 1,
     read_only: true,
@@ -401,7 +445,7 @@ async function loadDashboard(page, options = {}) {
   };
 
   await page.setContent(ASSETS.documentHtml, { waitUntil: "domcontentloaded" });
-  await page.evaluate(({ initialPayload, initialStorage, initialBluetoothPayload, initialSystemPayload, initialVehicleSetupPayload, initialVehicleSetupPreviewPayload, initialVehicleSetupCoordinatorPayload, initialVehicleSetupApplyPayload, initialUpdateStatusPayload, initialUpdateCheckPayload, initialUpdateReadinessPayload, initialUpdateCoordinatorPayload, initialVersionPayload, initialJellyfinStatusPayload, initialJellyfinSearchPayload, initialRuntimeDiagnosticsPayload, runtimeDiagnosticsIntervalMs, dashboardRetryDelaysMs }) => {
+  await page.evaluate(({ initialPayload, initialStorage, initialBluetoothPayload, initialSystemPayload, initialServiceReminderPayload, initialTripDistancePayload, initialTripAPayload, initialTripBPayload, initialVehicleSetupPayload, initialVehicleSetupPreviewPayload, initialVehicleSetupCoordinatorPayload, initialVehicleSetupApplyPayload, initialUpdateStatusPayload, initialUpdateCheckPayload, initialUpdateReadinessPayload, initialUpdateCoordinatorPayload, initialVersionPayload, initialJellyfinStatusPayload, initialJellyfinSearchPayload, initialRuntimeDiagnosticsPayload, runtimeDiagnosticsIntervalMs, dashboardRetryDelaysMs }) => {
     const values = Object.assign({}, initialStorage);
     const localStorageMock = {
       get length() { return Object.keys(values).length; },
@@ -416,6 +460,10 @@ async function loadDashboard(page, options = {}) {
     window.__openMmiStatusFixture = initialPayload;
     window.__openMmiBluetoothFixture = initialBluetoothPayload;
     window.__openMmiSystemFixture = initialSystemPayload;
+    window.__openMmiServiceReminderFixture = initialServiceReminderPayload;
+    window.__openMmiTripDistanceFixture = initialTripDistancePayload;
+    window.__openMmiTripAFixture = initialTripAPayload;
+    window.__openMmiTripBFixture = initialTripBPayload;
     window.__openMmiVehicleSetupFixture = initialVehicleSetupPayload;
     window.__openMmiVehicleSetupPreviewFixture = initialVehicleSetupPreviewPayload;
     window.__openMmiVehicleSetupCoordinatorFixture = initialVehicleSetupCoordinatorPayload;
@@ -697,6 +745,76 @@ async function loadDashboard(page, options = {}) {
         };
         return json(window.__openMmiUpdateCoordinatorFixture);
       }
+      if (url.includes("/api/system/service-reminder/settings")) {
+        const body = JSON.parse(init.body || "{}");
+        window.__openMmiServiceReminderFixture = {
+          ...window.__openMmiServiceReminderFixture,
+          settings: { ...window.__openMmiServiceReminderFixture.settings, ...body },
+        };
+        return json(window.__openMmiServiceReminderFixture);
+      }
+      if (url.includes("/api/system/service-reminder/acknowledge")) {
+        const body = JSON.parse(init.body || "{}");
+        const fixture = window.__openMmiServiceReminderFixture;
+        window.__openMmiServiceReminderFixture = {
+          ...fixture,
+          acknowledgement: {
+            acknowledged_at: "2026-07-26T20:30:00+00:00", level: body.level,
+            reset_date: fixture.reset.reset_date, reset_odometer_km: fixture.reset.odometer_km,
+            due_date: fixture.next_due.date, due_odometer_km: fixture.next_due.odometer_km,
+          },
+        };
+        return json(window.__openMmiServiceReminderFixture);
+      }
+      if (url.includes("/api/system/service-reminder/reset")) {
+        const body = JSON.parse(init.body || "{}");
+        const resetDate = "2026-07-26";
+        const settings = window.__openMmiServiceReminderFixture.settings;
+        window.__openMmiServiceReminderFixture = {
+          ...window.__openMmiServiceReminderFixture,
+          configured: true,
+          reset: { reset_date: resetDate, odometer_km: body.odometer_km },
+          next_due: { date: "2027-07-26", odometer_km: body.odometer_km + settings.distance_interval_km },
+        };
+        return json(window.__openMmiServiceReminderFixture);
+      }
+      if (url.includes("/api/system/service-reminder")) return json(window.__openMmiServiceReminderFixture);
+      if (url.includes("/api/system/trip-distance/observe")) {
+        const body = JSON.parse(init.body || "{}");
+        window.__openMmiTripDistanceFixture = {
+          ...window.__openMmiTripDistanceFixture,
+          total_km: window.__openMmiTripDistanceFixture.total_km + body.distance_delta_km,
+          odometer_km: body.odometer_km,
+          updated_at: "2026-07-27T10:00:30+00:00",
+        };
+        return json(window.__openMmiTripDistanceFixture);
+      }
+      if (url.includes("/api/system/trip-distance")) return json(window.__openMmiTripDistanceFixture);
+      if (url.includes("/api/system/trip-a/settings")) {
+        const body = JSON.parse(init.body || "{}");
+        window.__openMmiTripAFixture = { ...window.__openMmiTripAFixture, settings: body };
+        return json(window.__openMmiTripAFixture);
+      }
+      if (url.includes("/api/system/trip-a/observe")) return json({ ...window.__openMmiTripAFixture, auto_reset: false });
+      if (url.includes("/api/system/trip-a/reset")) {
+        const body = JSON.parse(init.body || "{}");
+        window.__openMmiTripAFixture = {
+          ...window.__openMmiTripAFixture,
+          configured: true,
+          reset: { reset_at: "2026-07-26T20:30:00+00:00", odometer_km: body.odometer_km, distance_total_km: body.distance_total_km ?? null },
+        };
+        return json(window.__openMmiTripAFixture);
+      }
+      if (url.includes("/api/system/trip-a")) return json(window.__openMmiTripAFixture);
+      if (url.includes("/api/system/trip-b/reset")) {
+        const body = JSON.parse(init.body || "{}");
+        window.__openMmiTripBFixture = {
+          ...window.__openMmiTripBFixture, configured: true,
+          reset: { reset_at: "2026-07-26T20:30:00+00:00", odometer_km: body.odometer_km, distance_total_km: body.distance_total_km ?? null },
+        };
+        return json(window.__openMmiTripBFixture);
+      }
+      if (url.includes("/api/system/trip-b")) return json(window.__openMmiTripBFixture);
       if (url.includes("/api/system/settings")) return json(window.__openMmiSystemFixture);
       if (url.includes("/api/system/launcher")) {
         const body = JSON.parse(init.body || "{}");
@@ -756,6 +874,10 @@ async function loadDashboard(page, options = {}) {
     initialStorage: storage,
     initialBluetoothPayload: bluetoothPayload,
     initialSystemPayload: systemPayload,
+    initialServiceReminderPayload: serviceReminderPayload,
+    initialTripDistancePayload: tripDistancePayload,
+    initialTripAPayload: tripAPayload,
+    initialTripBPayload: tripBPayload,
     initialVehicleSetupPayload: vehicleSetupPayload,
     initialVehicleSetupPreviewPayload: vehicleSetupPreviewPayload,
     initialVehicleSetupCoordinatorPayload: vehicleSetupCoordinatorPayload,
@@ -887,6 +1009,23 @@ async function openSettings(page) {
   await expect(page.locator("#pageTitle")).toHaveText("Settings");
 }
 
+async function openSettingsSection(page, section) {
+  const item = page.locator(`[data-openmmi-settings-section="${section}"]`);
+  if (!(await item.isVisible())) {
+    const parent = await item.getAttribute("data-openmmi-settings-parent");
+    if (parent) {
+      const branch = page.locator(`[data-openmmi-settings-group="${parent}"] [data-openmmi-settings-group-toggle]`);
+      if (!(await branch.isVisible())) {
+        const currentBranch = page.locator('[data-openmmi-settings-group-toggle][aria-expanded="true"]');
+        if (await currentBranch.count()) await currentBranch.first().click();
+      }
+      if (await branch.getAttribute("aria-expanded") !== "true") await branch.click();
+    }
+  }
+  await item.click();
+  await expect(item).toHaveClass(/active/);
+}
+
 async function openMedia(page) {
   await openHome(page);
   await page.locator('[data-openmmi-page="0"]').click();
@@ -940,11 +1079,42 @@ test("loads, renders status and navigates with buttons and keyboard", async ({ p
 });
 
 
+test("fuel remaining follows the decoded low-fuel warning state", async ({ page }) => {
+  const failures = captureRuntimeFailures(page);
+  const dashboard = await loadDashboard(page, {
+    payload: basePayload({ state: { fuel: { low_level_warning: false } } }),
+  });
+
+  await openHome(page);
+  await page.locator('[data-openmmi-page="2"]').click();
+  await expect(page.locator("#pageDrive")).toHaveClass(/active/);
+
+  const fuelValue = page.locator('#pageDrive [data-field="fuel_l"]');
+  const fuelUnit = page.locator('#pageDrive [data-field="fuel_l"] + small');
+  const warningColour = "rgb(255, 214, 10)";
+
+  await expect(page.locator("html")).not.toHaveClass(/openmmi-fuel-low-warning/);
+  expect(await fuelValue.evaluate((node) => getComputedStyle(node).color)).not.toBe(warningColour);
+  expect(await fuelUnit.evaluate((node) => getComputedStyle(node).color)).not.toBe(warningColour);
+
+  await dashboard.setPayload(basePayload({ state: { fuel: { low_level_warning: true } } }));
+  await expect(page.locator("html")).toHaveClass(/openmmi-fuel-low-warning/);
+  await expect(fuelValue).toHaveCSS("color", warningColour);
+  await expect(fuelUnit).toHaveCSS("color", warningColour);
+
+  await dashboard.setPayload(basePayload({ state: { fuel: { low_level_warning: false } } }));
+  await expect(page.locator("html")).not.toHaveClass(/openmmi-fuel-low-warning/);
+  await expect.poll(() => fuelValue.evaluate((node) => getComputedStyle(node).color)).not.toBe(warningColour);
+  await expect.poll(() => fuelUnit.evaluate((node) => getComputedStyle(node).color)).not.toBe(warningColour);
+
+  await expectNoRuntimeFailures(failures);
+});
+
 test("diagnostics renders canonical profile values and all decoded paths", async ({ page }) => {
   const failures = captureRuntimeFailures(page);
   await loadDashboard(page);
   await openSettings(page);
-  await page.locator('[data-openmmi-settings-section="diagnostics"]').click();
+  await openSettingsSection(page, "diagnostics");
 
   const metricValue = (label) => page.locator(".openmmi-settings-metric").filter({ has: page.locator("span", { hasText: label }) }).first().locator("strong");
   await expect(metricValue("Outside display")).toHaveText("12.5 °C");
@@ -962,7 +1132,7 @@ test("diagnostics updates values in place without flashing or rebuilding fields"
   const failures = captureRuntimeFailures(page);
   const dashboard = await loadDashboard(page);
   await openSettings(page);
-  await page.locator('[data-openmmi-settings-section="diagnostics"]').click();
+  await openSettingsSection(page, "diagnostics");
 
   const voltage = page.locator('[data-openmmi-diagnostic-key="electrical.voltage"]');
   await expect(voltage).toHaveText("13.9 V");
@@ -991,7 +1161,7 @@ test("thermal and power diagnostics poll only while visible and identify the Sur
   await openSettings(page);
   expect(await dashboard.runtimeDiagnosticsRequests()).toBe(0);
 
-  await page.locator('[data-openmmi-settings-section="diagnostics"]').click();
+  await openSettingsSection(page, "diagnostics");
   const runtimePanel = page.locator("#openMmiRuntimeDiagnostics");
   await expect(runtimePanel).toBeVisible();
   await expect(runtimePanel.locator('[data-openmmi-runtime-key="cpu.clock"]')).toHaveText("400 MHz average");
@@ -1004,13 +1174,13 @@ test("thermal and power diagnostics poll only while visible and identify the Sur
   const activeCount = await dashboard.runtimeDiagnosticsRequests();
   expect(activeCount).toBeGreaterThanOrEqual(2);
 
-  await page.locator('[data-openmmi-settings-section="system"]').click();
+  await openSettingsSection(page, "system");
   await page.waitForTimeout(80);
   const stoppedCount = await dashboard.runtimeDiagnosticsRequests();
   await page.waitForTimeout(180);
   expect(await dashboard.runtimeDiagnosticsRequests()).toBe(stoppedCount);
 
-  await page.locator('[data-openmmi-settings-section="diagnostics"]').click();
+  await openSettingsSection(page, "diagnostics");
   await expect.poll(() => dashboard.runtimeDiagnosticsRequests()).toBeGreaterThan(stoppedCount);
   await expectNoRuntimeFailures(failures);
 });
@@ -1029,6 +1199,15 @@ test("door and reverse overlays dismiss and reactivate on lifecycle changes", as
 
   await dashboard.setPayload(basePayload({ state: { doors: { front_left: true, rear_left: true, any_open: true } } }));
   await expect(page.locator("#openMmiVehicleOverlay")).toBeVisible();
+
+  await page.getByRole("button", { name: "Vehicle" }).click();
+  await expect(page.locator("#pageVehicle")).toHaveClass(/active/);
+  await expect(page.locator("#openMmiVehicleOverlay")).toBeHidden();
+  await dashboard.setPayload(basePayload({ state: { doors: { front_left: true, rear_left: true, any_open: true } } }));
+  await expect(page.locator("#openMmiVehicleOverlay")).toBeHidden();
+
+  await page.keyboard.press("Home");
+  await expect(page.locator("#openMmiVehicleOverlay")).toBeVisible();
   await page.locator("#openMmiDoorOverlayDismiss").click();
 
   await dashboard.setPayload(basePayload({ state: { vehicle: { reverse: true } } }));
@@ -1046,6 +1225,203 @@ test("door and reverse overlays dismiss and reactivate on lifecycle changes", as
   await expectNoRuntimeFailures(failures);
 });
 
+
+test("hazards use the indicator tell-tales without a separate warning triangle", async ({ page }) => {
+  const failures = captureRuntimeFailures(page);
+  const dashboard = await loadDashboard(page);
+
+  await dashboard.setPayload(basePayload({ state: { lighting: { hazards: true, left_indicator: false, right_indicator: false } } }));
+  const footer = page.locator("#openMmiFooterTelltales");
+  await expect(footer.locator('[data-openmmi-telltale-slot="left"]')).toHaveClass(/is-active/);
+  await expect(footer.locator('[data-openmmi-telltale-slot="right"]')).toHaveClass(/is-active/);
+  await expect(footer.locator('[data-openmmi-telltale-slot="hazard"]')).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Vehicle" }).click();
+  await expect(page.locator("#pageVehicle")).toHaveClass(/active/);
+  await expect(page.locator('#pageVehicle [data-bool="hazards"]')).toBeVisible();
+
+  await expectNoRuntimeFailures(failures);
+});
+
+test("tell-tale test is active only while the Test button is held", async ({ page }) => {
+  const failures = captureRuntimeFailures(page);
+  const dashboard = await loadDashboard(page, {
+    storage: {
+      [SETTINGS_KEY]: JSON.stringify({ speedUnit: "mph", telltaleTest: "on", tellTaleTest: "on", telltaleTestMode: "on" }),
+    },
+  });
+
+  await openSettings(page);
+  await openSettingsSection(page, "display");
+
+  const button = page.locator("#openmmiSettingsPanel [data-openmmi-telltale-test-hold]");
+  const left = page.locator('#openMmiFooterTelltales [data-openmmi-telltale-slot="left"]');
+  await expect(button).toHaveAttribute("aria-pressed", "false");
+  await expect(left).toHaveClass(/is-inactive/);
+
+  await button.hover();
+  await page.mouse.down();
+  await expect(button).toHaveAttribute("aria-pressed", "true");
+  await expect(button).toHaveText("Testing…");
+  await expect(left).toHaveClass(/is-active/);
+  await expect(page.locator("#openMmiTelltaleTestBadge")).toHaveText("TEST");
+
+  await page.mouse.up();
+  await expect(button).toHaveAttribute("aria-pressed", "false");
+  await expect(button).toHaveText("Test");
+  await expect(left).toHaveClass(/is-inactive/);
+  await expect(page.locator("#openMmiTelltaleTestBadge")).toHaveCount(0);
+
+  await button.click();
+  await expect(button).toHaveAttribute("aria-pressed", "false");
+  await expect(left).toHaveClass(/is-inactive/);
+
+  const saved = JSON.parse((await dashboard.storage())[SETTINGS_KEY]);
+  expect(saved.telltaleTest).toBeUndefined();
+  expect(saved.tellTaleTest).toBeUndefined();
+  expect(saved.telltaleTestMode).toBeUndefined();
+  await expectNoRuntimeFailures(failures);
+});
+
+test("service reminder shows MIB-style due-soon state and preserves active edits", async ({ page }) => {
+  const failures = captureRuntimeFailures(page);
+  const dashboard = await loadDashboard(page, {
+    serviceReminderPayload: {
+      ok: true,
+      api_version: 2,
+      configured: true,
+      path: "/home/test/.config/open-mmi/service-reminder.json",
+      settings: {
+        enabled: true,
+        distance_interval_km: 10000,
+        time_interval_months: 12,
+        warning_distance_km: 1000,
+        warning_days: 30,
+      },
+      reset: { reset_date: "2026-01-01", odometer_km: 3000 },
+      next_due: { date: "2027-01-01", odometer_km: 13000 },
+      acknowledgement: { acknowledged_at: null, level: null, reset_date: null, reset_odometer_km: null, due_date: null, due_odometer_km: null },
+    },
+  });
+
+  const indicator = page.locator("#openMmiServiceReminderIndicator");
+  await expect(indicator).toBeVisible();
+  await expect(indicator).toContainText("407 mi or");
+  await expect(page.locator("#openMmiServiceDetailOverlay")).toBeVisible();
+  await page.getByRole("button", { name: "Acknowledge" }).click();
+  await expect(page.locator("#openMmiServiceDetailOverlay")).toBeHidden();
+  await expect(indicator).toBeVisible();
+
+  await openSettings(page);
+  await openSettingsSection(page, "service");
+  await expect(page.locator('[data-openmmi-service-reminder-panel="true"]')).toContainText("Inspection due soon");
+  const distanceInput = page.getByLabel("Distance interval");
+  await expect(distanceInput).toHaveValue("6214");
+  await expect(page.getByRole("button", { name: "Save intervals" })).toHaveClass(/openmmi-setting-pill/);
+  await expect(page.getByRole("button", { name: "Reset inspection interval" })).toHaveClass(/openmmi-setting-pill/);
+  await expect(page.getByRole("button", { name: "Reset inspection interval" })).toBeEnabled();
+
+  await distanceInput.fill("7000");
+  await dashboard.setPayload(basePayload({ state: { vehicle: { odometer_km: 12346 } } }));
+  await page.waitForTimeout(300);
+  await expect(distanceInput).toBeFocused();
+  await expect(distanceInput).toHaveValue("7000");
+  await expectNoRuntimeFailures(failures);
+});
+
+
+test("Trip A displays live distance and resets from Settings", async ({ page }) => {
+  const failures = captureRuntimeFailures(page);
+  const dashboard = await loadDashboard(page, {
+    tripAPayload: {
+      ok: true,
+      api_version: 3,
+      configured: true,
+      path: "/home/test/.config/open-mmi/trip-a.json",
+      settings: { auto_reset_hours: 0 },
+      activity: { last_active_at: null, odometer_km: null },
+      reset: { reset_at: "2026-07-26T20:30:00+00:00", odometer_km: 12000, distance_total_km: null },
+    },
+  });
+
+  await expect(page.locator("[data-openmmi-trip-a]").first()).toHaveText("214.4");
+  await expect(page.locator("[data-openmmi-trip-a-unit]").first()).toHaveText("mi");
+
+  await openSettings(page);
+  await openSettingsSection(page, "trip");
+  await expect(page.locator('[data-openmmi-trip-a-panel="true"]')).toContainText("Trip A");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Reset Trip A" }).click();
+  await expect(page.locator('[data-openmmi-trip-a-summary-detail]')).toHaveText("0.0 mi");
+  await expect(page.locator("[data-openmmi-trip-a]").first()).toHaveText("0.0");
+  const autoReset = page.getByLabel("Trip A automatic reset");
+  await autoReset.selectOption("2");
+  await page.getByRole("button", { name: "Save automatic reset" }).click();
+  await expect(autoReset).toHaveValue("2");
+  await expectNoRuntimeFailures(failures);
+});
+
+test("Trip B displays independently and resets manually", async ({ page }) => {
+  const failures = captureRuntimeFailures(page);
+  const dashboard = await loadDashboard(page, {
+    tripBPayload: {
+      ok: true, api_version: 2, configured: true,
+      path: "/home/test/.config/open-mmi/trip-b.json",
+      reset: { reset_at: "2026-07-20T12:00:00+00:00", odometer_km: 11000, distance_total_km: null },
+    },
+  });
+  await page.locator('[data-openmmi-page="2"]').click();
+  await expect(page.locator("#pageDrive")).toHaveClass(/active/);
+  const tripCard = page.locator("#pageDrive [data-openmmi-trip-card]");
+  await expect(tripCard.locator("[data-openmmi-trip-b]")).toBeHidden();
+  await expect(tripCard.locator("[data-openmmi-trip-label]")).toHaveText("Trip A");
+  await tripCard.getByRole("button", { name: "Show Trip B" }).click();
+  await expect(tripCard.locator("[data-openmmi-trip-label]")).toHaveText("Trip B");
+  await expect(tripCard.locator("[data-openmmi-trip-b]")).toBeVisible();
+  await expect(tripCard.locator("[data-openmmi-trip-b]")).toHaveText("835.7");
+  await expect(tripCard.getByRole("button", { name: "Show Trip A" })).toBeVisible();
+  await page.keyboard.press("Home");
+  await openSettings(page);
+  await openSettingsSection(page, "trip");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Reset Trip B" }).click();
+  await expect(tripCard.locator("[data-openmmi-trip-b]")).toHaveText("0.0");
+  await expectNoRuntimeFailures(failures);
+});
+
+test("settings categories use an expandable tree without overflowing the sidebar", async ({ page }) => {
+  const failures = captureRuntimeFailures(page);
+  await loadDashboard(page);
+  await openSettings(page);
+
+  const tree = page.getByRole("tree", { name: "Settings tree" });
+  const general = tree.locator('[data-openmmi-settings-group-toggle][data-openmmi-settings-group-label="General"]');
+  const vehicle = tree.locator('[data-openmmi-settings-group-toggle][data-openmmi-settings-group-label="Vehicle"]');
+  await expect(general).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator('[data-openmmi-settings-section="units"]')).toBeHidden();
+  await expect(page.locator('[data-openmmi-settings-section="service"]')).toBeHidden();
+
+  await vehicle.click();
+  await expect(vehicle).toHaveAttribute("aria-expanded", "true");
+  await expect(vehicle).toHaveAttribute("aria-label", "Back to settings categories from Vehicle");
+  await expect(general).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator('[data-openmmi-settings-section="service"]')).toBeVisible();
+  await expect(page.locator('[data-openmmi-settings-section="trip"]')).toBeVisible();
+
+  const fitsSidebar = await page.locator(".openmmi-settings-sidebar-card").evaluate((sidebar) => {
+    const visibleItems = Array.from(sidebar.querySelectorAll('[role="treeitem"]'))
+      .filter((item) => item.getClientRects().length > 0);
+    const last = visibleItems[visibleItems.length - 1]?.getBoundingClientRect();
+    const bounds = sidebar.getBoundingClientRect();
+    return Boolean(last && last.bottom <= bounds.bottom + 1);
+  });
+  expect(fitsSidebar).toBe(true);
+
+  await openSettingsSection(page, "trip");
+  await expect(page.locator('[data-openmmi-trip-a-panel="true"]')).toBeVisible();
+  await expectNoRuntimeFailures(failures);
+});
+
 test("settings persist units and display mode across page reconstruction", async ({ page, context }) => {
   const failures = captureRuntimeFailures(page);
   const dashboard = await loadDashboard(page);
@@ -1054,7 +1430,7 @@ test("settings persist units and display mode across page reconstruction", async
   const speedRow = page.locator(".openmmi-setting-row").filter({ hasText: "Speed" });
   await speedRow.getByRole("button", { name: "km/h" }).click();
 
-  await page.locator('[data-openmmi-settings-section="display"]').click();
+  await openSettingsSection(page, "display");
   const dimRow = page.locator(".openmmi-setting-row").filter({ hasText: "Dim mode" });
   await dimRow.getByRole("button", { name: "on", exact: true }).click();
 
@@ -1164,7 +1540,7 @@ test("Diagnostics remains scrollable while live values refresh", async ({ page }
   );
   const dashboard = await loadDashboard(page, { payload });
   await openSettings(page);
-  await page.locator('[data-openmmi-settings-section="diagnostics"]').click();
+  await openSettingsSection(page, "diagnostics");
 
   const scroller = page.locator("#pageSettings .openmmi-settings-panel-card");
   await expect(scroller.locator(".openmmi-settings-diagnostics-details summary")).toContainText("Decoded profile values");
@@ -1363,7 +1739,7 @@ test("shared clock persists display preferences and survives page navigation", a
 
   await page.keyboard.press("Home");
   await openSettings(page);
-  await page.locator('[data-openmmi-settings-section="display"]').click();
+  await openSettingsSection(page, "display");
 
   const formatRow = page.locator('[data-openmmi-clock-setting-row="clockFormat"]');
   const dateRow = page.locator('[data-openmmi-clock-setting-row="showDate"]');
@@ -1405,7 +1781,7 @@ test("vehicle setup copies maintained templates into the user catalogue", async 
   const dashboard = await loadDashboard(page);
   await openSettings(page);
 
-  await page.locator('[data-openmmi-settings-section="vehicle-setup"]').click();
+  await openSettingsSection(page, "vehicle-setup");
   await expect(page.locator('[data-openmmi-vehicle-setup-ready="true"]')).toBeVisible();
   await expect(page.getByTestId("vehicle-setup-copy-vehicle")).toBeEnabled();
   await expect(page.getByTestId("vehicle-setup-copy-bindings")).toBeEnabled();
@@ -1441,7 +1817,7 @@ test("vehicle setup imports JSON as a new unapplied custom draft", async ({ page
   const failures = captureRuntimeFailures(page);
   const dashboard = await loadDashboard(page);
   await openSettings(page);
-  await page.locator('[data-openmmi-settings-section="vehicle-setup"]').click();
+  await openSettingsSection(page, "vehicle-setup");
   await expect(page.locator('[data-openmmi-vehicle-setup-ready="true"]')).toBeVisible();
 
   await expect(page.getByTestId("vehicle-setup-import-vehicle")).toBeEnabled();
@@ -1471,7 +1847,7 @@ test("vehicle setup manages only inactive custom catalogue items without applyin
   const failures = captureRuntimeFailures(page);
   const dashboard = await loadDashboard(page);
   await openSettings(page);
-  await page.locator('[data-openmmi-settings-section="vehicle-setup"]').click();
+  await openSettingsSection(page, "vehicle-setup");
   await expect(page.locator('[data-openmmi-vehicle-setup-ready="true"]')).toBeVisible();
 
   await page.getByTestId("vehicle-setup-profile").selectOption("custom:my-seat");
@@ -1527,7 +1903,7 @@ test("vehicle setup edits only custom JSON and leaves it unapplied", async ({ pa
   const failures = captureRuntimeFailures(page);
   const dashboard = await loadDashboard(page);
   await openSettings(page);
-  await page.locator('[data-openmmi-settings-section="vehicle-setup"]').click();
+  await openSettingsSection(page, "vehicle-setup");
   await expect(page.locator('[data-openmmi-vehicle-setup-ready="true"]')).toBeVisible();
 
   await page.getByTestId("vehicle-setup-profile").selectOption("custom:my-seat");
@@ -1571,7 +1947,7 @@ test("vehicle setup contains long revisions and distinguishes saved from loaded 
   await loadDashboard(page, { vehicleSetupPendingRevisions: revisions });
   await openSettings(page);
 
-  await page.locator('[data-openmmi-settings-section="vehicle-setup"]').click();
+  await openSettingsSection(page, "vehicle-setup");
   await expect(page.getByTestId("vehicle-setup-status")).toContainText("Saved custom revisions await review and Apply");
   await expect(page.getByTestId("vehicle-setup-runtime-sync")).toContainText("Saved revisions await review and Apply");
   await expect(page.getByTestId("vehicle-setup-profile")).toHaveValue("custom:my-seat");
@@ -1604,7 +1980,7 @@ test("vehicle setup reviews and applies an exact confirmed draft", async ({ page
   const dashboard = await loadDashboard(page);
   await openSettings(page);
 
-  await page.locator('[data-openmmi-settings-section="vehicle-setup"]').click();
+  await openSettingsSection(page, "vehicle-setup");
   await expect(page.locator('[data-openmmi-vehicle-setup-ready="true"]')).toBeVisible();
   await expect(page.getByTestId("vehicle-setup-active-profile")).toHaveText("SEAT Leon 1P / Mk2 (PQ35) · Maintained");
   await expect(page.getByTestId("vehicle-setup-active-bindings")).toHaveText("Default · Maintained");
@@ -1671,7 +2047,7 @@ test("system settings and Jellyfin setup use the shared local configuration API"
   const dashboard = await loadDashboard(page);
   await openSettings(page);
 
-  await page.locator('[data-openmmi-settings-section="system"]').click();
+  await openSettingsSection(page, "system");
   await expect(page.locator('[data-openmmi-system-settings-panel="true"]')).toBeVisible();
   await expect(page.getByTestId("launcher-default-web")).toHaveClass(/is-selected/);
   await expect(page.getByTestId("launcher-autostart-on")).toHaveClass(/is-selected/);
@@ -1739,7 +2115,7 @@ test("system settings and Jellyfin setup use the shared local configuration API"
   await page.getByTestId("launcher-autostart-off").click();
   await expect(page.getByTestId("launcher-autostart-off")).toHaveClass(/is-selected/);
 
-  await page.locator('[data-openmmi-settings-section="media"]').click();
+  await openSettingsSection(page, "media");
   await expect(page.locator('[data-openmmi-jellyfin-settings="true"]')).toBeVisible();
   const username = page.getByTestId("jellyfin-username");
   await username.click();

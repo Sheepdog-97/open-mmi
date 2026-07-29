@@ -84,6 +84,16 @@
 
       <div class="panel-stack">
         <article class="tile"><div><div class="label">Odometer</div><div class="value"><span data-field="odo_mi">--</span><small>mi</small></div></div></article>
+        <article class="tile compact openmmi-trip-card" data-openmmi-trip-card>
+          <div class="openmmi-trip-card-head">
+            <div class="label" data-openmmi-trip-label>Trip A</div>
+            <button type="button" class="openmmi-trip-card-next" data-openmmi-trip-next aria-label="Show Trip B" title="Show Trip B"><span aria-hidden="true">›</span></button>
+          </div>
+          <div class="value" aria-live="polite">
+            <span data-openmmi-trip-a>--</span><small data-openmmi-trip-a-unit>mi</small>
+            <span hidden data-openmmi-trip-b>--</span><small data-openmmi-trip-b-unit hidden>mi</small>
+          </div>
+        </article>
         <article class="tile"><div class="icon openmmi-voltage-tile-icon" aria-label="Supply voltage">
           <svg viewBox="0 0 96 64" role="img" aria-hidden="true" focusable="false">
             <path d="M18 18H76c4.4 0 8 3.6 8 8v5h4c3.3 0 6 2.7 6 6v10c0 3.3-2.7 6-6 6h-4v5c0 4.4-3.6 8-8 8H18c-4.4 0-8-3.6-8-8V26c0-4.4 3.6-8 8-8Z" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"/>
@@ -172,6 +182,16 @@
 
       <div class="panel-stack">
         <article class="tile"><div><div class="label">Odometer</div><div class="value"><span data-field="odo_mi">--</span><small>mi</small></div></div></article>
+        <article class="tile compact openmmi-trip-card" data-openmmi-trip-card>
+          <div class="openmmi-trip-card-head">
+            <div class="label" data-openmmi-trip-label>Trip A</div>
+            <button type="button" class="openmmi-trip-card-next" data-openmmi-trip-next aria-label="Show Trip B" title="Show Trip B"><span aria-hidden="true">›</span></button>
+          </div>
+          <div class="value" aria-live="polite">
+            <span data-openmmi-trip-a>--</span><small data-openmmi-trip-a-unit>mi</small>
+            <span hidden data-openmmi-trip-b>--</span><small data-openmmi-trip-b-unit hidden>mi</small>
+          </div>
+        </article>
         <article class="tile"><div class="icon">⛽</div><div><div class="label">Fuel remaining</div><div class="value"><span data-field="fuel_l">--</span><small>L</small></div></div></article>
       </div>
     </section>
@@ -195,6 +215,11 @@
   <script src="/system-settings.js"></script>
   <script src="/vehicle-setup-settings.js"></script>
   <script src="/runtime-diagnostics.js"></script>
+  <script src="/service-reminder.js"></script>
+  <script src="/trip-distance.js"></script>
+  <script src="/trip-a.js"></script>
+  <script src="/trip-b.js"></script>
+  <script src="/trip-switcher.js"></script>
   <script src="/clock.js"></script>
   <script src="/status.js"></script>
   <script src="/navigation.js"></script>

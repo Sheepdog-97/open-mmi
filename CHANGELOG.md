@@ -7,6 +7,9 @@
 - Added bounded classic-CAN capture normalization, filtering, before/after byte-and-bit comparison, and experimental candidate replay export that cannot write directly into the maintained vehicle tree.
 
 ### Added
+- Host-backed Trip B as an independent long-term odometer counter with manual reset and miles/kilometres display.
+- Configurable Trip A automatic reset after a parked interval, using a conservative vehicle-present heartbeat and odometer continuity check.
+- MIB-style inspection detail notification with persistent acknowledgement tied to the exact due level and service schedule.
 - Versioned maintained vehicle-profile schema, explicit identity/maturity/qualification metadata, reviewable evidence records and a single `vehicle-setup conform` catalogue-admission command shared by contributors and CI.
 - Canonical machine-readable vehicle-action registry with stable human-readable behavior identifiers, configured-argument contracts, event-payload compatibility, availability requirements, lifecycle status and private Python implementation mappings.
 - Action search/check CLI tooling, generated action documentation, runtime resolution and maintained-binding conformance that complete the event → action → implementation boundary without restricting same-pull-request proposals.
@@ -31,10 +34,20 @@
 - Local same-origin JSON import for new custom profiles and bindings. The server validates strict UTF-8 JSON and the complete profile/bindings schema before a private no-overwrite creation, records import provenance, selects the new item only as a draft, and never applies or restarts the CAN service.
 
 ### Changed
+- Settings → Display now uses a non-persistent press-and-hold tell-tale Test button; releasing, losing focus or leaving the page always restores live vehicle state.
+- Removed the obsolete SEAT 1P climate demist compatibility aliases; recirculation now publishes only canonical status paths.
+- Door-open overlays are suppressed while the Vehicle page is visible because that page already shows the full door state.
+- Hazard activation now drives the left and right indicator tell-tales without adding a separate warning triangle.
+- Settings now uses a four-branch drill-down tree so categories and nested pages fit the 800×480 sidebar without a scrollbar.
+- Dashboard trip readouts now share one compact Trip A/B card with an arrow control and a persisted selection.
 - Maintained default bindings now use canonical action identifiers instead of Python module/function names. Existing custom legacy bindings remain supported with a migration warning.
 - Settings → Vehicle setup now distinguishes configured catalogue content, page-local draft selection and exact loaded-runtime evidence. Saved active custom revisions are labelled as awaiting review and Apply instead of appearing already loaded.
 - Technical details render compact SHA-256 fingerprints with the full exact value retained in accessible metadata, preventing long revisions from widening the 800×480 panel or the cards above it.
 - CAN summary labels now describe the selected draft bus, adapter and compatibility rather than implying those draft values are already active.
+
+### Fixed
+- Corrected Playwright Trip B rounding and made the Settings tree locator unambiguous after drilling into Vehicle.
+- Playwright Trip B coverage now opens the visible Drive card before using the A/B selector instead of waiting on a hidden duplicate.
 
 ### Security
 - Privileged rendering reopens catalogue files through descriptor-relative no-follow traversal, verifies maintained/custom ownership and non-writable modes, and rechecks the reviewed content revisions immediately before installation.
@@ -152,4 +165,3 @@
 - Isolated subscriber and persistence failures from CAN reception.
 
 ### Compatibility
-- The legacy `climate.front_demist_air_request` status field remains temporarily as an alias of `climate.recirculation_active`.

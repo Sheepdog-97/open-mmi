@@ -233,6 +233,13 @@
     };
   }
 
+  function vehiclePageActive(documentRef) {
+    const page = documentRef && typeof documentRef.querySelector === "function"
+      ? documentRef.querySelector("#pageVehicle")
+      : null;
+    return !!(page && page.classList && typeof page.classList.contains === "function" && page.classList.contains("active"));
+  }
+
   function createController(options = {}) {
     const documentRef = options.document || (root && root.document);
     const windowRef = options.window || root;
@@ -242,7 +249,11 @@
 
     const doorState = { currentSignature: "", dismissedSignature: "", visible: false };
     const reverseState = { active: false, dismissedThisReverse: false, visible: false };
+    const suppressDoorOverlay = typeof options.suppressDoorOverlay === "function"
+      ? options.suppressDoorOverlay
+      : () => vehiclePageActive(documentRef);
     let initialized = false;
+    let pageChangeHandler = null;
     const one = (selector) => documentRef.querySelector(selector);
 
     function copyState(target, next) {
@@ -373,11 +384,21 @@
       return overlay;
     }
 
+    function doorOverlaySuppressed() {
+      try { return !!suppressDoorOverlay(); }
+      catch (_) { return false; }
+    }
+
+    function syncDoorOverlayVisibility() {
+      const visible = doorState.visible && !doorOverlaySuppressed();
+      if (visible) showDoorOverlay();
+      else hideDoorOverlay();
+      return visible;
+    }
+
     function updateDoor(payload) {
       copyState(doorState, reduceDoorOverlay(doorState, collectOpenDoors(payload)));
-      if (doorState.visible) showDoorOverlay();
-      else hideDoorOverlay();
-      return doorState.visible;
+      return syncDoorOverlayVisibility();
     }
 
     function updateReverse(payload) {
@@ -400,6 +421,10 @@
       ensureReverseOverlay();
       initialized = true;
       if (windowRef) {
+        pageChangeHandler = () => syncDoorOverlayVisibility();
+        if (typeof windowRef.addEventListener === "function") {
+          windowRef.addEventListener("openmmi:pagechange", pageChangeHandler);
+        }
         windowRef.__openMmiDoorOverlayV1Loaded = true;
         windowRef.__openMmiReverseOverlayV1Loaded = true;
         windowRef.openMmiDoorOverlayState = doorState;
@@ -436,5 +461,6 @@
     reduceReverseOverlay,
     reverseSelected,
     truthyReverseValue,
+    vehiclePageActive,
   });
 });

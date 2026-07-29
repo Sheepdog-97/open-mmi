@@ -48,7 +48,7 @@ Initial settings should cover:
 
 - units, such as mph/kmh and °C/°F
 - display preferences
-- tell-tale test mode
+- press-and-hold tell-tale test
 - raw/debug visibility
 - Jellyfin status
 - reverse assist placeholder
@@ -173,7 +173,7 @@ Raw/debug visibility controls now live outside the diagnostics refresh target, s
 
 
 - Settings Display tell-tale visual test: frontend-only icon strip for safe local verification.
-- Settings Display tell-tale test uses existing footer tell-tale icons only; no backend or CAN state changes.
+- Settings Display tell-tale test is a press-and-hold control using existing footer icons only; releasing restores live state and no backend or CAN state changes are made.
 
 <!-- OPENMMI_V1_STATUS_START -->
 ## Current V1 status

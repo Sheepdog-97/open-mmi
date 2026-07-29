@@ -27,7 +27,7 @@ try:
         restart_dashboard,
         write_environment_file,
     )
-    from ui.web_dashboard import jellyfin, update_status
+    from ui.web_dashboard import jellyfin, service_reminder, trip_a, trip_b, trip_distance, update_status
 except ModuleNotFoundError as exc:  # pragma: no cover - direct script fallback
     if exc.name != "ui":
         raise
@@ -43,7 +43,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - direct script fallback
         restart_dashboard,
         write_environment_file,
     )
-    from ui.web_dashboard import jellyfin, update_status
+    from ui.web_dashboard import jellyfin, service_reminder, trip_a, trip_b, trip_distance, update_status
 
 SYSTEM_MAX_BODY_BYTES = 16 * 1024
 SYSTEM_CUSTOM_EDIT_MAX_BODY_BYTES = vehicle_setup.MAX_PROFILE_BYTES * 6 + SYSTEM_MAX_BODY_BYTES
@@ -205,6 +205,10 @@ def _handle_get(handler: Any, path: str) -> bool:
         "/api/system/update-status": update_status.status_payload,
         "/api/system/update-readiness": lambda: update_readiness.readiness_payload(update_status.status_payload()),
         "/api/system/update-coordinator": update_coordinator.client_status,
+        "/api/system/service-reminder": service_reminder.status_payload,
+        "/api/system/trip-distance": trip_distance.status_payload,
+        "/api/system/trip-a": trip_a.status_payload,
+        "/api/system/trip-b": trip_b.status_payload,
     }
     if path not in routes:
         return False
@@ -213,6 +217,8 @@ def _handle_get(handler: Any, path: str) -> bool:
         return True
     try:
         handler._send_json(routes[path]())
+    except ConfigurationError as exc:
+        handler._send_json({"ok": False, "error": str(exc)}, 400)
     except (
         update_coordinator.CoordinatorError,
         vehicle_config_coordinator.CoordinatorError,
@@ -242,6 +248,14 @@ def _handle_post(handler: Any, path: str) -> bool:
         "/api/system/update-check",
         "/api/system/update-prepare",
         "/api/system/update-install",
+        "/api/system/service-reminder/settings",
+        "/api/system/service-reminder/reset",
+        "/api/system/trip-a/reset",
+        "/api/system/trip-a/settings",
+        "/api/system/trip-a/observe",
+        "/api/system/trip-b/reset",
+        "/api/system/trip-distance/observe",
+        "/api/system/service-reminder/acknowledge",
     }:
         return False
     if not _request_allowed(handler):
@@ -272,6 +286,22 @@ def _handle_post(handler: Any, path: str) -> bool:
             result = vehicle_catalogue.import_custom_item(
                 _json_body(handler, maximum_bytes=SYSTEM_CUSTOM_EDIT_MAX_BODY_BYTES)
             )
+        elif path == "/api/system/service-reminder/settings":
+            result = service_reminder.update_settings(_json_body(handler))
+        elif path == "/api/system/service-reminder/reset":
+            result = service_reminder.reset_interval(_json_body(handler))
+        elif path == "/api/system/trip-a/reset":
+            result = trip_a.reset_trip(_json_body(handler))
+        elif path == "/api/system/trip-a/settings":
+            result = trip_a.update_settings(_json_body(handler))
+        elif path == "/api/system/trip-a/observe":
+            result = trip_a.observe_vehicle(_json_body(handler))
+        elif path == "/api/system/trip-b/reset":
+            result = trip_b.reset_trip(_json_body(handler))
+        elif path == "/api/system/trip-distance/observe":
+            result = trip_distance.observe(_json_body(handler))
+        elif path == "/api/system/service-reminder/acknowledge":
+            result = service_reminder.acknowledge(_json_body(handler))
         elif path == "/api/system/update-check":
             payload = _json_body(handler)
             if payload not in ({}, {"confirm": True}):
