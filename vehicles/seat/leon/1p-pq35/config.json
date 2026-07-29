@@ -41,12 +41,17 @@
           "kind": "research",
           "path": "vehicles/seat/leon/1p-pq35/notes/experimental_can_candidates_2026-07-04.md",
           "description": "Reverse-engineering notes for mappings that remain experimental or diagnostic."
+        },
+        {
+          "kind": "research",
+          "path": "vehicles/seat/leon/1p-pq35/notes/tpms_warning_2026-07-29.md",
+          "description": "TPMS warning capture comparison and reviewed 0x555 byte-0 bit candidate."
         }
       ]
     },
     "limitations": [
       "Only the comfort CAN bus is qualified.",
-      "Selected climate and lighting paths remain experimental or diagnostic.",
+      "Selected climate, lighting, and tyre-pressure paths remain experimental or diagnostic.",
       "Open MMI remains passive receive-only and does not transmit vehicle CAN frames."
     ]
   },
@@ -383,6 +388,16 @@
       "byte": 3,
       "type": "raw",
       "path": "climate.rear_window_heater_raw"
+    },
+    {
+      "id": "0x555",
+      "byte": 0,
+      "type": "bool",
+      "path": "tyres.pressure_monitoring_warning",
+      "mask": "0x10",
+      "true": "0x10",
+      "false": "0x00",
+      "raw_path": "tyres.pressure_monitoring_warning_raw"
     },
     {
       "id": "0x555",

@@ -399,23 +399,25 @@
       }
     },
     {
-      "name": "climate-research-bytes",
+      "name": "tyre-pressure-monitoring-warning-and-climate-research",
       "bus": "comfort",
       "frames": [
         {
           "id": "0x555",
-          "data": "00 11 00 33 44 00 00 00"
+          "data": "F0 2B 80 00 64 00 00 00"
         }
       ],
       "expect": {
         "events": [],
         "statuses": {
-          "climate.debug_555_b1_raw": 17,
-          "climate.debug_555_b1": 17.0,
-          "climate.debug_555_b3_raw": 51,
-          "climate.debug_555_b3": 51.0,
-          "climate.debug_555_b4_raw": 68,
-          "climate.debug_555_b4": 68.0
+          "tyres.pressure_monitoring_warning_raw": 240,
+          "tyres.pressure_monitoring_warning": true,
+          "climate.debug_555_b1_raw": 43,
+          "climate.debug_555_b1": 43.0,
+          "climate.debug_555_b3_raw": 0,
+          "climate.debug_555_b3": 0.0,
+          "climate.debug_555_b4_raw": 100,
+          "climate.debug_555_b4": 100.0
         }
       }
     },
