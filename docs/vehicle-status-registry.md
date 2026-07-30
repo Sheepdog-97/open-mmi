@@ -77,6 +77,8 @@ Registry: `open-mmi.vehicle-statuses` · schema version `1`
 | `steering.angle_magnitude_raw` | steering | integer · 0…32767 | diagnostic | Unsigned steering-angle magnitude before scaling. |
 | `steering.angle_raw` | steering | integer · 0…65535 | diagnostic | Uninterpreted packed steering-angle source value. |
 | `steering.direction` | steering | enum · left, center, right | stable | Coarse direction derived from steering angle. |
+| `tyres.pressure_monitoring_warning` | vehicle | boolean | experimental | Whether the tyre-pressure monitoring system is requesting its warning indicator. |
+| `tyres.pressure_monitoring_warning_raw` | vehicle | integer · 0…255 | diagnostic | Uninterpreted source byte containing the tyre-pressure monitoring warning bit. |
 | `vehicle.handbrake` | vehicle | boolean | stable | Whether the parking brake or handbrake is applied. |
 | `vehicle.handbrake_raw` | vehicle | integer · 0…255 | diagnostic | Uninterpreted source byte for the handbrake state. |
 | `vehicle.odometer_km` | vehicle | number · km · 0…∞ | stable | Decoded total vehicle distance. |
