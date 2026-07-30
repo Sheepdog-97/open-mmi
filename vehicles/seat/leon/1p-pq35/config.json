@@ -45,13 +45,13 @@
         {
           "kind": "research",
           "path": "vehicles/seat/leon/1p-pq35/notes/tpms_warning_2026-07-29.md",
-          "description": "TPMS warning capture comparison and reviewed 0x555 byte-0 bit candidate."
+          "description": "TPMS candidate rejection after transition and independent lamp-off control review."
         }
       ]
     },
     "limitations": [
       "Only the comfort CAN bus is qualified.",
-      "Selected climate, lighting, and tyre-pressure paths remain experimental or diagnostic.",
+      "Selected climate and lighting paths remain experimental or diagnostic.",
       "Open MMI remains passive receive-only and does not transmit vehicle CAN frames."
     ]
   },
@@ -204,15 +204,6 @@
       "mask": "0x80",
       "true": "0x80",
       "false": "0x00"
-    },
-    {
-      "id": "0x635",
-      "byte": 0,
-      "type": "bool",
-      "path": "lighting.lights_on",
-      "true": "0x64",
-      "false": "0x00",
-      "raw_path": "lighting.lights_on_raw"
     },
     {
       "id": "0x531",
@@ -388,16 +379,6 @@
       "byte": 3,
       "type": "raw",
       "path": "climate.rear_window_heater_raw"
-    },
-    {
-      "id": "0x555",
-      "byte": 0,
-      "type": "bool",
-      "path": "tyres.pressure_monitoring_warning",
-      "mask": "0x10",
-      "true": "0x10",
-      "false": "0x00",
-      "raw_path": "tyres.pressure_monitoring_warning_raw"
     },
     {
       "id": "0x555",

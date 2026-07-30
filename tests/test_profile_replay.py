@@ -32,8 +32,8 @@ class ProfileReplayTests(unittest.TestCase):
         self.assertEqual(report["case_count"], 24)
         self.assertEqual(report["coverage"]["events"], 11)
         self.assertEqual(report["coverage"]["event_total"], 11)
-        self.assertEqual(report["coverage"]["statuses"], 66)
-        self.assertEqual(report["coverage"]["status_total"], 66)
+        self.assertEqual(report["coverage"]["statuses"], 62)
+        self.assertEqual(report["coverage"]["status_total"], 62)
 
     def test_changed_mapping_fails_the_existing_fixture(self) -> None:
         changed = copy.deepcopy(self.profile)

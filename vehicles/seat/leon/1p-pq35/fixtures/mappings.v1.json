@@ -247,7 +247,7 @@
       }
     },
     {
-      "name": "lighting-and-dimmer-mirror",
+      "name": "dimmer-mirror",
       "bus": "comfort",
       "frames": [
         {
@@ -258,8 +258,6 @@
       "expect": {
         "events": [],
         "statuses": {
-          "lighting.lights_on_raw": 100,
-          "lighting.lights_on": true,
           "lighting.dimmer_635_raw": 100,
           "lighting.dimmer_percent_mirror": 100
         }
@@ -399,7 +397,7 @@
       }
     },
     {
-      "name": "tyre-pressure-monitoring-warning-and-climate-research",
+      "name": "climate-research-bytes",
       "bus": "comfort",
       "frames": [
         {
@@ -410,8 +408,6 @@
       "expect": {
         "events": [],
         "statuses": {
-          "tyres.pressure_monitoring_warning_raw": 240,
-          "tyres.pressure_monitoring_warning": true,
           "climate.debug_555_b1_raw": 43,
           "climate.debug_555_b1": 43.0,
           "climate.debug_555_b3_raw": 0,
