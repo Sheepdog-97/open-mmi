@@ -20,7 +20,7 @@
       "level": "hardware",
       "last_tested": "2026-07-20",
       "scope": [
-        "Passive comfort CAN reception at 100 kbit/s",
+        "Passive infotainment CAN reception at 100 kbit/s",
         "Canonical steering-wheel and presence events",
         "Canonical vehicle status decoding",
         "Reviewed Vehicle Setup apply and rollback",
@@ -50,17 +50,17 @@
       ]
     },
     "limitations": [
-      "Only the comfort CAN bus is qualified.",
+      "Only the infotainment CAN bus is qualified.",
       "Selected climate and lighting paths remain experimental or diagnostic.",
       "Open MMI remains passive receive-only and does not transmit vehicle CAN frames."
     ]
   },
-  "default_bus": "comfort",
+  "default_bus": "infotainment",
   "can_buses": {
-    "comfort": {
+    "infotainment": {
       "interface": "can0",
       "bitrate": 100000,
-      "capture_point": "maintainer-tested comfort CAN connection",
+      "capture_point": "maintainer-tested radio infotainment CAN connection",
       "provisioning": "udev",
       "bring_up": false,
       "notes": "Seat Leon 1P / VAG PQ35 maintainer-tested reference setup."

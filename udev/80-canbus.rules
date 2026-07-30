@@ -12,7 +12,7 @@
 # canbusd consumes SocketCAN interfaces. It does not configure bitrate or bring
 # interfaces up.
 
-# Seat 1P reference comfort CAN.
+# Seat 1P reference radio infotainment CAN.
 SUBSYSTEM=="net", KERNEL=="can0", ACTION=="add", RUN+="/sbin/ip link set can0 down", RUN+="/sbin/ip link set can0 type can bitrate 100000", RUN+="/sbin/ip link set can0 up"
 
 # Local UI/input support used by open-mmi actions.

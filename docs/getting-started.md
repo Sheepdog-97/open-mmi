@@ -65,7 +65,7 @@ ip link show can0
 The SEAT reference profile currently declares:
 
 ```text
-logical bus: comfort
+logical bus: infotainment
 interface: can0
 bitrate: 100000
 provisioning: udev
@@ -87,7 +87,7 @@ For the current maintained vehicle, select:
 ```text
 Vehicle profile: SEAT Leon 1P / Mk2 (PQ35) · Maintained
 Bindings: Default · Maintained
-CAN bus: comfort
+CAN bus: infotainment
 CAN adapter: can0
 ```
 

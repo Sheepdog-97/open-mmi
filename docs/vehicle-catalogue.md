@@ -34,12 +34,12 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 - Qualification history entries: 1
 - Legacy aliases: `seat_1p`
 - Compatible market names: —
-- CAN buses: `comfort`
+- CAN buses: `infotainment`
 - Replay proof: `fixtures/mappings.v1.json`; 24 cases; 11/11 events and 62/62 statuses covered
 
 #### Qualification scope
 
-- Passive comfort CAN reception at 100 kbit/s
+- Passive infotainment CAN reception at 100 kbit/s
 - Canonical steering-wheel and presence events
 - Canonical vehicle status decoding
 - Reviewed Vehicle Setup apply and rollback
@@ -47,7 +47,7 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 
 #### Compatibility boundary
 
-- Equipment: Maintainer-qualified passive comfort CAN connection at 100 kbit/s
+- Equipment: Maintainer-qualified passive radio infotainment CAN connection at 100 kbit/s
 - Vehicle variants: SEAT Leon 1P / Mk2 (PQ35), model years 2005 to 2012
 
 #### Evidence
@@ -59,7 +59,7 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 
 #### Limitations
 
-- Only the comfort CAN bus is qualified.
+- Only the infotainment CAN bus is qualified.
 - Selected climate and lighting paths remain experimental or diagnostic.
 - Open MMI remains passive receive-only and does not transmit vehicle CAN frames.
 

@@ -269,7 +269,7 @@ A dashboard or UI consumer should:
 
 Some vehicle profiles expose additional passive status fields when the relevant CAN signals are available.
 
-The Seat 1P comfort/infotainment profile currently publishes:
+The Seat 1P infotainment-CAN profile currently publishes:
 
 ```text
 state.vehicle.speed_kmh
@@ -278,7 +278,7 @@ state.climate.blower_load_percent
 state.climate.blower_load_raw
 ```
 
-`state.vehicle.speed_kmh` is decoded from the comfort CAN speed signal and is stored internally as kilometres per hour. User interfaces may choose to display this value as mph, km/h, or both.
+`state.vehicle.speed_kmh` is decoded from the infotainment CAN speed signal and is stored internally as kilometres per hour. User interfaces may choose to display this value as mph, km/h, or both.
 
 `state.climate.blower_load_percent` is decoded as an approximate HVAC blower load percentage.
 

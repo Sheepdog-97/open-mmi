@@ -5,7 +5,7 @@
   "cases": [
     {
       "name": "steering-volume-up",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x5C1",
@@ -24,7 +24,7 @@
     },
     {
       "name": "steering-volume-down",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x5C1",
@@ -43,7 +43,7 @@
     },
     {
       "name": "steering-mute-toggle",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x5C1",
@@ -62,7 +62,7 @@
     },
     {
       "name": "steering-next-track",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x5C1",
@@ -81,7 +81,7 @@
     },
     {
       "name": "steering-previous-track",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x5C1",
@@ -100,7 +100,7 @@
     },
     {
       "name": "steering-arrow-right",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x5C1",
@@ -119,7 +119,7 @@
     },
     {
       "name": "steering-arrow-left",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x5C1",
@@ -138,7 +138,7 @@
     },
     {
       "name": "steering-play-pause",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x5C1",
@@ -157,7 +157,7 @@
     },
     {
       "name": "body-and-brightness",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x470",
@@ -189,7 +189,7 @@
     },
     {
       "name": "reverse-and-speed",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x351",
@@ -208,7 +208,7 @@
     },
     {
       "name": "handbrake-and-fuel-level",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x621",
@@ -228,7 +228,7 @@
     },
     {
       "name": "low-fuel-warning-and-level",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x621",
@@ -248,7 +248,7 @@
     },
     {
       "name": "dimmer-mirror",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x635",
@@ -265,7 +265,7 @@
     },
     {
       "name": "lighting-mode-and-telltales",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x531",
@@ -287,7 +287,7 @@
     },
     {
       "name": "steering-angle",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x3C3",
@@ -306,7 +306,7 @@
     },
     {
       "name": "climate-controls-and-blower",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x3E1",
@@ -327,7 +327,7 @@
     },
     {
       "name": "engine-speed-and-coolant",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x35B",
@@ -346,7 +346,7 @@
     },
     {
       "name": "outside-temperatures",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x527",
@@ -365,7 +365,7 @@
     },
     {
       "name": "supply-voltage",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x571",
@@ -382,7 +382,7 @@
     },
     {
       "name": "rear-window-heater-raw",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x575",
@@ -398,7 +398,7 @@
     },
     {
       "name": "climate-research-bytes",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x555",
@@ -419,7 +419,7 @@
     },
     {
       "name": "odometer",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x65D",
@@ -436,7 +436,7 @@
     },
     {
       "name": "recirculation",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x3E3",
@@ -453,7 +453,7 @@
     },
     {
       "name": "vehicle-presence-transition",
-      "bus": "comfort",
+      "bus": "infotainment",
       "frames": [
         {
           "id": "0x65F",
