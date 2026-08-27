@@ -153,6 +153,37 @@ rules in [`vehicle-integration-standard.md`](vehicle-integration-standard.md).
 Unknown event names, deprecated aliases, payload-bearing `any` rules for no-payload events,
 and no-payload rules for value events fail profile validation.
 
+A normal event rule still matches one CAN byte:
+
+```json
+{
+  "id": "0x5C1",
+  "byte": 0,
+  "value": 6,
+  "event": "volume_up"
+}
+```
+
+When one byte is not sufficient to identify a control, use `matches`. Every predicate must
+match in the same frame before the event is emitted, and the runtime edge-detects the whole
+predicate rather than any individual byte:
+
+```json
+{
+  "id": "0x5C1",
+  "matches": [
+    {"byte": 0, "value": "0x13"},
+    {"byte": 2, "value": "0x01"}
+  ],
+  "event": "volume_up"
+}
+```
+
+`matches` rules use fixed byte values and do not carry an event payload. They are intended
+for controls whose semantics are encoded across multiple bytes, such as steering-wheel
+thumbwheel selector/direction pairs. A rule must use either top-level `byte`/`value` or
+`matches`, never both.
+
 ## Universal statuses, not vehicle-specific paths
 
 Status rules translate vehicle-specific bytes, masks and scaling into canonical persistent

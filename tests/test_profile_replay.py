@@ -80,5 +80,40 @@ class ProfileReplayTests(unittest.TestCase):
         self.assertEqual(result, 0)
 
 
+class MultiByteEventReplayTests(unittest.TestCase):
+    def test_frame_requires_all_multi_byte_matches(self):
+        profile = {
+            "default_bus": "infotainment",
+            "rules": [
+                {
+                    "id": "0x5C1",
+                    "matches": [
+                        {"byte": 0, "value": "0x13"},
+                        {"byte": 2, "value": "0x01"},
+                    ],
+                    "event": "volume_up",
+                }
+            ],
+        }
+
+        self.assertEqual(
+            profile_replay._events_for_frame(
+                profile,
+                "infotainment",
+                0x5C1,
+                bytes([0x13, 0x00, 0x01, 0x63]),
+            ),
+            [{"event": "volume_up", "payload": None}],
+        )
+        self.assertEqual(
+            profile_replay._events_for_frame(
+                profile,
+                "infotainment",
+                0x5C1,
+                bytes([0x14, 0x00, 0x01, 0x63]),
+            ),
+            [],
+        )
+
 if __name__ == "__main__":
     unittest.main()

@@ -160,6 +160,48 @@ class VehicleSetupTests(unittest.TestCase):
             {issue["code"] for issue in result["errors"]},
         )
 
+    def test_profile_validator_accepts_multi_byte_event_matches(self):
+        document = json.loads(self.profile().read_text(encoding="utf-8"))
+        document["rules"] = [
+            {
+                "id": "0x5C1",
+                "matches": [
+                    {"byte": 0, "value": "0x13"},
+                    {"byte": 2, "value": "0x01"},
+                ],
+                "event": "volume_up",
+            }
+        ]
+
+        result = vehicle_setup.validate_profile(document)
+        self.assertTrue(result["valid"], result)
+
+    def test_profile_validator_rejects_ambiguous_or_invalid_multi_byte_matches(self):
+        document = json.loads(self.profile().read_text(encoding="utf-8"))
+        document["rules"] = [
+            {
+                "id": "0x5C1",
+                "byte": 0,
+                "value": 0x13,
+                "matches": [
+                    {"byte": 0, "value": "0x13"},
+                    {"byte": 0, "value": "any"},
+                ],
+                "event": "volume_up",
+            }
+        ]
+
+        result = vehicle_setup.validate_profile(document)
+        self.assertFalse(result["valid"])
+        self.assertEqual(
+            {
+                "ambiguous-event-rule",
+                "duplicate-rule-match-byte",
+                "invalid-rule-match-value",
+            },
+            {issue["code"] for issue in result["errors"]},
+        )
+
     def test_profile_validator_enforces_canonical_status_paths_and_types(self):
         valid_document = json.loads(self.profile().read_text(encoding="utf-8"))
         valid_document["status"] = [

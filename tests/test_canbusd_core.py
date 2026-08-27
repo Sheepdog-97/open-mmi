@@ -502,6 +502,63 @@ class CanbusdCoreTests(unittest.TestCase):
             ],
         )
 
+    def test_multi_byte_event_rules_match_the_whole_predicate_and_edge_detect(self):
+        event_rules = {
+            0x5C1: [
+                {
+                    "matches": ((0, 0x13), (2, 0x01)),
+                    "event": "volume_up",
+                },
+                {
+                    "matches": ((0, 0x13), (2, 0x0F)),
+                    "event": "volume_down",
+                },
+            ]
+        }
+        messages = [
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x13, 0x00, 0x01, 0x63]), dlc=4),
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x13, 0x00, 0x01, 0x63]), dlc=4),
+            # Same direction byte from the other Superb thumbwheel must not match.
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x14, 0x00, 0x01, 0x63]), dlc=4),
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x13, 0x00, 0x01, 0x63]), dlc=4),
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x13, 0x00, 0x0F, 0x63]), dlc=4),
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x13, 0x00, 0x0F, 0x63]), dlc=4),
+        ]
+        bus = FakeBus(messages)
+
+        with mock.patch.object(core, "dispatch") as dispatch:
+            self._run_main(bus, self._config(rules=event_rules), len(messages))
+
+        self.assertEqual(
+            dispatch.call_args_list,
+            [
+                mock.call("volume_up", None),
+                mock.call("volume_up", None),
+                mock.call("volume_down", None),
+            ],
+        )
+
+    def test_multi_byte_event_rule_ignores_short_frames_without_rearming(self):
+        event_rules = {
+            0x5C1: [
+                {
+                    "matches": ((0, 0x13), (2, 0x01)),
+                    "event": "volume_up",
+                }
+            ]
+        }
+        messages = [
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x13, 0x00, 0x01]), dlc=3),
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x13]), dlc=1),
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x13, 0x00, 0x01]), dlc=3),
+        ]
+        bus = FakeBus(messages)
+
+        with mock.patch.object(core, "dispatch") as dispatch:
+            self._run_main(bus, self._config(rules=event_rules), len(messages))
+
+        dispatch.assert_called_once_with("volume_up", None)
+
     def test_publish_presence_updates_status_and_dispatches_configured_event(self):
         rule = {
             "id": 0x65F,

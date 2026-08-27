@@ -404,13 +404,96 @@ def _validate_profile_item(
         issues.append(_issue("error", "undeclared-default-bus", f"{path}.bus", "implicit default bus is not declared"))
 
     if kind == "rule":
-        _validate_byte(item.get("byte", 0), f"{path}.byte", issues)
         event_definition = _validate_event_reference(
             item.get("event"),
             path=f"{path}.event",
             registry=event_registry,
             issues=issues,
         )
+
+        if "matches" in item:
+            if "byte" in item or "value" in item:
+                issues.append(
+                    _issue(
+                        "error",
+                        "ambiguous-event-rule",
+                        path,
+                        "must use either byte/value or matches, not both",
+                    )
+                )
+
+            matches = item.get("matches")
+            if not isinstance(matches, list) or not 1 <= len(matches) <= 8:
+                issues.append(
+                    _issue(
+                        "error",
+                        "invalid-rule-matches",
+                        f"{path}.matches",
+                        "must be an array containing 1 to 8 byte/value predicates",
+                    )
+                )
+                matches = []
+
+            seen_bytes: set[int] = set()
+            for index, match in enumerate(matches):
+                match_path = f"{path}.matches[{index}]"
+                if not isinstance(match, Mapping) or set(match) != {"byte", "value"}:
+                    issues.append(
+                        _issue(
+                            "error",
+                            "invalid-rule-match",
+                            match_path,
+                            "must contain exactly byte and value",
+                        )
+                    )
+                    continue
+
+                _validate_byte(match.get("byte"), f"{match_path}.byte", issues)
+                try:
+                    byte_index = _parse_int(match.get("byte"))
+                except (TypeError, ValueError):
+                    byte_index = -1
+                if 0 <= byte_index <= 7:
+                    if byte_index in seen_bytes:
+                        issues.append(
+                            _issue(
+                                "error",
+                                "duplicate-rule-match-byte",
+                                f"{match_path}.byte",
+                                "each matched byte may appear only once",
+                            )
+                        )
+                    seen_bytes.add(byte_index)
+
+                try:
+                    parsed = _parse_int(match.get("value"))
+                except (TypeError, ValueError):
+                    parsed = -1
+                if not 0 <= parsed <= 255:
+                    issues.append(
+                        _issue(
+                            "error",
+                            "invalid-rule-match-value",
+                            f"{match_path}.value",
+                            "must be a fixed byte value from 0 to 255",
+                        )
+                    )
+
+            if (
+                event_definition is not None
+                and event_definition["payload"]["type"] != "none"
+            ):
+                issues.append(
+                    _issue(
+                        "error",
+                        "missing-event-payload",
+                        f"{path}.matches",
+                        "multi-byte match rules do not supply an event payload",
+                    )
+                )
+            return
+
+        _validate_byte(item.get("byte", 0), f"{path}.byte", issues)
         value = item.get("value")
         carries_payload = isinstance(value, str) and value.lower() == "any"
         if event_definition is not None:

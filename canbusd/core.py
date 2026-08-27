@@ -336,18 +336,41 @@ def _load_config(
         all_rule_items = cfg.get("rules", [])
         for item in all_rule_items:
             raw_value = item.get("value")
+            carries_payload = (
+                "matches" not in item
+                and isinstance(raw_value, str)
+                and raw_value.lower() == ANY_VALUE_WILDCARD
+            )
             event_registry.require_event(
                 item["event"],
-                carries_payload=(
-                    isinstance(raw_value, str)
-                    and raw_value.lower() == ANY_VALUE_WILDCARD
-                ),
+                carries_payload=carries_payload,
             )
         rule_items = _filter_items_for_bus(all_rule_items, runtime)
 
-        rules: Dict[int, List[Tuple[int, Optional[int], str]]] = {}
+        rules: Dict[int, List[Any]] = {}
         for r in rule_items:
             cid = int(r["id"], 16) if isinstance(r["id"], str) else int(r["id"])
+
+            if "matches" in r:
+                matches = []
+                for match in r["matches"]:
+                    byte_index = int(match["byte"])
+                    raw_match_value = match["value"]
+                    match_value = (
+                        int(raw_match_value, 16)
+                        if isinstance(raw_match_value, str)
+                        and raw_match_value.lower().startswith("0x")
+                        else int(raw_match_value)
+                    )
+                    matches.append((byte_index, match_value))
+                rules.setdefault(cid, []).append(
+                    {
+                        "matches": tuple(matches),
+                        "event": r["event"],
+                    }
+                )
+                continue
+
             b = int(r.get("byte", 0))
             v = r.get("value")
             carries_payload = (
@@ -569,6 +592,9 @@ def main(
 
     last_seen: Dict[int, float] = {}
     last_codes: Dict[Tuple[int, int, Optional[int]], int] = {}
+    last_match_states: Dict[
+        Tuple[int, Tuple[Tuple[int, int], ...], str], bool
+    ] = {}
     present_state: Dict[int, Optional[bool]] = {}
     status_state = StatusRuleState()
     _safe_reset_status()
@@ -657,7 +683,25 @@ def main(
                     _safe_publish_status(status_update)
 
             if cid in rules:
-                for b, v, event in rules[cid]:
+                for rule in rules[cid]:
+                    if isinstance(rule, dict) and "matches" in rule:
+                        matches = tuple(rule["matches"])
+                        if any(msg.dlc <= byte_index for byte_index, _ in matches):
+                            continue
+
+                        matched = all(
+                            msg.data[byte_index] == expected
+                            for byte_index, expected in matches
+                        )
+                        event = rule["event"]
+                        key = (cid, matches, event)
+                        previous = last_match_states.get(key, False)
+                        if matched and not previous:
+                            dispatch_fn(event, bindings.get(event))
+                        last_match_states[key] = matched
+                        continue
+
+                    b, v, event = rule
                     if msg.dlc <= b:
                         continue
 
