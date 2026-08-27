@@ -14,3 +14,9 @@ vehicle, use `candidate_mappings.v1.json`. Structured candidates must keep
 evidence, confidence and verification steps. `canbusd` ignores this file; promotion
 means moving/merging the rule into `config.json`, adding replay coverage and removing
 the candidate record.
+
+## Rear PDC probe
+
+`pdc_5b5_candidate_2026-08-27.md` records the observed four-channel `0x5B5` bit
+packing and a fast live verification procedure. `tools/pq_pdc_probe.py` decodes those
+channels for research only; it does not publish runtime parking-distance statuses.

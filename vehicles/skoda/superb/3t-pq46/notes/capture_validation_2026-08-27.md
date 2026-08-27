@@ -109,5 +109,4 @@ kept as structured non-runtime candidates rather than promoted capabilities.
 - **Horn:** `0x2C1 byte0 = 0x80` appeared only at horn presses; research only.
 - **Interior lock:** `0x523 byte2 = 0x10` correlated with the lock button; likely a
   momentary request rather than persistent lock state.
-- **Rear PDC:** `0x5B5` changed progressively while approaching constant tone;
-  proximity encoding is not yet derived.
+- **Rear PDC:** `0x5B5` changed progressively while approaching constant tone. Bytes 2..6 decode cleanly as four packed little-endian 10-bit proximity channels; physical ordering and centimetre scaling remain unqualified. See `pdc_5b5_candidate_2026-08-27.md` and `tools/pq_pdc_probe.py`.
