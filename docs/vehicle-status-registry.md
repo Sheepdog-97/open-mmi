@@ -60,6 +60,7 @@ Registry: `open-mmi.vehicle-statuses` · schema version `1`
 | `lighting.dimmer_percent` | lighting | number · percent · 0…100 | stable | Requested dashboard or display dimmer level. |
 | `lighting.dimmer_percent_mirror` | lighting | number · percent · 0…100 | experimental | Experimental second source for display dimmer level. |
 | `lighting.dimmer_raw` | lighting | integer · 0…255 | diagnostic | Unscaled source byte for the display dimmer. |
+| `lighting.front_fog` | lighting | boolean | experimental | Whether the front fog lights are active. |
 | `lighting.hazards` | lighting | boolean | stable | Whether hazard warning lights are active. |
 | `lighting.left_indicator` | lighting | boolean | stable | Whether the left direction indicator is active. |
 | `lighting.lights_on` | lighting | boolean | stable | Whether exterior lighting is active. |

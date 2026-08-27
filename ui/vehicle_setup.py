@@ -533,11 +533,33 @@ def _validate_profile_item(
                 continue
             fields_present = fields_present or bool(values)
             for name, value in values.items():
-                try:
-                    parsed = _parse_int(value)
-                except (TypeError, ValueError):
-                    parsed = -1
-                if not _bounded_text(name, maximum=64) or not 0 <= parsed <= 255:
+                valid_entry = _bounded_text(name, maximum=64)
+                if key == "equals" and isinstance(value, Mapping):
+                    if set(value) - {"mask", "value"} or "value" not in value:
+                        valid_entry = False
+                    else:
+                        try:
+                            parsed_value = _parse_int(value["value"])
+                            parsed_mask = (
+                                _parse_int(value["mask"])
+                                if "mask" in value
+                                else 0xFF
+                            )
+                        except (TypeError, ValueError):
+                            parsed_value = -1
+                            parsed_mask = -1
+                        valid_entry = (
+                            valid_entry
+                            and 0 <= parsed_value <= 255
+                            and 0 <= parsed_mask <= 255
+                        )
+                else:
+                    try:
+                        parsed = _parse_int(value)
+                    except (TypeError, ValueError):
+                        parsed = -1
+                    valid_entry = valid_entry and 0 <= parsed <= 255
+                if not valid_entry:
                     issues.append(_issue("error", "invalid-bitfield-entry", f"{path}.{key}.{name}", "must have a bounded name and 0..255 value"))
         if not fields_present:
             issues.append(_issue("error", "empty-bitfield", path, "must declare fields or equals"))

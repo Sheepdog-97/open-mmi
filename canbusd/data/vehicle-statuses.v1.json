@@ -563,6 +563,19 @@
       },
       "status": "diagnostic"
     },
+    "lighting.front_fog": {
+      "title": "Front fog lights",
+      "category": "lighting",
+      "description": "Whether the front fog lights are active.",
+      "value": {
+        "type": "boolean",
+        "nullable": false
+      },
+      "status": "experimental",
+      "search_terms": [
+        "front fog lamp lights"
+      ]
+    },
     "lighting.hazards": {
       "title": "Hazard lights",
       "category": "lighting",

@@ -190,6 +190,35 @@ class VehicleSetupTests(unittest.TestCase):
             {issue["code"] for issue in result["errors"]},
         )
 
+    def test_profile_validator_accepts_masked_bitfield_equals(self):
+        valid_document = json.loads(self.profile().read_text(encoding="utf-8"))
+        valid_document["status"] = [
+            {
+                "id": "0x470",
+                "byte": 1,
+                "type": "bitfield",
+                "path": "doors",
+                "fields": {"front_right": "0x01"},
+                "equals": {
+                    "boot": {
+                        "mask": "0x60",
+                        "value": "0x60",
+                    }
+                },
+                "any": "any_open",
+                "raw": "raw",
+            }
+        ]
+        self.assertTrue(vehicle_setup.validate_profile(valid_document)["valid"])
+
+        valid_document["status"][0]["equals"]["boot"]["mask"] = "0x100"
+        result = vehicle_setup.validate_profile(valid_document)
+        self.assertFalse(result["valid"])
+        self.assertIn(
+            "invalid-bitfield-entry",
+            {issue["code"] for issue in result["errors"]},
+        )
+
     def test_profile_validator_supports_documented_legacy_bus_fallback(self):
         result = vehicle_setup.validate_profile(
             {

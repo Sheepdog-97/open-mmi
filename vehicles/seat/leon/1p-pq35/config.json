@@ -46,6 +46,11 @@
           "kind": "research",
           "path": "vehicles/seat/leon/1p-pq35/notes/tpms_warning_2026-07-29.md",
           "description": "TPMS candidate rejection after transition and independent lamp-off control review."
+        },
+        {
+          "kind": "research",
+          "path": "vehicles/seat/leon/1p-pq35/notes/cross_vehicle_can_validation_2026-08-27.md",
+          "description": "Controlled Leon, Passat and Superb infotainment-CAN captures used to harden shared PQ35/PQ46 decoders."
         }
       ]
     },
@@ -144,7 +149,10 @@
         "bonnet": "0x10"
       },
       "equals": {
-        "boot": "0x60"
+        "boot": {
+          "mask": "0x60",
+          "value": "0x60"
+        }
       },
       "any": "any_open",
       "raw": "raw"
@@ -164,7 +172,8 @@
       "path": "lighting.bulb_out",
       "true": "0x10",
       "false": "0x00",
-      "raw_path": "lighting.bulb_out_raw"
+      "raw_path": "lighting.bulb_out_raw",
+      "mask": "0x10"
     },
     {
       "id": "0x351",
@@ -225,7 +234,17 @@
         "0xF3": "rear_fog_with_reverse"
       },
       "default": "unknown",
-      "raw_path": "lighting.mode_raw"
+      "raw_path": "lighting.mode_raw",
+      "mask": "0xF7"
+    },
+    {
+      "id": "0x531",
+      "byte": 0,
+      "type": "bool",
+      "path": "lighting.front_fog",
+      "mask": "0x08",
+      "true": "0x08",
+      "false": "0x00"
     },
     {
       "id": "0x531",
@@ -418,7 +437,8 @@
       "scale": 1.0,
       "offset": 0.0,
       "round": 0,
-      "raw_path": "vehicle.odometer_raw"
+      "raw_path": "vehicle.odometer_raw",
+      "mask": "0x0FFFFF"
     },
     {
       "id": "0x3E3",

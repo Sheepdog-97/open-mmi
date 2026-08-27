@@ -10,7 +10,7 @@ not prove that the physical vehicle lacks the feature.
 
 | Profile | Vehicle | Maturity | Qualification | Last tested | Review | Recheck after | Events | Statuses |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `seat-leon-1p-pq35` | SEAT Leon 1P / Mk2 (PQ35) | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | 11 | 62 |
+| `seat-leon-1p-pq35` | SEAT Leon 1P / Mk2 (PQ35) | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | 11 | 63 |
 
 ## Canonical events
 
@@ -75,6 +75,7 @@ not prove that the physical vehicle lacks the feature.
 | `lighting.dimmer_percent` | Yes |
 | `lighting.dimmer_percent_mirror` | Yes |
 | `lighting.dimmer_raw` | Yes |
+| `lighting.front_fog` | Yes |
 | `lighting.hazards` | Yes |
 | `lighting.left_indicator` | Yes |
 | `lighting.mode` | Yes |
