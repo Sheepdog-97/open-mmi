@@ -4,7 +4,7 @@ Open MMI separates reverse-engineering progress from a maintained compatibility 
 A scaffold, capture comparison, provisional decoder, or candidate fixture does not by
 itself mean that a vehicle is supported.
 
-SEAT Leon 1P / Mk2 (PQ35) remains the only maintained profile backed by real reverse
+SEAT Leon Mk2 / 1P (PQ35) remains the only maintained profile backed by real reverse
 engineering and hardware qualification in this repository.
 
 ## Lifecycle

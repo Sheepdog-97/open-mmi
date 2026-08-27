@@ -1,4 +1,4 @@
-# Škoda Superb II 3T (PQ46)
+# Škoda Superb II / 3T (PQ46)
 
 This is an **experimental maintained profile** for the Škoda Superb II / 3T on
 VAG PQ46. It is based on a controlled passive capture from one 2012 RHD 2.0 TDI

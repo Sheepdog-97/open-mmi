@@ -1,4 +1,4 @@
-# Volkswagen Passat B6 3C (PQ46)
+# Volkswagen Passat B6 / 3C (PQ46)
 
 This is an **experimental maintained profile** for the Volkswagen Passat B6 / 3C
 on VAG PQ46. It is based on a controlled passive capture from one 2010 RHD

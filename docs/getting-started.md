@@ -12,7 +12,7 @@ Open MMI currently:
 - supports one active named CAN bus at a time;
 - requires a Linux system with a supported SocketCAN adapter;
 - requires the correct connection point and bitrate for the maintained profile;
-- has one maintained vehicle profile: SEAT Leon 1P / Mk2 on VAG PQ35.
+- has a hardware-qualified SEAT Leon reference profile plus experimental Superb and Passat profiles.
 
 Decoded status is informational. It is not a replacement for OEM warnings,
 diagnostics, or driver judgement.
@@ -82,10 +82,10 @@ Open:
 Settings → Vehicle setup
 ```
 
-For the current maintained vehicle, select:
+For the hardware-qualified SEAT reference profile, select:
 
 ```text
-Vehicle profile: SEAT Leon 1P / Mk2 (PQ35) · Maintained
+Vehicle profile: SEAT Leon Mk2 / 1P (PQ35) · Maintained
 Bindings: Default · Maintained
 CAN bus: infotainment
 CAN adapter: can0

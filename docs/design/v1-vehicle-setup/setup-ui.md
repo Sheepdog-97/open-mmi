@@ -71,7 +71,7 @@ Maintained
   (•) Seat 1P              VAG PQ35 · Infotainment CAN · 100 kbit/s
 
 Custom
-  ( ) My Seat              Based on SEAT Leon 1P / Mk2 (PQ35) · locally modified
+  ( ) My Seat              Based on SEAT Leon Mk2 / 1P (PQ35) · locally modified
   (!) Capture experiment   Invalid JSON · not available to activate
 
 [Use selected] [Create custom copy] [Cancel]
@@ -151,7 +151,7 @@ Review shows only changed values first, followed by an expandable complete plan:
 ```text
 Apply vehicle setup
 
-Profile      SEAT Leon 1P / Mk2 (PQ35) · Maintained  ->  My Seat · Custom
+Profile      SEAT Leon Mk2 / 1P (PQ35) · Maintained  ->  My Seat · Custom
 Bindings     Default · Maintained  ->  Default · Maintained
 CAN adapter  can0                  ->  can1
 Provisioning can0 / 100 kbit/s     ->  can1 / 100 kbit/s

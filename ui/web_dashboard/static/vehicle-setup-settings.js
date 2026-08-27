@@ -70,7 +70,7 @@
         .map((entry) => {
           const key = identityKey(entry);
           const selected = key === selectedKey ? " selected" : "";
-          const disabled = entry?.valid === false ? " disabled" : "";
+          const disabled = entry?.valid === false && entry?.source !== "custom" ? " disabled" : "";
           const suffix = entry?.valid === false ? " — invalid" : "";
           return `<option value="${escapeHtml(key)}"${selected}${disabled}>${escapeHtml(entry?.display_name || entry?.id || "Unnamed")}${escapeHtml(suffix)}</option>`;
         })
@@ -305,18 +305,24 @@
         const editing = editor?.kind === kind && editor?.id === entry.id;
         const active = identityKey(activeIdentity(kind)) === identityKey(entry);
         const disabled = loading || previewLoading || applyBusy || Boolean(copyBusyKind)
-          || Boolean(lifecycleBusyKind) || Boolean(importBusyKind) || editorBusy || Boolean(editor) || entry.valid === false;
+          || Boolean(lifecycleBusyKind) || Boolean(importBusyKind) || editorBusy || Boolean(editor);
+        const duplicateDisabled = disabled || entry.valid === false;
         const destructiveDisabled = disabled || active;
         const busy = lifecycleBusyKind === kind;
+        const locationNote = active
+          ? "Active custom items can be duplicated or edited, but not renamed or deleted. Switch and apply another item first."
+          : entry.valid === false
+            ? "Invalid custom items can be edited, renamed or deleted. Duplicate, Review and Apply remain blocked until validation passes."
+            : "Stored in your user catalogue. Lifecycle changes do not apply or restart the CAN service.";
         return `
           <div class="openmmi-vehicle-custom-controls">
             <div class="openmmi-vehicle-custom-actions">
               <button type="button" class="openmmi-settings-link openmmi-vehicle-edit-custom" data-openmmi-vehicle-custom-edit="${escapeHtml(kind)}" data-testid="vehicle-setup-edit-${escapeHtml(kind)}" ${disabled ? "disabled" : ""}>${editing ? "Editing custom " + label + "…" : "Edit"}</button>
-              <button type="button" class="openmmi-settings-link" data-openmmi-vehicle-custom-manage="duplicate" data-openmmi-vehicle-custom-kind="${escapeHtml(kind)}" data-testid="vehicle-setup-duplicate-${escapeHtml(kind)}" ${disabled ? "disabled" : ""}>${busy ? "Working…" : "Duplicate"}</button>
+              <button type="button" class="openmmi-settings-link" data-openmmi-vehicle-custom-manage="duplicate" data-openmmi-vehicle-custom-kind="${escapeHtml(kind)}" data-testid="vehicle-setup-duplicate-${escapeHtml(kind)}" ${duplicateDisabled ? "disabled" : ""}>${busy ? "Working…" : "Duplicate"}</button>
               <button type="button" class="openmmi-settings-link" data-openmmi-vehicle-custom-manage="rename" data-openmmi-vehicle-custom-kind="${escapeHtml(kind)}" data-testid="vehicle-setup-rename-${escapeHtml(kind)}" ${destructiveDisabled ? "disabled" : ""}>Rename</button>
               <button type="button" class="openmmi-settings-link openmmi-vehicle-custom-delete" data-openmmi-vehicle-custom-manage="delete" data-openmmi-vehicle-custom-kind="${escapeHtml(kind)}" data-testid="vehicle-setup-delete-${escapeHtml(kind)}" ${destructiveDisabled ? "disabled" : ""}>Delete</button>
             </div>
-            <small class="openmmi-vehicle-custom-location">${active ? "Active custom items can be duplicated or edited, but not renamed or deleted. Switch and apply another item first." : "Stored in your user catalogue. Lifecycle changes do not apply or restart the CAN service."}</small>
+            <small class="openmmi-vehicle-custom-location">${locationNote}</small>
           </div>`;
       }
       if (entry?.source !== "maintained") return "";
@@ -453,8 +459,8 @@
 
     async function openCustomEditor(kind) {
       const entry = selectedEntry(kind);
-      if (entry?.source !== "custom" || entry.valid === false) {
-        throw new Error("Select a valid custom catalogue item to edit");
+      if (entry?.source !== "custom") {
+        throw new Error("Select a custom catalogue item to edit");
       }
       if (editor || editorBusy) return null;
       const label = editorKind(kind);
@@ -648,12 +654,17 @@
         || editor || editorBusy) return null;
       const entry = selectedEntry(kind);
       const label = editorKind(kind);
-      if (!entry || entry.source !== "custom" || entry.valid === false
+      if (!entry || entry.source !== "custom"
         || typeof entry.revision !== "string" || !entry.revision) {
-        throw new Error(`Select a valid custom ${label} to manage`);
+        throw new Error(`Select a custom ${label} to manage`);
       }
       if (!['duplicate', 'rename', 'delete'].includes(action)) {
         throw new Error("Custom catalogue lifecycle action is invalid");
+      }
+      if (entry.valid === false && action === "duplicate") {
+        setCopyMessage(`Fix validation errors before duplicating this custom ${label}.`, "warning");
+        render();
+        return null;
       }
       const active = identityKey(activeIdentity(kind)) === identityKey(entry);
       if (active && action !== "duplicate") {
@@ -920,7 +931,7 @@
       if (editor || editorBusy) return false;
       if (!SOURCES.some((source) => String(key).startsWith(`${source}:`))) return false;
       const entry = entryFor(catalogue(kind), key);
-      if (!entry || entry.valid === false) return false;
+      if (!entry || (entry.valid === false && entry.source !== "custom")) return false;
       if (!draft) seedDraft();
       draft[kind] = key;
       draftDirty = draftDiffers();
@@ -933,7 +944,11 @@
       if (!entry) return fallback;
       const errors = entry.validation?.errors?.length || 0;
       const warnings = entry.validation?.warnings?.length || 0;
-      if (errors) return `${errors} validation error${errors === 1 ? "" : "s"}`;
+      if (errors) {
+        const first = entry.validation?.errors?.[0] || {};
+        const detail = [first.code, first.path].filter(Boolean).join(" · ");
+        return `${errors} validation error${errors === 1 ? "" : "s"}${detail ? ` · ${detail}` : ""}`;
+      }
       if (warnings) return `${warnings} catalogue warning${warnings === 1 ? "" : "s"}`;
       return `${sourceLabel(entry.source)} catalogue · valid`;
     }
@@ -949,6 +964,9 @@
 
     function previewRequest() {
       if (!draft || !snapshot) return null;
+      const profile = selectedEntry("vehicle");
+      const bindingsEntry = selectedEntry("bindings");
+      if (!profile || !bindingsEntry || profile.valid === false || bindingsEntry.valid === false) return null;
       const vehicle = identityFromKey(draft.vehicle);
       const bindings = identityFromKey(draft.bindings);
       const bus = selectedBus();

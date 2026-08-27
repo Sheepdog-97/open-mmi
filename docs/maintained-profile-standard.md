@@ -29,7 +29,7 @@ A maintained profile starts with:
   "schema_version": 1,
   "metadata": {
     "id": "seat-leon-1p-pq35",
-    "display_name": "SEAT Leon 1P / Mk2 (PQ35)",
+    "display_name": "SEAT Leon Mk2 / 1P (PQ35)",
     "manufacturer": "SEAT",
     "model": "Leon",
     "generation": "1P",
@@ -71,10 +71,14 @@ A maintained profile starts with:
 ```
 
 `metadata.id` must match the stable identity declared in `vehicles/catalogue.v1.json`.
-The catalogue maps that ID to `vehicles/<brand>/<model>/<generation-platform>/config.json`
-and may retain deprecated IDs for installed compatibility. Optional `market_aliases` records
-compatible regional or rebadged names without duplicating a profile solely for branding. Evidence
-paths are repository-relative and must resolve to regular files in the same source tree.
+For user-facing consistency, `metadata.display_name` uses the form
+`Manufacturer Model market-generation / type-code (platform-code)` when both a familiar
+market generation and an OEM type/chassis code are known, for example
+`Volkswagen Passat B6 / 3C (PQ46)`. The catalogue maps the stable ID to
+`vehicles/<brand>/<model>/<generation-platform>/config.json` and may retain deprecated IDs
+for installed compatibility. Optional `market_aliases` records compatible regional or
+rebadged names without duplicating a profile solely for branding. Evidence paths are
+repository-relative and must resolve to regular files in the same source tree.
 
 ## Maturity levels
 

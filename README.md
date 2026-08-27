@@ -15,18 +15,15 @@ Open MMI is an alpha vehicle-integration project with a working local web
 dashboard, installed desktop launcher, vehicle-setup workflow, update
 management, terminal diagnostics, and contributor tooling.
 
-The only vehicle currently reverse engineered and maintained by Open MMI is:
+The maintained vehicle catalogue currently includes:
 
-```text
-SEAT Leon 1P / Mk2
-VAG PQ35
-profile: seat-leon-1p-pq35
-```
+- **SEAT Leon Mk2 / 1P (PQ35)** — hardware-qualified reference profile;
+- **Škoda Superb II / 3T (PQ46)** — experimental profile from a bounded hardware capture; and
+- **Volkswagen Passat B6 / 3C (PQ46)** — experimental profile from a bounded hardware capture.
 
-Templates, synthetic captures, scaffolds, and catalogue infrastructure do not
-claim support for a second vehicle. The maintained SEAT profile is qualified
-only for the equipment, connection point, vehicle variants, and signal scope
-recorded in the [vehicle catalogue](docs/vehicle-catalogue.md).
+The SEAT profile remains the hardware-qualified reference. Experimental profiles are
+bounded compatibility claims and do not imply generation-wide support beyond the scope
+and limitations recorded in the [vehicle catalogue](docs/vehicle-catalogue.md).
 
 Open MMI currently remains:
 
