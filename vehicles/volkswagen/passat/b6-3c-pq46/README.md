@@ -24,12 +24,12 @@ generation compatibility is not yet hardware-qualified.
 
 ## Deliberately omitted
 
-Road speed was skipped during the capture. The vehicle had no front windscreen
-heater available for testing. The wheel had a telephone button rather than mute
-or play/pause, so those events are not claimed. Fuel-range candidates remain
-unqualified. Front-fog state itself was not exercised; the base lighting-mode
-decoder only masks the known shared PQ front-fog bit so a fog request cannot
-invalidate the underlying lamp mode.
+The moving road-speed test was skipped; stationary traffic supports only the zero
+state. The vehicle had no front-windscreen-heater control available for testing.
+The wheel had a telephone button rather than mute or play/pause, so those events
+are not claimed. Fuel level/reserve, road speed, front fog and the conditional
+front-windscreen-heater mapping are retained as structured non-runtime candidates
+for quick follow-up verification. Fuel range remains unresolved.
 
 The right-steering-angle guided step contained operator error and is not used as
 evidence; centre/left observations and independent PQ35/PQ46 captures support the

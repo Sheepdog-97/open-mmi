@@ -42,10 +42,9 @@
     },
     "limitations": [
       "Candidate profile derived from one controlled 2012 RHD 2.0 TDI hardware capture; wider Superb II / 3T compatibility is not hardware-qualified.",
-      "Road-speed decoding was not exercised in the capture and is intentionally omitted.",
+      "Road-speed decoding is directly observed only at crawl speed (approximately 0.3–2.5 km/h); higher-speed accuracy remains untested.",
       "Bonnet input was not testable because the captured vehicle bonnet-switch wiring was cut.",
       "Front windscreen heater was unavailable on the captured vehicle and is intentionally omitted.",
-      "Bulb-warning state was not independently available and is intentionally omitted.",
       "Sleep/wake timeout was not exercised; 0x65F presence traffic itself was observed continuously.",
       "Fuel-range candidates are intentionally omitted.",
       "Open MMI remains passive receive-only and does not transmit vehicle CAN frames."
@@ -200,6 +199,16 @@
       "raw_path": "lighting.dimmer_raw"
     },
     {
+      "id": "0x470",
+      "byte": 4,
+      "type": "bool",
+      "path": "lighting.bulb_out",
+      "true": "0x10",
+      "false": "0x00",
+      "raw_path": "lighting.bulb_out_raw",
+      "mask": "0x10"
+    },
+    {
       "id": "0x351",
       "byte": 0,
       "type": "bool",
@@ -299,6 +308,16 @@
       "offset": 0.0,
       "round": 1,
       "raw_path": "climate.blower_load_raw"
+    },
+    {
+      "id": "0x351",
+      "type": "u16le",
+      "start_byte": 1,
+      "path": "vehicle.speed_kmh",
+      "scale": 0.005,
+      "offset": 0.0,
+      "round": 1,
+      "raw_path": "vehicle.speed_raw"
     },
     {
       "id": "0x35B",

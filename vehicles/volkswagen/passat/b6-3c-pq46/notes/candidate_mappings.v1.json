@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "record_id": "open-mmi.vehicle-candidate-mappings",
+  "profile_id": "volkswagen-passat-b6-3c-pq46",
+  "runtime_authority": false,
+  "candidates": [
+    {
+      "id": "fuel-level",
+      "status": "candidate",
+      "confidence": "strong",
+      "rule": {
+        "id": "0x621",
+        "byte": 3,
+        "type": "scaled",
+        "path": "fuel.level_l",
+        "mask": "0x7F",
+        "scale": 1.0,
+        "offset": 0.0,
+        "round": 0,
+        "raw_path": "fuel.level_raw"
+      },
+      "source_profiles": [
+        "seat-leon-1p-pq35"
+      ],
+      "local_evidence": "Passat capture carried lower-seven-bit values of 18 or 19 litres in 6450 of 6452 0x621 frames, with only two transient zero values. The result is plausible but no independent litre quantity was recorded.",
+      "verify": [
+        "Compare the live Open MMI quantity with an independent fuel-quantity reading on the same vehicle.",
+        "Repeat after a meaningful fuel-level change and confirm byte 3 follows the quantity rather than another state."
+      ]
+    },
+    {
+      "id": "low-fuel-warning",
+      "status": "candidate",
+      "confidence": "moderate",
+      "rule": {
+        "id": "0x621",
+        "byte": 3,
+        "type": "bool",
+        "path": "fuel.low_level_warning",
+        "mask": "0x80",
+        "true": "0x80",
+        "false": "0x00"
+      },
+      "source_profiles": [
+        "seat-leon-1p-pq35"
+      ],
+      "local_evidence": "The Passat capture never set 0x621 byte 3 bit 0x80, so only the non-warning state is locally observed. The same byte layout is maintained on the Leon.",
+      "verify": [
+        "Observe the frame when the vehicle independently reports its reserve/low-fuel warning.",
+        "Confirm bit 0x80 changes without corrupting the lower-seven-bit fuel quantity."
+      ]
+    },
+    {
+      "id": "road-speed",
+      "status": "candidate",
+      "confidence": "strong",
+      "rule": {
+        "id": "0x351",
+        "type": "u16le",
+        "start_byte": 1,
+        "path": "vehicle.speed_kmh",
+        "scale": 0.005,
+        "offset": 0.0,
+        "round": 1,
+        "raw_path": "vehicle.speed_raw"
+      },
+      "source_profiles": [
+        "seat-leon-1p-pq35",
+        "skoda-superb-3t-pq46"
+      ],
+      "local_evidence": "The stationary Passat capture decoded as zero speed in 6451 of 6452 0x351 frames; the lone non-zero value was sentinel-like 0xFF88. This confirms the zero state but not moving-scale accuracy.",
+      "verify": [
+        "Compare Open MMI against an independent speed reference while moving safely at several steady speeds.",
+        "Confirm the 0.005 km/h scale and exclude sentinel values before promotion."
+      ]
+    },
+    {
+      "id": "front-fog",
+      "status": "candidate",
+      "confidence": "strong",
+      "rule": {
+        "id": "0x531",
+        "byte": 0,
+        "type": "bool",
+        "path": "lighting.front_fog",
+        "mask": "0x08",
+        "true": "0x08",
+        "false": "0x00"
+      },
+      "source_profiles": [
+        "seat-leon-1p-pq35",
+        "skoda-superb-3t-pq46"
+      ],
+      "local_evidence": "Passat front fog was not exercised. Its base lighting decoder already masks bit 0x08, while independent Leon and Superb captures identify that bit as front fog.",
+      "verify": [
+        "Toggle front fog on an equipped Passat and confirm only 0x531 byte 0 bit 0x08 tracks the telltale.",
+        "Confirm the masked base lighting mode remains unchanged across the fog transition."
+      ]
+    },
+    {
+      "id": "front-windscreen-heater-request",
+      "status": "candidate",
+      "confidence": "moderate",
+      "rule": {
+        "id": "0x3E1",
+        "byte": 0,
+        "type": "bool",
+        "path": "climate.front_windscreen_heater_requested",
+        "mask": "0x08",
+        "true": "0x08",
+        "false": "0x00"
+      },
+      "source_profiles": [
+        "seat-leon-1p-pq35"
+      ],
+      "local_evidence": "The captured Passat did not provide an independently testable front-windscreen-heater control. The mapping is retained only as a related-PQ lead for equipped variants.",
+      "verify": [
+        "Exercise the front-windscreen-heater control on an equipped Passat variant.",
+        "Confirm 0x3E1 byte 0 bit 0x08 tracks the request independently of rear demist and compressor bits."
+      ]
+    }
+  ]
+}

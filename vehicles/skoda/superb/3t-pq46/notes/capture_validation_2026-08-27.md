@@ -47,6 +47,7 @@ The capture agrees with the Leon/PQ35 mappings for:
 - `0x470` door bits: FR `0x01`, FL `0x02`, RL `0x04`, RR `0x08`
 - `0x470` boot field: `(byte1 & 0x60) == 0x60`
 - `0x351 byte0 == 0x02`: reverse
+- `0x351 bytes1..2 little-endian * 0.005`: road speed; crawl-speed motion was observed despite the scripted road-speed step being skipped
 - `0x621 byte0 & 0x20`: handbrake
 - `0x3C3`: sign-magnitude steering angle, scale `0.04375`
 - `0x531`: base lighting-mode enum
@@ -66,12 +67,43 @@ Entered truth values strongly supported the common engine/electrical decoders:
 idle was approximately 780 rpm, coolant was 18–19 °C, outside temperature was
 19 °C, and ignition-off supply voltage was 11.9 V.
 
+
+## Corrected bulb-warning observation
+
+The guided `bulb_out_dash_state` metadata entry is blank because Enter was pressed
+instead of `Y`. The operator subsequently corrected the physical truth: the Superb
+bulb-warning lamp **was on** during the capture. Around the guided observation,
+`0x470` carried byte 4 as `0x30`; masking `0x10` therefore decodes the warning as
+on while leaving the unrelated `0x20` bit independent. This supersedes the blank
+guided metadata entry and independently corroborates the Leon positive state and
+Passat negative-state masking result.
+
+## Incidental crawl-speed validation
+
+The scripted road-speed step was skipped, but the later rear-PDC exercise required
+the vehicle to creep backwards and forwards. During those movements `0x351`
+bytes 1..2 produced non-zero values that decode with the maintained Leon scale to
+approximately 0.3–2.5 km/h. A captured forward frame `0x351#0048010000000000`
+decodes to 1.64 km/h (about 1.02 mph), matching the live Open MMI observation of
+roughly 1 mph while crawling. Reverse-motion samples carried byte 0 `0x02` at the
+same time as plausible low-speed values.
+
+This is positive real-car evidence for the field and scale at crawl speed. Higher
+speeds were not exercised and remain outside the current claim.
+
+## Fuel-level candidate observation
+
+Open MMI was running the Leon decoder during the Superb session and displayed a
+sane-looking fuel quantity. Independently, `0x621` byte 3 lower seven bits ranged
+from 26 to 30 throughout the capture, while bit `0x80` never set. No exact
+independent fuel quantity was recorded, so `fuel.level_l` and the low-fuel bit are
+kept as structured non-runtime candidates rather than promoted capabilities.
+
 ## Deliberately not exposed
 
-- **Bonnet:** not testable; the vehicle's bonnet-switch wiring had been cut.
-- **Road speed:** operator skipped the road-speed test.
-- **Front windscreen heater:** feature unavailable on the captured vehicle.
-- **Bulb warning:** no independent lamp state was entered.
+- **Bonnet:** not testable; the vehicle's bonnet-switch wiring had been cut. The common `0x470 byte1 & 0x10` mapping is retained as a structured cross-profile candidate.
+- **Front windscreen heater:** feature unavailable on the captured vehicle; retained as a structured cross-profile candidate for equipped variants.
+- **Fuel level / reserve warning:** plausible shared `0x621` mapping, but no exact independent quantity or positive reserve-warning truth; retained as structured non-runtime candidates.
 - **Fuel range:** no usable truth value; prior Leon/Passat candidates disagree.
 - **AUTO lights:** `0x531 byte1 & 0x20` is a strong candidate but remains research.
 - **Horn:** `0x2C1 byte0 = 0x80` appeared only at horn presses; research only.

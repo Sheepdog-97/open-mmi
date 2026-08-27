@@ -218,7 +218,9 @@
           "doors.any_open": true,
           "doors.raw": 96,
           "lighting.dimmer_raw": 100,
-          "lighting.dimmer_percent": 100
+          "lighting.dimmer_percent": 100,
+          "lighting.bulb_out_raw": 48,
+          "lighting.bulb_out": true
         }
       }
     },
@@ -235,7 +237,28 @@
         "events": [],
         "statuses": {
           "vehicle.reverse_raw": 2,
-          "vehicle.reverse": true
+          "vehicle.reverse": true,
+          "vehicle.speed_raw": 0,
+          "vehicle.speed_kmh": 0.0
+        }
+      }
+    },
+    {
+      "name": "crawl-speed",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x351",
+          "data": "00 48 01 00 00 00 00 00"
+        }
+      ],
+      "expect": {
+        "events": [],
+        "statuses": {
+          "vehicle.reverse_raw": 0,
+          "vehicle.reverse": false,
+          "vehicle.speed_raw": 328,
+          "vehicle.speed_kmh": 1.6
         }
       }
     },

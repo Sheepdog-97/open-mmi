@@ -24,6 +24,9 @@ from ui import vehicle_setup
 STANDARD_ID = "open-mmi.maintained-vehicle-profile"
 SCHEMA_VERSION = 1
 MAX_PROFILE_BYTES = 1024 * 1024
+MAX_CANDIDATE_MAPPING_BYTES = 256 * 1024
+CANDIDATE_MAPPING_RECORD_ID = "open-mmi.vehicle-candidate-mappings"
+CANDIDATE_CONFIDENCE_LEVELS = {"weak", "moderate", "strong"}
 PROFILE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 MATURITY_LEVELS = {"experimental", "candidate", "qualified", "deprecated"}
 QUALIFICATION_LEVELS = {"none", "replay", "hardware"}
@@ -586,6 +589,306 @@ def _event_names(document: Mapping[str, Any]) -> list[str]:
     return sorted(events)
 
 
+def _candidate_mapping_report(
+    document: Mapping[str, Any],
+    *,
+    profile_path: Path,
+    identifier: str,
+) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    relative_path = "notes/candidate_mappings.v1.json"
+    candidate_path = profile_path.parent / relative_path
+    issues: list[dict[str, str]] = []
+    if not candidate_path.exists():
+        return {
+            "present": False,
+            "valid": True,
+            "path": relative_path,
+            "count": 0,
+            "items": [],
+        }, issues
+
+    try:
+        metadata = candidate_path.lstat()
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > MAX_CANDIDATE_MAPPING_BYTES:
+            raise VehicleProfileConformanceError(
+                f"candidate mapping file must be a bounded regular file: {candidate_path}"
+            )
+        payload = json.loads(
+            candidate_path.read_text(encoding="utf-8"),
+            object_pairs_hook=_unique_object,
+            parse_constant=_reject_constant,
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, VehicleProfileConformanceError) as exc:
+        issues.append(
+            _issue(
+                "error",
+                "invalid-candidate-mappings",
+                relative_path,
+                str(exc),
+            )
+        )
+        return {
+            "present": True,
+            "valid": False,
+            "path": relative_path,
+            "count": 0,
+            "items": [],
+        }, issues
+
+    if not isinstance(payload, Mapping):
+        issues.append(
+            _issue(
+                "error",
+                "invalid-candidate-mappings",
+                relative_path,
+                "candidate mapping file root must be a JSON object",
+            )
+        )
+        payload = {}
+
+    expected_top = {
+        "schema_version",
+        "record_id",
+        "profile_id",
+        "runtime_authority",
+        "candidates",
+    }
+    if set(payload) != expected_top:
+        issues.append(
+            _issue(
+                "error",
+                "invalid-candidate-mapping-envelope",
+                relative_path,
+                "must contain exactly schema_version, record_id, profile_id, runtime_authority and candidates",
+            )
+        )
+    if payload.get("schema_version") != 1 or isinstance(payload.get("schema_version"), bool):
+        issues.append(
+            _issue(
+                "error",
+                "invalid-candidate-mapping-schema",
+                f"{relative_path}.schema_version",
+                "must be integer 1",
+            )
+        )
+    if payload.get("record_id") != CANDIDATE_MAPPING_RECORD_ID:
+        issues.append(
+            _issue(
+                "error",
+                "invalid-candidate-mapping-record",
+                f"{relative_path}.record_id",
+                f"must be {CANDIDATE_MAPPING_RECORD_ID!r}",
+            )
+        )
+    if payload.get("profile_id") != identifier:
+        issues.append(
+            _issue(
+                "error",
+                "candidate-profile-id-mismatch",
+                f"{relative_path}.profile_id",
+                f"must match maintained catalogue identity {identifier!r}",
+            )
+        )
+    if payload.get("runtime_authority") is not False:
+        issues.append(
+            _issue(
+                "error",
+                "candidate-runtime-authority",
+                f"{relative_path}.runtime_authority",
+                "must be false; candidate mappings are research only and must not be loaded by runtime",
+            )
+        )
+
+    raw_candidates = payload.get("candidates")
+    if not isinstance(raw_candidates, list) or not 1 <= len(raw_candidates) <= 64:
+        issues.append(
+            _issue(
+                "error",
+                "invalid-candidate-list",
+                f"{relative_path}.candidates",
+                "must contain 1 to 64 candidate mapping records",
+            )
+        )
+        raw_candidates = []
+
+    active_outputs = {
+        str(item["path"])
+        for item in status_registry.profile_outputs(document)
+        if item.get("role") != "alias" and isinstance(item.get("path"), str)
+    }
+    seen_ids: set[str] = set()
+    items: list[dict[str, Any]] = []
+    expected_item = {
+        "id",
+        "status",
+        "confidence",
+        "rule",
+        "source_profiles",
+        "local_evidence",
+        "verify",
+    }
+    for index, raw in enumerate(raw_candidates):
+        path = f"{relative_path}.candidates[{index}]"
+        if not isinstance(raw, Mapping) or set(raw) != expected_item:
+            issues.append(
+                _issue(
+                    "error",
+                    "invalid-candidate-record",
+                    path,
+                    "must contain exactly id, status, confidence, rule, source_profiles, local_evidence and verify",
+                )
+            )
+            continue
+
+        candidate_id = raw.get("id")
+        if not isinstance(candidate_id, str) or not PROFILE_ID_RE.fullmatch(candidate_id):
+            issues.append(
+                _issue(
+                    "error",
+                    "invalid-candidate-id",
+                    f"{path}.id",
+                    "must be a bounded lowercase identifier",
+                )
+            )
+        elif candidate_id in seen_ids:
+            issues.append(
+                _issue(
+                    "error",
+                    "duplicate-candidate-id",
+                    f"{path}.id",
+                    "must be unique within the candidate file",
+                )
+            )
+        else:
+            seen_ids.add(candidate_id)
+
+        if raw.get("status") != "candidate":
+            issues.append(
+                _issue(
+                    "error",
+                    "invalid-candidate-status",
+                    f"{path}.status",
+                    "must be candidate",
+                )
+            )
+        confidence = raw.get("confidence")
+        if confidence not in CANDIDATE_CONFIDENCE_LEVELS:
+            issues.append(
+                _issue(
+                    "error",
+                    "invalid-candidate-confidence",
+                    f"{path}.confidence",
+                    "must be weak, moderate or strong",
+                )
+            )
+
+        source_profiles = _validate_text_list(
+            raw.get("source_profiles"),
+            path=f"{path}.source_profiles",
+            issues=issues,
+            minimum=1,
+            maximum=8,
+        )
+        for source_index, source_profile in enumerate(source_profiles):
+            if not PROFILE_ID_RE.fullmatch(source_profile):
+                issues.append(
+                    _issue(
+                        "error",
+                        "invalid-candidate-source-profile",
+                        f"{path}.source_profiles[{source_index}]",
+                        "must be a maintained profile identifier",
+                    )
+                )
+
+        local_evidence = raw.get("local_evidence")
+        if not _bounded_text(local_evidence, 1024):
+            issues.append(
+                _issue(
+                    "error",
+                    "invalid-candidate-evidence",
+                    f"{path}.local_evidence",
+                    "must be a non-empty bounded evidence summary",
+                )
+            )
+        verify = _validate_text_list(
+            raw.get("verify"),
+            path=f"{path}.verify",
+            issues=issues,
+            minimum=1,
+            maximum=8,
+        )
+
+        rule = raw.get("rule")
+        outputs: list[str] = []
+        if not isinstance(rule, Mapping):
+            issues.append(
+                _issue(
+                    "error",
+                    "invalid-candidate-rule",
+                    f"{path}.rule",
+                    "must be a ready-to-promote status rule object",
+                )
+            )
+        else:
+            candidate_document = {
+                "default_bus": document.get("default_bus", "infotainment"),
+                "can_buses": copy.deepcopy(document.get("can_buses", {})),
+                "rules": [],
+                "presence": [],
+                "status": [copy.deepcopy(rule)],
+            }
+            technical = vehicle_setup.validate_profile(candidate_document)
+            for issue in technical["errors"]:
+                issues.append(
+                    _issue(
+                        "error",
+                        "invalid-candidate-rule",
+                        f"{path}.rule.{issue['path']}",
+                        issue["message"],
+                    )
+                )
+            if not technical["errors"]:
+                outputs = sorted(
+                    {
+                        str(item["path"])
+                        for item in status_registry.rule_outputs(rule)
+                        if item.get("role") != "alias" and isinstance(item.get("path"), str)
+                    }
+                )
+                overlap = sorted(active_outputs & set(outputs))
+                if overlap:
+                    issues.append(
+                        _issue(
+                            "error",
+                            "candidate-already-active",
+                            f"{path}.rule",
+                            "candidate outputs are already runtime capabilities: " + ", ".join(overlap),
+                        )
+                    )
+
+        items.append(
+            {
+                "id": candidate_id,
+                "status": raw.get("status"),
+                "confidence": confidence,
+                "outputs": outputs,
+                "source_profiles": source_profiles,
+                "local_evidence": local_evidence,
+                "verify": verify,
+                "rule": copy.deepcopy(rule) if isinstance(rule, Mapping) else {},
+            }
+        )
+
+    candidate_issues = [issue for issue in issues if issue["level"] == "error"]
+    return {
+        "present": True,
+        "valid": not candidate_issues,
+        "path": relative_path,
+        "count": len(items),
+        "items": items,
+    }, issues
+
+
 def _fixture_report(
     document: Mapping[str, Any],
     *,
@@ -685,6 +988,12 @@ def profile_report(
         identifier=identifier,
     )
     issues.extend(fixture_issues)
+    candidates, candidate_issues = _candidate_mapping_report(
+        document,
+        profile_path=path,
+        identifier=identifier,
+    )
+    issues.extend(candidate_issues)
     from ui import vehicle_profile_qualification
 
     qualification_record = vehicle_profile_qualification.qualification_report_for_profile(
@@ -723,6 +1032,7 @@ def profile_report(
             "status_count": len(canonical_statuses),
         },
         "fixtures": fixtures,
+        "candidates": candidates,
         "qualification": qualification_record,
         "validation": validation,
     }
@@ -801,6 +1111,13 @@ def catalogue_report(
                         "case_count": 0,
                         "coverage": {},
                     },
+                    "candidates": {
+                        "present": False,
+                        "valid": False,
+                        "path": "notes/candidate_mappings.v1.json",
+                        "count": 0,
+                        "items": [],
+                    },
                     "qualification": {
                         "present": False,
                         "stale": False,
@@ -825,6 +1142,7 @@ def catalogue_report(
                     "event_count": 0, "status_count": 0,
                 },
                 "fixtures": {"present": False, "valid": False, "case_count": 0, "coverage": {}},
+                "candidates": {"present": False, "valid": False, "path": "notes/candidate_mappings.v1.json", "count": 0, "items": []},
                 "qualification": {"present": False, "stale": False, "validation": _validation([])},
                 "validation": _validation([
                     _issue("error", "invalid-catalogue-tree", "vehicles", issue)

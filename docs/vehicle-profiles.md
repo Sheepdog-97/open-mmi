@@ -102,6 +102,26 @@ configure bitrate and does not silently bring interfaces up.
 
 ---
 
+
+## Structured cross-profile candidates
+
+A maintained profile may keep likely related-vehicle status mappings in
+`notes/candidate_mappings.v1.json`. This is deliberately outside `config.json`: candidate
+rules are never loaded by `canbusd`, never published as vehicle state and never counted as
+canonical profile capabilities.
+
+Each record carries an exact ready-to-verify status rule, source profiles, a local evidence
+summary, verification steps and a `weak` / `moderate` / `strong` confidence label. The
+maintained conformance check validates the candidate file and rejects any candidate whose
+output has already become active, preventing stale research entries after promotion.
+Generated catalogue and capability docs show these leads in a separate non-runtime section.
+
+Use this layer for cross-pollination where a related profile strongly suggests the mapping
+but the target vehicle lacks positive local truth. Once verified, move or merge the rule
+into `config.json`, add replay coverage and remove the candidate record.
+
+---
+
 ## Selecting and applying a profile
 
 For an installed system, the intended normal path is:

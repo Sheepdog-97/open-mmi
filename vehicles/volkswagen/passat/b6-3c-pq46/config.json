@@ -42,12 +42,13 @@
     },
     "limitations": [
       "Candidate profile derived from one controlled 2010 RHD hardware capture; wider Passat B6 / 3C compatibility is not hardware-qualified.",
-      "Road-speed decoding was not exercised in the capture and is intentionally omitted.",
-      "Front windscreen heater was unavailable on the captured vehicle and is intentionally omitted.",
+      "Moving road-speed decoding was not exercised; the stationary zero state is retained only as a structured non-runtime candidate pending scale verification.",
+      "Front windscreen heater was unavailable on the captured vehicle; the related-PQ mapping is retained only as a structured non-runtime candidate for equipped variants.",
       "The captured steering wheel had a telephone button and no mute control; no mute or play/pause event is claimed.",
       "The guided right-steering-angle procedure contained operator error; steering decoding is supported by centre/left observations and cross-vehicle PQ agreement.",
-      "Front-fog state was not directly exercised; the lighting-mode decoder masks the known PQ front-fog bit only to preserve the base lamp mode.",
+      "Front-fog state was not directly exercised; the shared PQ bit is retained only as a structured non-runtime candidate while the base lamp-mode mask remains active.",
       "Sleep/wake timeout was not exercised; 0x65F presence traffic itself was observed continuously.",
+      "Fuel-level and reserve-warning mappings are plausible from local 0x621 traffic but remain structured non-runtime candidates pending independent quantity/positive-warning truth.",
       "Fuel-range candidates are intentionally omitted.",
       "Open MMI remains passive receive-only and does not transmit vehicle CAN frames."
     ]

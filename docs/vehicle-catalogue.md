@@ -20,11 +20,11 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 
 ## Catalogue summary
 
-| Profile | Vehicle | Years | Maturity | Qualification | Last tested | Review | Recheck after | Legacy aliases | Compatible market names | Replay coverage | Evidence | Canonical capabilities |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [`seat-leon-1p-pq35`](#seat-leon-1p-pq35) | SEAT Leon Mk2 / 1P (PQ35) | 2005–2012 | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | `seat_1p` | — | 24 cases; 11/11 events; 63/63 statuses | hardware: 1, replay: 1, research: 3 | 11 events; 63 statuses |
-| [`volkswagen-passat-b6-3c-pq46`](#volkswagen-passat-b6-3c-pq46) | Volkswagen Passat B6 / 3C (PQ46) | 2005–2010 | candidate | replay | 2026-08-27 | approved | 2027-08-27 | — | Passat B6 | 24 cases; 10/10 events; 50/50 statuses | capture: 1, replay: 1 | 10 events; 50 statuses |
-| [`skoda-superb-3t-pq46`](#skoda-superb-3t-pq46) | Škoda Superb II / 3T (PQ46) | 2008–2015 | candidate | replay | 2026-08-27 | approved | 2027-08-27 | — | Superb II | 24 cases; 13/13 events; 48/48 statuses | capture: 1, replay: 1 | 13 events; 48 statuses |
+| Profile | Vehicle | Years | Maturity | Qualification | Last tested | Review | Recheck after | Legacy aliases | Compatible market names | Replay coverage | Evidence | Canonical capabilities | Research candidates |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| [`seat-leon-1p-pq35`](#seat-leon-1p-pq35) | SEAT Leon Mk2 / 1P (PQ35) | 2005–2012 | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | `seat_1p` | — | 24 cases; 11/11 events; 63/63 statuses | hardware: 1, replay: 1, research: 3 | 11 events; 63 statuses | 0 non-runtime mappings |
+| [`volkswagen-passat-b6-3c-pq46`](#volkswagen-passat-b6-3c-pq46) | Volkswagen Passat B6 / 3C (PQ46) | 2005–2010 | candidate | replay | 2026-08-27 | approved | 2027-08-27 | — | Passat B6 | 24 cases; 10/10 events; 50/50 statuses | capture: 1, replay: 1 | 10 events; 50 statuses | 5 non-runtime mappings |
+| [`skoda-superb-3t-pq46`](#skoda-superb-3t-pq46) | Škoda Superb II / 3T (PQ46) | 2008–2015 | candidate | replay | 2026-08-27 | approved | 2027-08-27 | — | Superb II | 25 cases; 13/13 events; 52/52 statuses | capture: 1, replay: 1 | 13 events; 52 statuses | 4 non-runtime mappings |
 
 ## Profiles
 
@@ -44,6 +44,7 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 - Compatible market names: —
 - CAN buses: `infotainment`
 - Replay proof: `fixtures/mappings.v1.json`; 24 cases; 11/11 events and 63/63 statuses covered
+- Non-runtime candidate mappings: 0
 
 #### Qualification scope
 
@@ -72,6 +73,10 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 - Selected climate and lighting paths remain experimental or diagnostic.
 - Open MMI remains passive receive-only and does not transmit vehicle CAN frames.
 
+#### Non-runtime candidate mappings
+
+- No structured cross-profile candidate mappings recorded.
+
 #### Canonical events
 
 `arrow_left`, `arrow_right`, `brightness_level`, `mute_toggle`, `next_track`, `play_pause`, `previous_track`, `vehicle_present:off`, `vehicle_present:on`, `volume_down`, `volume_up`
@@ -96,6 +101,7 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 - Compatible market names: Passat B6
 - CAN buses: `infotainment`
 - Replay proof: `fixtures/mappings.v1.json`; 24 cases; 10/10 events and 50/50 statuses covered
+- Non-runtime candidate mappings: 5
 
 #### Qualification scope
 
@@ -116,14 +122,25 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 #### Limitations
 
 - Candidate profile derived from one controlled 2010 RHD hardware capture; wider Passat B6 / 3C compatibility is not hardware-qualified.
-- Road-speed decoding was not exercised in the capture and is intentionally omitted.
-- Front windscreen heater was unavailable on the captured vehicle and is intentionally omitted.
+- Moving road-speed decoding was not exercised; the stationary zero state is retained only as a structured non-runtime candidate pending scale verification.
+- Front windscreen heater was unavailable on the captured vehicle; the related-PQ mapping is retained only as a structured non-runtime candidate for equipped variants.
 - The captured steering wheel had a telephone button and no mute control; no mute or play/pause event is claimed.
 - The guided right-steering-angle procedure contained operator error; steering decoding is supported by centre/left observations and cross-vehicle PQ agreement.
-- Front-fog state was not directly exercised; the lighting-mode decoder masks the known PQ front-fog bit only to preserve the base lamp mode.
+- Front-fog state was not directly exercised; the shared PQ bit is retained only as a structured non-runtime candidate while the base lamp-mode mask remains active.
 - Sleep/wake timeout was not exercised; 0x65F presence traffic itself was observed continuously.
+- Fuel-level and reserve-warning mappings are plausible from local 0x621 traffic but remain structured non-runtime candidates pending independent quantity/positive-warning truth.
 - Fuel-range candidates are intentionally omitted.
 - Open MMI remains passive receive-only and does not transmit vehicle CAN frames.
+
+#### Non-runtime candidate mappings
+
+These mappings are structured research only. They are not loaded by `canbusd`, not published as canonical runtime state, and do not count as profile capabilities.
+
+- `fuel-level` (`strong`) — outputs `fuel.level_l`, `fuel.level_raw`; sources `seat-leon-1p-pq35`. Passat capture carried lower-seven-bit values of 18 or 19 litres in 6450 of 6452 0x621 frames, with only two transient zero values. The result is plausible but no independent litre quantity was recorded. Verify: Compare the live Open MMI quantity with an independent fuel-quantity reading on the same vehicle; Repeat after a meaningful fuel-level change and confirm byte 3 follows the quantity rather than another state.
+- `low-fuel-warning` (`moderate`) — outputs `fuel.low_level_warning`; sources `seat-leon-1p-pq35`. The Passat capture never set 0x621 byte 3 bit 0x80, so only the non-warning state is locally observed. The same byte layout is maintained on the Leon. Verify: Observe the frame when the vehicle independently reports its reserve/low-fuel warning; Confirm bit 0x80 changes without corrupting the lower-seven-bit fuel quantity.
+- `road-speed` (`strong`) — outputs `vehicle.speed_kmh`, `vehicle.speed_raw`; sources `seat-leon-1p-pq35`, `skoda-superb-3t-pq46`. The stationary Passat capture decoded as zero speed in 6451 of 6452 0x351 frames; the lone non-zero value was sentinel-like 0xFF88. This confirms the zero state but not moving-scale accuracy. Verify: Compare Open MMI against an independent speed reference while moving safely at several steady speeds; Confirm the 0.005 km/h scale and exclude sentinel values before promotion.
+- `front-fog` (`strong`) — outputs `lighting.front_fog`; sources `seat-leon-1p-pq35`, `skoda-superb-3t-pq46`. Passat front fog was not exercised. Its base lighting decoder already masks bit 0x08, while independent Leon and Superb captures identify that bit as front fog. Verify: Toggle front fog on an equipped Passat and confirm only 0x531 byte 0 bit 0x08 tracks the telltale; Confirm the masked base lighting mode remains unchanged across the fog transition.
+- `front-windscreen-heater-request` (`moderate`) — outputs `climate.front_windscreen_heater_requested`; sources `seat-leon-1p-pq35`. The captured Passat did not provide an independently testable front-windscreen-heater control. The mapping is retained only as a related-PQ lead for equipped variants. Verify: Exercise the front-windscreen-heater control on an equipped Passat variant; Confirm 0x3E1 byte 0 bit 0x08 tracks the request independently of rear demist and compressor bits.
 
 #### Canonical events
 
@@ -148,7 +165,8 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 - Legacy aliases: —
 - Compatible market names: Superb II
 - CAN buses: `infotainment`
-- Replay proof: `fixtures/mappings.v1.json`; 24 cases; 13/13 events and 48/48 statuses covered
+- Replay proof: `fixtures/mappings.v1.json`; 25 cases; 13/13 events and 52/52 statuses covered
+- Non-runtime candidate mappings: 4
 
 #### Qualification scope
 
@@ -169,13 +187,21 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 #### Limitations
 
 - Candidate profile derived from one controlled 2012 RHD 2.0 TDI hardware capture; wider Superb II / 3T compatibility is not hardware-qualified.
-- Road-speed decoding was not exercised in the capture and is intentionally omitted.
+- Road-speed decoding is directly observed only at crawl speed (approximately 0.3–2.5 km/h); higher-speed accuracy remains untested.
 - Bonnet input was not testable because the captured vehicle bonnet-switch wiring was cut.
 - Front windscreen heater was unavailable on the captured vehicle and is intentionally omitted.
-- Bulb-warning state was not independently available and is intentionally omitted.
 - Sleep/wake timeout was not exercised; 0x65F presence traffic itself was observed continuously.
 - Fuel-range candidates are intentionally omitted.
 - Open MMI remains passive receive-only and does not transmit vehicle CAN frames.
+
+#### Non-runtime candidate mappings
+
+These mappings are structured research only. They are not loaded by `canbusd`, not published as canonical runtime state, and do not count as profile capabilities.
+
+- `fuel-level` (`strong`) — outputs `fuel.level_l`, `fuel.level_raw`; sources `seat-leon-1p-pq35`. During the Superb session Open MMI was running the Leon decoder and displayed a sane-looking fuel quantity. The capture independently carries lower-seven-bit values from 26 to 30 in 0x621 byte 3, but no exact independent litre truth was recorded. Verify: Compare the live Open MMI quantity with an independent fuel-quantity reading on the same vehicle; Repeat after a meaningful fuel-level change and confirm byte 3 follows the quantity rather than another state.
+- `low-fuel-warning` (`moderate`) — outputs `fuel.low_level_warning`; sources `seat-leon-1p-pq35`. The Superb capture never set 0x621 byte 3 bit 0x80, so the positive warning state was not exercised. The lower seven bits are independently plausible as fuel quantity and the Leon uses bit 0x80 for reserve warning. Verify: Observe the frame when the vehicle independently reports its reserve/low-fuel warning; Confirm bit 0x80 changes without corrupting the lower-seven-bit fuel quantity.
+- `bonnet` (`strong`) — outputs `doors.bonnet`; sources `seat-leon-1p-pq35`, `volkswagen-passat-b6-3c-pq46`. The Superb bonnet-switch wiring was cut, so the state could not be exercised. The rest of its 0x470 closure layout matches the Leon and Passat, both of which use byte 1 bit 0x10 for bonnet. Verify: Restore or test a functioning bonnet switch and compare closed/open 0x470 byte 1 values; Confirm bit 0x10 changes independently of the four door bits and masked boot field.
+- `front-windscreen-heater-request` (`moderate`) — outputs `climate.front_windscreen_heater_requested`; sources `seat-leon-1p-pq35`. The captured Superb did not provide an independently testable front-windscreen-heater control. The mapping is retained only as a related-PQ lead for equipped variants. Verify: Exercise the front-windscreen-heater control on an equipped Superb variant; Confirm 0x3E1 byte 0 bit 0x08 tracks the request independently of rear demist and compressor bits.
 
 #### Canonical events
 
@@ -183,7 +209,7 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 
 #### Canonical statuses
 
-`climate.blower_load_percent`, `climate.blower_load_raw`, `climate.compressor_active`, `climate.klima_status_raw`, `climate.outside_temp_regulation_c`, `climate.outside_temp_regulation_raw`, `climate.outside_temp_unfiltered_c`, `climate.outside_temp_unfiltered_raw`, `climate.rear_window_heater_raw`, `climate.rear_window_heater_requested`, `climate.recirculation_active`, `climate.recirculation_raw`, `doors.any_open`, `doors.boot`, `doors.front_left`, `doors.front_right`, `doors.raw`, `doors.rear_left`, `doors.rear_right`, `electrical.supply_voltage_raw`, `electrical.supply_voltage_v`, `engine.coolant_temp_c`, `engine.coolant_temp_raw`, `engine.speed_raw`, `engine.speed_rpm`, `lighting.brake`, `lighting.dimmer_635_raw`, `lighting.dimmer_percent`, `lighting.dimmer_percent_mirror`, `lighting.dimmer_raw`, `lighting.front_fog`, `lighting.hazards`, `lighting.left_indicator`, `lighting.mode`, `lighting.mode_raw`, `lighting.right_indicator`, `lighting.secondary_raw`, `steering.angle_degrees`, `steering.angle_magnitude_raw`, `steering.angle_raw`, `steering.direction`, `vehicle.handbrake`, `vehicle.handbrake_raw`, `vehicle.odometer_km`, `vehicle.odometer_raw`, `vehicle.present`, `vehicle.reverse`, `vehicle.reverse_raw`
+`climate.blower_load_percent`, `climate.blower_load_raw`, `climate.compressor_active`, `climate.klima_status_raw`, `climate.outside_temp_regulation_c`, `climate.outside_temp_regulation_raw`, `climate.outside_temp_unfiltered_c`, `climate.outside_temp_unfiltered_raw`, `climate.rear_window_heater_raw`, `climate.rear_window_heater_requested`, `climate.recirculation_active`, `climate.recirculation_raw`, `doors.any_open`, `doors.boot`, `doors.front_left`, `doors.front_right`, `doors.raw`, `doors.rear_left`, `doors.rear_right`, `electrical.supply_voltage_raw`, `electrical.supply_voltage_v`, `engine.coolant_temp_c`, `engine.coolant_temp_raw`, `engine.speed_raw`, `engine.speed_rpm`, `lighting.brake`, `lighting.bulb_out`, `lighting.bulb_out_raw`, `lighting.dimmer_635_raw`, `lighting.dimmer_percent`, `lighting.dimmer_percent_mirror`, `lighting.dimmer_raw`, `lighting.front_fog`, `lighting.hazards`, `lighting.left_indicator`, `lighting.mode`, `lighting.mode_raw`, `lighting.right_indicator`, `lighting.secondary_raw`, `steering.angle_degrees`, `steering.angle_magnitude_raw`, `steering.angle_raw`, `steering.direction`, `vehicle.handbrake`, `vehicle.handbrake_raw`, `vehicle.odometer_km`, `vehicle.odometer_raw`, `vehicle.present`, `vehicle.reverse`, `vehicle.reverse_raw`, `vehicle.speed_kmh`, `vehicle.speed_raw`
 
 ## Regeneration
 

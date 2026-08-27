@@ -127,6 +127,7 @@ The command verifies:
 - CAN bus metadata and decoder structure;
 - canonical event and status contracts;
 - deterministic `fixtures/mappings.v1.json` replay with complete event/status coverage;
+- optional structured non-runtime candidates in `notes/candidate_mappings.v1.json`;
 - a capability inventory derived from the profile rather than handwritten claims.
 
 CI runs the same complete-catalogue command. A failed report blocks admission to the maintained
@@ -143,12 +144,33 @@ vehicles/<brand>/<model>/<generation-platform>/
 ├── fixtures/mappings.v1.json
 ├── evidence/
 └── notes/
+    └── candidate_mappings.v1.json   # optional, non-runtime research queue
 ```
 
 The folder explains where a vehicle belongs. The profile ID remains the stable
 machine contract and therefore does not need to mirror every path component.
 Existing IDs can be retained as deprecated aliases while the maintained tree is
 reorganised.
+
+
+### Structured candidate mappings
+
+Related vehicles often provide enough evidence to make a mapping worth preserving before it
+is safe to claim as a runtime capability. An optional
+`notes/candidate_mappings.v1.json` file records those leads without adding them to
+`config.json`. The envelope must set `runtime_authority` to `false`; conformance validates
+that each candidate is a canonical, technically valid status rule and that none of its
+outputs are already active capabilities.
+
+Candidate confidence (`weak`, `moderate`, or `strong`) describes the quality of the lead,
+not support status. Generated catalogue/matrix documentation lists candidates separately.
+`canbusd`, replay coverage totals, dashboard state and canonical capability counts ignore
+these files entirely.
+
+Promotion is explicit: verify the candidate on the target vehicle, move or merge the rule
+into `config.json`, add deterministic replay coverage, remove the candidate entry, and
+update the capture/evidence note. This makes cross-platform verification fast without
+allowing likely-but-unverified mappings to acquire runtime authority by accident.
 
 Replay one profile, using either its canonical ID or a legacy alias:
 

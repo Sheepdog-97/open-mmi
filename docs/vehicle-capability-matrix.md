@@ -4,15 +4,16 @@
 
 The matrix compares canonical event and status coverage across maintained integrations.
 A blank cell means the maintained profile does not currently claim that capability; it does
-not prove that the physical vehicle lacks the feature.
+not prove that the physical vehicle lacks the feature. Structured cross-profile candidates are
+listed separately and never count as runtime capabilities until promoted into `config.json`.
 
 ## Profile key
 
-| Profile | Vehicle | Maturity | Qualification | Last tested | Review | Recheck after | Events | Statuses |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `seat-leon-1p-pq35` | SEAT Leon Mk2 / 1P (PQ35) | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | 11 | 63 |
-| `volkswagen-passat-b6-3c-pq46` | Volkswagen Passat B6 / 3C (PQ46) | candidate | replay | 2026-08-27 | approved | 2027-08-27 | 10 | 50 |
-| `skoda-superb-3t-pq46` | Škoda Superb II / 3T (PQ46) | candidate | replay | 2026-08-27 | approved | 2027-08-27 | 13 | 48 |
+| Profile | Vehicle | Maturity | Qualification | Last tested | Review | Recheck after | Events | Statuses | Candidates |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `seat-leon-1p-pq35` | SEAT Leon Mk2 / 1P (PQ35) | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | 11 | 63 | 0 |
+| `volkswagen-passat-b6-3c-pq46` | Volkswagen Passat B6 / 3C (PQ46) | candidate | replay | 2026-08-27 | approved | 2027-08-27 | 10 | 50 | 5 |
+| `skoda-superb-3t-pq46` | Škoda Superb II / 3T (PQ46) | candidate | replay | 2026-08-27 | approved | 2027-08-27 | 13 | 52 | 4 |
 
 ## Canonical events
 
@@ -76,8 +77,8 @@ not prove that the physical vehicle lacks the feature.
 | `fuel.level_raw` | Yes | — | — |
 | `fuel.low_level_warning` | Yes | — | — |
 | `lighting.brake` | Yes | Yes | Yes |
-| `lighting.bulb_out` | Yes | Yes | — |
-| `lighting.bulb_out_raw` | Yes | Yes | — |
+| `lighting.bulb_out` | Yes | Yes | Yes |
+| `lighting.bulb_out_raw` | Yes | Yes | Yes |
 | `lighting.dimmer_635_raw` | Yes | Yes | Yes |
 | `lighting.dimmer_percent` | Yes | Yes | Yes |
 | `lighting.dimmer_percent_mirror` | Yes | Yes | Yes |
@@ -100,8 +101,24 @@ not prove that the physical vehicle lacks the feature.
 | `vehicle.present` | Yes | Yes | Yes |
 | `vehicle.reverse` | Yes | Yes | Yes |
 | `vehicle.reverse_raw` | Yes | Yes | Yes |
-| `vehicle.speed_kmh` | Yes | — | — |
-| `vehicle.speed_raw` | Yes | — | — |
+| `vehicle.speed_kmh` | Yes | — | Yes |
+| `vehicle.speed_raw` | Yes | — | Yes |
+
+## Non-runtime cross-profile candidates
+
+These cells are verification leads, not support claims. Candidate rules live under
+`notes/candidate_mappings.v1.json`; runtime and canonical capability counts ignore them.
+
+| Canonical descriptor | `seat-leon-1p-pq35` | `volkswagen-passat-b6-3c-pq46` | `skoda-superb-3t-pq46` |
+| --- | --- | --- | --- |
+| `climate.front_windscreen_heater_requested` | — | Candidate (moderate) | Candidate (moderate) |
+| `doors.bonnet` | — | — | Candidate (strong) |
+| `fuel.level_l` | — | Candidate (strong) | Candidate (strong) |
+| `fuel.level_raw` | — | Candidate (strong) | Candidate (strong) |
+| `fuel.low_level_warning` | — | Candidate (moderate) | Candidate (moderate) |
+| `lighting.front_fog` | — | Candidate (strong) | — |
+| `vehicle.speed_kmh` | — | Candidate (strong) | — |
+| `vehicle.speed_raw` | — | Candidate (strong) | — |
 
 ## Regeneration
 

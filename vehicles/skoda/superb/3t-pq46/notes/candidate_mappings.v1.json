@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "record_id": "open-mmi.vehicle-candidate-mappings",
+  "profile_id": "skoda-superb-3t-pq46",
+  "runtime_authority": false,
+  "candidates": [
+    {
+      "id": "fuel-level",
+      "status": "candidate",
+      "confidence": "strong",
+      "rule": {
+        "id": "0x621",
+        "byte": 3,
+        "type": "scaled",
+        "path": "fuel.level_l",
+        "mask": "0x7F",
+        "scale": 1.0,
+        "offset": 0.0,
+        "round": 0,
+        "raw_path": "fuel.level_raw"
+      },
+      "source_profiles": [
+        "seat-leon-1p-pq35"
+      ],
+      "local_evidence": "During the Superb session Open MMI was running the Leon decoder and displayed a sane-looking fuel quantity. The capture independently carries lower-seven-bit values from 26 to 30 in 0x621 byte 3, but no exact independent litre truth was recorded.",
+      "verify": [
+        "Compare the live Open MMI quantity with an independent fuel-quantity reading on the same vehicle.",
+        "Repeat after a meaningful fuel-level change and confirm byte 3 follows the quantity rather than another state."
+      ]
+    },
+    {
+      "id": "low-fuel-warning",
+      "status": "candidate",
+      "confidence": "moderate",
+      "rule": {
+        "id": "0x621",
+        "byte": 3,
+        "type": "bool",
+        "path": "fuel.low_level_warning",
+        "mask": "0x80",
+        "true": "0x80",
+        "false": "0x00"
+      },
+      "source_profiles": [
+        "seat-leon-1p-pq35"
+      ],
+      "local_evidence": "The Superb capture never set 0x621 byte 3 bit 0x80, so the positive warning state was not exercised. The lower seven bits are independently plausible as fuel quantity and the Leon uses bit 0x80 for reserve warning.",
+      "verify": [
+        "Observe the frame when the vehicle independently reports its reserve/low-fuel warning.",
+        "Confirm bit 0x80 changes without corrupting the lower-seven-bit fuel quantity."
+      ]
+    },
+    {
+      "id": "bonnet",
+      "status": "candidate",
+      "confidence": "strong",
+      "rule": {
+        "id": "0x470",
+        "byte": 1,
+        "type": "bitfield",
+        "path": "doors",
+        "fields": {
+          "bonnet": "0x10"
+        }
+      },
+      "source_profiles": [
+        "seat-leon-1p-pq35",
+        "volkswagen-passat-b6-3c-pq46"
+      ],
+      "local_evidence": "The Superb bonnet-switch wiring was cut, so the state could not be exercised. The rest of its 0x470 closure layout matches the Leon and Passat, both of which use byte 1 bit 0x10 for bonnet.",
+      "verify": [
+        "Restore or test a functioning bonnet switch and compare closed/open 0x470 byte 1 values.",
+        "Confirm bit 0x10 changes independently of the four door bits and masked boot field."
+      ]
+    },
+    {
+      "id": "front-windscreen-heater-request",
+      "status": "candidate",
+      "confidence": "moderate",
+      "rule": {
+        "id": "0x3E1",
+        "byte": 0,
+        "type": "bool",
+        "path": "climate.front_windscreen_heater_requested",
+        "mask": "0x08",
+        "true": "0x08",
+        "false": "0x00"
+      },
+      "source_profiles": [
+        "seat-leon-1p-pq35"
+      ],
+      "local_evidence": "The captured Superb did not provide an independently testable front-windscreen-heater control. The mapping is retained only as a related-PQ lead for equipped variants.",
+      "verify": [
+        "Exercise the front-windscreen-heater control on an equipped Superb variant.",
+        "Confirm 0x3E1 byte 0 bit 0x08 tracks the request independently of rear demist and compressor bits."
+      ]
+    }
+  ]
+}

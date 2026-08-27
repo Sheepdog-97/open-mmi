@@ -85,10 +85,33 @@ was a coarse 850 rpm reference while raw CAN values clustered around 780–800 r
 The odometer's lower 20 bits decoded to 174684 km, closely matching the entered
 108541 mi using the VAG conversion relationship seen across the three captures.
 
+
+## Cross-profile candidates retained without runtime authority
+
+The capture also provides useful evidence for several mappings that are not yet
+claimed by the Passat runtime profile. They are recorded in
+`notes/candidate_mappings.v1.json` as ready-to-verify rules:
+
+- `0x621` byte 3 lower seven bits decoded to 18 or 19 litres in 6450 of 6452
+  frames, with only two transient zero values. That is a plausible fuel quantity,
+  but no independent litre truth was recorded. Bit `0x80` never set, so the
+  low-fuel warning has only a negative local observation.
+- `0x351` speed bytes decoded to zero in 6451 of 6452 frames while the Passat
+  remained stationary. The lone non-zero value was sentinel-like `0xFF88`; this
+  supports the zero state but does not validate the moving scale.
+- front fog was not exercised locally, but the Leon and Superb independently
+  identify `0x531 byte0 & 0x08` as the front-fog bit.
+- the front-windscreen-heater bit remains an equipment-conditional lead from the
+  related Leon profile because the captured Passat did not expose a testable
+  control.
+
+These candidates are deliberately excluded from `config.json`, replay capability
+counts and runtime publication until their local verification steps are completed.
+
 ## Deliberately not exposed
 
-- **Road speed:** operator skipped the road-speed test.
-- **Front windscreen heater:** feature unavailable on the captured vehicle.
+- **Road speed:** operator skipped the moving test; stationary zero-state evidence is retained only as a structured non-runtime candidate.
+- **Front windscreen heater:** feature unavailable on the captured vehicle; retained only as a structured non-runtime candidate for equipped variants.
 - **Fuel range:** entered dashboard range did not agree with prior candidate fields; omitted.
 - **Mute / play-pause:** not present as physical controls on this wheel.
-- **Front fog:** base-mode masking retained, but no Passat front-fog status is claimed.
+- **Front fog:** base-mode masking retained; the shared bit is recorded as a structured non-runtime candidate, but no Passat front-fog status is claimed.

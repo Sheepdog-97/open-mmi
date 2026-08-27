@@ -25,7 +25,9 @@ The SEAT profile remains the generation-wide hardware-qualified reference. The S
 Passat profiles have reviewed real-car capture evidence plus complete deterministic replay,
 but their formal qualification remains `replay` and their compatibility claims stay bounded
 to the captured vehicles rather than the whole generation. See the
-[vehicle catalogue](docs/vehicle-catalogue.md) for exact evidence and limitations.
+[vehicle catalogue](docs/vehicle-catalogue.md) for exact evidence and limitations. Likely
+related-PQ mappings that still need local truth can be preserved as structured non-runtime
+candidates, so they are easy to verify without being published as supported vehicle state.
 
 Open MMI currently remains:
 
