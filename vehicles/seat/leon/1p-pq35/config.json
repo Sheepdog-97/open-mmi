@@ -20,7 +20,7 @@
       "level": "hardware",
       "last_tested": "2026-07-20",
       "scope": [
-        "Passive comfort CAN reception at 100 kbit/s",
+        "Passive infotainment CAN reception at 100 kbit/s",
         "Canonical steering-wheel and presence events",
         "Canonical vehicle status decoding",
         "Reviewed Vehicle Setup apply and rollback",
@@ -41,21 +41,26 @@
           "kind": "research",
           "path": "vehicles/seat/leon/1p-pq35/notes/experimental_can_candidates_2026-07-04.md",
           "description": "Reverse-engineering notes for mappings that remain experimental or diagnostic."
+        },
+        {
+          "kind": "research",
+          "path": "vehicles/seat/leon/1p-pq35/notes/tpms_warning_2026-07-29.md",
+          "description": "TPMS candidate rejection after transition and independent lamp-off control review."
         }
       ]
     },
     "limitations": [
-      "Only the comfort CAN bus is qualified.",
+      "Only the infotainment CAN bus is qualified.",
       "Selected climate and lighting paths remain experimental or diagnostic.",
       "Open MMI remains passive receive-only and does not transmit vehicle CAN frames."
     ]
   },
-  "default_bus": "comfort",
+  "default_bus": "infotainment",
   "can_buses": {
-    "comfort": {
+    "infotainment": {
       "interface": "can0",
       "bitrate": 100000,
-      "capture_point": "maintainer-tested comfort CAN connection",
+      "capture_point": "maintainer-tested radio infotainment CAN connection",
       "provisioning": "udev",
       "bring_up": false,
       "notes": "Seat Leon 1P / VAG PQ35 maintainer-tested reference setup."
@@ -199,15 +204,6 @@
       "mask": "0x80",
       "true": "0x80",
       "false": "0x00"
-    },
-    {
-      "id": "0x635",
-      "byte": 0,
-      "type": "bool",
-      "path": "lighting.lights_on",
-      "true": "0x64",
-      "false": "0x00",
-      "raw_path": "lighting.lights_on_raw"
     },
     {
       "id": "0x531",

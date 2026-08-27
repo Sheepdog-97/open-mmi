@@ -31,7 +31,7 @@ Current behaviour on `main`:
 
 * the daemon resolves an active named bus
 * the default named bus is `comfort`
-* the Seat 1P profile declares `default_bus` and `can_buses.comfort`
+* the Seat 1P profile declares `default_bus` and `can_buses.infotainment`
 * the default SocketCAN interface is `can0`
 * `OPEN_MMI_CAN_BUS` can override the selected named bus
 * `OPEN_MMI_CAN_INTERFACE` can override the consumed SocketCAN interface
@@ -46,7 +46,7 @@ The maintainer-tested real-car path remains:
 
 ```text
 Seat Leon 1P / VAG PQ35
-bus: comfort
+bus: infotainment
 interface: can0
 bitrate metadata: 100000
 provisioning: udev
@@ -103,12 +103,12 @@ Vehicle profiles may declare named CAN bus metadata:
 
 ```json
 {
-  "default_bus": "comfort",
+  "default_bus": "infotainment",
   "can_buses": {
-    "comfort": {
+    "infotainment": {
       "interface": "can0",
       "bitrate": 100000,
-      "capture_point": "maintainer-tested comfort CAN connection",
+      "capture_point": "maintainer-tested radio infotainment CAN connection",
       "provisioning": "udev",
       "bring_up": false
     }
@@ -185,7 +185,7 @@ Status: **done for the Seat 1P reference profile**.
 The Seat Leon 1P / VAG PQ35 profile now declares:
 
 ```text
-default bus: comfort
+default bus: infotainment
 tested interface: can0
 tested bitrate: 100000
 provisioning: udev
@@ -198,7 +198,7 @@ Status: **implemented, lightly used**.
 Rules, presence rules, and status rules may declare `bus`.
 
 The current Seat 1P profile does not need explicit `bus` fields yet because all entries
-belong to the default `comfort` bus.
+belong to the default `infotainment` bus.
 
 ### Phase 5: multiple active buses
 

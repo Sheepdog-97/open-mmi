@@ -68,7 +68,7 @@ Profiles are grouped by source:
 
 ```text
 Maintained
-  (•) Seat 1P              VAG PQ35 · Comfort CAN · 100 kbit/s
+  (•) Seat 1P              VAG PQ35 · Infotainment CAN · 100 kbit/s
 
 Custom
   ( ) My Seat              Based on SEAT Leon 1P / Mk2 (PQ35) · locally modified
@@ -181,7 +181,7 @@ Success:
 
 ```text
 Setup applied
-Seat 1P / Default is active on comfort via can0.
+Seat 1P / Default is active on infotainment via can0.
 ```
 
 Success with no adapter:

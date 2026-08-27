@@ -3,7 +3,7 @@
 - Canonical profile ID: `seat-leon-1p-pq35`
 - Deprecated compatibility ID: `seat_1p`
 
-This is the maintainer-qualified reference profile for passive comfort-CAN
+This is the maintainer-qualified reference profile for passive infotainment-CAN
 reception at 100 kbit/s. The exact qualification scope and limitations are in
 `config.json`; broader hardware acceptance is recorded in the Vehicle Setup
 qualification document.

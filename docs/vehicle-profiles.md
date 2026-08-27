@@ -20,7 +20,7 @@ The maintainer-tested reference vehicle is currently:
 
 * SEAT Leon 1P
 * VAG PQ35 platform
-* comfort CAN at 100000 bitrate
+* infotainment CAN at 100000 bitrate
 * SocketCAN interface currently provisioned as `can0`
 
 This does not mean `open-mmi` is a finished Seat/VW infotainment product. The project is
@@ -74,12 +74,12 @@ A vehicle profile may contain:
 
 ```json
 {
-  "default_bus": "comfort",
+  "default_bus": "infotainment",
   "can_buses": {
-    "comfort": {
+    "infotainment": {
       "interface": "can0",
       "bitrate": 100000,
-      "capture_point": "maintainer-tested comfort CAN connection",
+      "capture_point": "maintainer-tested radio infotainment CAN connection",
       "provisioning": "udev",
       "bring_up": false
     }

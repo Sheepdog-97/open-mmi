@@ -808,6 +808,31 @@
         "steering direction left right center"
       ]
     },
+    "tyres.pressure_monitoring_warning": {
+      "title": "Tyre-pressure monitoring warning",
+      "category": "vehicle",
+      "description": "Whether the tyre-pressure monitoring system is requesting its warning indicator.",
+      "value": {
+        "type": "boolean",
+        "nullable": false
+      },
+      "status": "experimental",
+      "search_terms": [
+        "tyre tire pressure monitoring system tpms warning lamp low pressure fault"
+      ]
+    },
+    "tyres.pressure_monitoring_warning_raw": {
+      "title": "Tyre-pressure monitoring warning raw byte",
+      "category": "vehicle",
+      "description": "Uninterpreted source byte containing the tyre-pressure monitoring warning bit.",
+      "value": {
+        "type": "integer",
+        "nullable": false,
+        "minimum": 0,
+        "maximum": 255
+      },
+      "status": "diagnostic"
+    },
     "vehicle.handbrake": {
       "title": "Handbrake applied",
       "category": "vehicle",

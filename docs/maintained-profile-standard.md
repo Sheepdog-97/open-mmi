@@ -48,7 +48,7 @@ A maintained profile starts with:
       "level": "hardware",
       "last_tested": "2026-07-20",
       "scope": [
-        "Passive comfort CAN reception at 100 kbit/s"
+        "Passive infotainment CAN reception at 100 kbit/s"
       ],
       "evidence": [
         {
@@ -59,10 +59,10 @@ A maintained profile starts with:
       ]
     },
     "limitations": [
-      "Only the comfort CAN bus is qualified."
+      "Only the infotainment CAN bus is qualified."
     ]
   },
-  "default_bus": "comfort",
+  "default_bus": "infotainment",
   "can_buses": {},
   "rules": [],
   "presence": [],

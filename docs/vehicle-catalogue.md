@@ -16,7 +16,7 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 
 | Profile | Vehicle | Years | Maturity | Qualification | Last tested | Review | Recheck after | Legacy aliases | Compatible market names | Replay coverage | Evidence | Canonical capabilities |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [`seat-leon-1p-pq35`](#seat-leon-1p-pq35) | SEAT Leon 1P / Mk2 (PQ35) | 2005–2012 | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | `seat_1p` | — | 24 cases; 11/11 events; 64/64 statuses | hardware: 1, replay: 1, research: 1 | 11 events; 64 statuses |
+| [`seat-leon-1p-pq35`](#seat-leon-1p-pq35) | SEAT Leon 1P / Mk2 (PQ35) | 2005–2012 | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | `seat_1p` | — | 24 cases; 11/11 events; 62/62 statuses | hardware: 1, replay: 1, research: 2 | 11 events; 62 statuses |
 
 ## Profiles
 
@@ -34,12 +34,12 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 - Qualification history entries: 1
 - Legacy aliases: `seat_1p`
 - Compatible market names: —
-- CAN buses: `comfort`
-- Replay proof: `fixtures/mappings.v1.json`; 24 cases; 11/11 events and 64/64 statuses covered
+- CAN buses: `infotainment`
+- Replay proof: `fixtures/mappings.v1.json`; 24 cases; 11/11 events and 62/62 statuses covered
 
 #### Qualification scope
 
-- Passive comfort CAN reception at 100 kbit/s
+- Passive infotainment CAN reception at 100 kbit/s
 - Canonical steering-wheel and presence events
 - Canonical vehicle status decoding
 - Reviewed Vehicle Setup apply and rollback
@@ -47,7 +47,7 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 
 #### Compatibility boundary
 
-- Equipment: Maintainer-qualified passive comfort CAN connection at 100 kbit/s
+- Equipment: Maintainer-qualified passive radio infotainment CAN connection at 100 kbit/s
 - Vehicle variants: SEAT Leon 1P / Mk2 (PQ35), model years 2005 to 2012
 
 #### Evidence
@@ -55,10 +55,11 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 - `hardware` — [`docs/design/v1-vehicle-setup/qualification.md`](../docs/design/v1-vehicle-setup/qualification.md): Maintainer hardware qualification and V1 acceptance record.
 - `replay` — [`vehicles/seat/leon/1p-pq35/fixtures/mappings.v1.json`](../vehicles/seat/leon/1p-pq35/fixtures/mappings.v1.json): Deterministic replay coverage for every canonical event and status output.
 - `research` — [`vehicles/seat/leon/1p-pq35/notes/experimental_can_candidates_2026-07-04.md`](../vehicles/seat/leon/1p-pq35/notes/experimental_can_candidates_2026-07-04.md): Reverse-engineering notes for mappings that remain experimental or diagnostic.
+- `research` — [`vehicles/seat/leon/1p-pq35/notes/tpms_warning_2026-07-29.md`](../vehicles/seat/leon/1p-pq35/notes/tpms_warning_2026-07-29.md): TPMS candidate rejection after transition and independent lamp-off control review.
 
 #### Limitations
 
-- Only the comfort CAN bus is qualified.
+- Only the infotainment CAN bus is qualified.
 - Selected climate and lighting paths remain experimental or diagnostic.
 - Open MMI remains passive receive-only and does not transmit vehicle CAN frames.
 
@@ -68,7 +69,7 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 
 #### Canonical statuses
 
-`climate.blower_load_percent`, `climate.blower_load_raw`, `climate.compressor_active`, `climate.debug_555_b1`, `climate.debug_555_b1_raw`, `climate.debug_555_b3`, `climate.debug_555_b3_raw`, `climate.debug_555_b4`, `climate.debug_555_b4_raw`, `climate.front_windscreen_heater_requested`, `climate.klima_status_raw`, `climate.outside_temp_regulation_c`, `climate.outside_temp_regulation_raw`, `climate.outside_temp_unfiltered_c`, `climate.outside_temp_unfiltered_raw`, `climate.rear_window_heater_raw`, `climate.rear_window_heater_requested`, `climate.recirculation_active`, `climate.recirculation_raw`, `doors.any_open`, `doors.bonnet`, `doors.boot`, `doors.front_left`, `doors.front_right`, `doors.raw`, `doors.rear_left`, `doors.rear_right`, `electrical.supply_voltage_raw`, `electrical.supply_voltage_v`, `engine.coolant_temp_c`, `engine.coolant_temp_raw`, `engine.speed_raw`, `engine.speed_rpm`, `fuel.level_l`, `fuel.level_raw`, `fuel.low_level_warning`, `lighting.brake`, `lighting.bulb_out`, `lighting.bulb_out_raw`, `lighting.dimmer_635_raw`, `lighting.dimmer_percent`, `lighting.dimmer_percent_mirror`, `lighting.dimmer_raw`, `lighting.hazards`, `lighting.left_indicator`, `lighting.lights_on`, `lighting.lights_on_raw`, `lighting.mode`, `lighting.mode_raw`, `lighting.right_indicator`, `lighting.secondary_raw`, `steering.angle_degrees`, `steering.angle_magnitude_raw`, `steering.angle_raw`, `steering.direction`, `vehicle.handbrake`, `vehicle.handbrake_raw`, `vehicle.odometer_km`, `vehicle.odometer_raw`, `vehicle.present`, `vehicle.reverse`, `vehicle.reverse_raw`, `vehicle.speed_kmh`, `vehicle.speed_raw`
+`climate.blower_load_percent`, `climate.blower_load_raw`, `climate.compressor_active`, `climate.debug_555_b1`, `climate.debug_555_b1_raw`, `climate.debug_555_b3`, `climate.debug_555_b3_raw`, `climate.debug_555_b4`, `climate.debug_555_b4_raw`, `climate.front_windscreen_heater_requested`, `climate.klima_status_raw`, `climate.outside_temp_regulation_c`, `climate.outside_temp_regulation_raw`, `climate.outside_temp_unfiltered_c`, `climate.outside_temp_unfiltered_raw`, `climate.rear_window_heater_raw`, `climate.rear_window_heater_requested`, `climate.recirculation_active`, `climate.recirculation_raw`, `doors.any_open`, `doors.bonnet`, `doors.boot`, `doors.front_left`, `doors.front_right`, `doors.raw`, `doors.rear_left`, `doors.rear_right`, `electrical.supply_voltage_raw`, `electrical.supply_voltage_v`, `engine.coolant_temp_c`, `engine.coolant_temp_raw`, `engine.speed_raw`, `engine.speed_rpm`, `fuel.level_l`, `fuel.level_raw`, `fuel.low_level_warning`, `lighting.brake`, `lighting.bulb_out`, `lighting.bulb_out_raw`, `lighting.dimmer_635_raw`, `lighting.dimmer_percent`, `lighting.dimmer_percent_mirror`, `lighting.dimmer_raw`, `lighting.hazards`, `lighting.left_indicator`, `lighting.mode`, `lighting.mode_raw`, `lighting.right_indicator`, `lighting.secondary_raw`, `steering.angle_degrees`, `steering.angle_magnitude_raw`, `steering.angle_raw`, `steering.direction`, `vehicle.handbrake`, `vehicle.handbrake_raw`, `vehicle.odometer_km`, `vehicle.odometer_raw`, `vehicle.present`, `vehicle.reverse`, `vehicle.reverse_raw`, `vehicle.speed_kmh`, `vehicle.speed_raw`
 
 ## Regeneration
 

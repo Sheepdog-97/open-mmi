@@ -17,7 +17,7 @@ The current single-bus runtime resolves:
 
 ```text
 named bus label  ->  SocketCAN interface
-comfort          ->  can0
+infotainment     ->  can0
 ```
 
 The daemon consumes an already-provisioned SocketCAN interface. It does not silently
@@ -39,12 +39,12 @@ Vehicle profiles may declare:
 
 ```json
 {
-  "default_bus": "comfort",
+  "default_bus": "infotainment",
   "can_buses": {
-    "comfort": {
+    "infotainment": {
       "interface": "can0",
       "bitrate": 100000,
-      "capture_point": "maintainer-tested comfort CAN connection",
+      "capture_point": "maintainer-tested radio infotainment CAN connection",
       "provisioning": "udev",
       "bring_up": false
     }

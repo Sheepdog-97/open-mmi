@@ -6,7 +6,7 @@
     "level": "hardware",
     "tested_on": "2026-07-20",
     "scope": [
-      "Passive comfort CAN reception at 100 kbit/s",
+      "Passive infotainment CAN reception at 100 kbit/s",
       "Canonical steering-wheel and presence events",
       "Canonical vehicle status decoding",
       "Reviewed Vehicle Setup apply and rollback",
@@ -14,7 +14,7 @@
     ],
     "compatibility": {
       "equipment": [
-        "Maintainer-qualified passive comfort CAN connection at 100 kbit/s"
+        "Maintainer-qualified passive radio infotainment CAN connection at 100 kbit/s"
       ],
       "variants": [
         "SEAT Leon 1P / Mk2 (PQ35), model years 2005 to 2012"
