@@ -26,6 +26,18 @@
   "arrow_right": {
     "action": "navigation.focus.right"
   },
+  "arrow_up": {
+    "action": "navigation.focus.up"
+  },
+  "arrow_down": {
+    "action": "navigation.focus.down"
+  },
+  "confirm": {
+    "action": "navigation.activate"
+  },
+  "back": {
+    "action": "navigation.back"
+  },
   "brightness_level": {
     "action": "display.brightness.set"
   },

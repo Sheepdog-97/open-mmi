@@ -1,0 +1,394 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "id": "skoda-superb-3t-pq46",
+    "display_name": "Škoda Superb II 3T (PQ46)",
+    "manufacturer": "Škoda",
+    "model": "Superb",
+    "generation": "3T",
+    "platform": "VAG PQ46",
+    "market_aliases": [
+      "Superb II"
+    ],
+    "model_years": {
+      "from": 2008,
+      "to": 2015
+    },
+    "maturity": "experimental",
+    "license": "GPL-3.0-only",
+    "maintainers": [
+      "Open MMI contributors"
+    ],
+    "qualification": {
+      "level": "none",
+      "last_tested": null,
+      "scope": [],
+      "evidence": []
+    },
+    "limitations": [
+      "Experimental profile derived from one 2012 RHD 2.0 TDI hardware capture; wider 3T compatibility is not yet qualified.",
+      "Road-speed decoding was not exercised in the capture and is intentionally omitted.",
+      "Bonnet input was not testable because the captured vehicle bonnet-switch wiring was cut.",
+      "Front windscreen heater was unavailable on the captured vehicle and is intentionally omitted.",
+      "Bulb-warning state was not independently available and is intentionally omitted.",
+      "Sleep/wake timeout was not exercised; 0x65F presence traffic itself was observed continuously.",
+      "Fuel-range candidates are intentionally omitted.",
+      "Open MMI remains passive receive-only and does not transmit vehicle CAN frames."
+    ]
+  },
+  "default_bus": "infotainment",
+  "can_buses": {
+    "infotainment": {
+      "interface": "can0",
+      "bitrate": 100000,
+      "capture_point": "radio infotainment CAN connection observed on a 2012 Škoda Superb 3T",
+      "provisioning": "udev",
+      "bring_up": false,
+      "notes": "Experimental VAG PQ46 radio/infotainment CAN profile; receive-only."
+    }
+  },
+  "rules": [
+    {
+      "id": "0x5C1",
+      "matches": [
+        {
+          "byte": 0,
+          "value": "0x13"
+        },
+        {
+          "byte": 2,
+          "value": "0x01"
+        }
+      ],
+      "event": "volume_up"
+    },
+    {
+      "id": "0x5C1",
+      "matches": [
+        {
+          "byte": 0,
+          "value": "0x13"
+        },
+        {
+          "byte": 2,
+          "value": "0x0F"
+        }
+      ],
+      "event": "volume_down"
+    },
+    {
+      "id": "0x5C1",
+      "matches": [
+        {
+          "byte": 0,
+          "value": "0x14"
+        },
+        {
+          "byte": 2,
+          "value": "0x01"
+        }
+      ],
+      "event": "arrow_up"
+    },
+    {
+      "id": "0x5C1",
+      "matches": [
+        {
+          "byte": 0,
+          "value": "0x14"
+        },
+        {
+          "byte": 2,
+          "value": "0x0F"
+        }
+      ],
+      "event": "arrow_down"
+    },
+    {
+      "id": "0x5C1",
+      "byte": 0,
+      "value": "0x28",
+      "event": "confirm"
+    },
+    {
+      "id": "0x5C1",
+      "byte": 0,
+      "value": "0x29",
+      "event": "back"
+    },
+    {
+      "id": "0x5C1",
+      "byte": 0,
+      "value": "0x2A",
+      "event": "mute_toggle"
+    },
+    {
+      "id": "0x5C1",
+      "byte": 0,
+      "value": "0x1A",
+      "event": "telephone"
+    },
+    {
+      "id": "0x5C1",
+      "byte": 0,
+      "value": "0x02",
+      "event": "next_track"
+    },
+    {
+      "id": "0x5C1",
+      "byte": 0,
+      "value": "0x03",
+      "event": "previous_track"
+    },
+    {
+      "id": "0x470",
+      "byte": 2,
+      "value": "any",
+      "event": "brightness_level"
+    }
+  ],
+  "presence": [
+    {
+      "id": "0x65F",
+      "timeout_ms": 6000,
+      "on_present": "vehicle_present:on",
+      "on_absent": "vehicle_present:off"
+    }
+  ],
+  "status": [
+    {
+      "id": "0x470",
+      "byte": 1,
+      "type": "bitfield",
+      "path": "doors",
+      "fields": {
+        "front_right": "0x01",
+        "front_left": "0x02",
+        "rear_left": "0x04",
+        "rear_right": "0x08"
+      },
+      "equals": {
+        "boot": {
+          "mask": "0x60",
+          "value": "0x60"
+        }
+      },
+      "any": "any_open",
+      "raw": "raw"
+    },
+    {
+      "id": "0x470",
+      "byte": 2,
+      "type": "percent",
+      "path": "lighting.dimmer_percent",
+      "mask": "0x7F",
+      "raw_path": "lighting.dimmer_raw"
+    },
+    {
+      "id": "0x351",
+      "byte": 0,
+      "type": "bool",
+      "path": "vehicle.reverse",
+      "true": "0x02",
+      "false": "0x00",
+      "raw_path": "vehicle.reverse_raw"
+    },
+    {
+      "id": "0x621",
+      "byte": 0,
+      "type": "bool",
+      "path": "vehicle.handbrake",
+      "true": "0x20",
+      "false": "0x00",
+      "mask": "0x20",
+      "raw_path": "vehicle.handbrake_raw"
+    },
+    {
+      "id": "0x531",
+      "byte": 0,
+      "type": "enum",
+      "path": "lighting.mode",
+      "values": {
+        "0x00": "off",
+        "0xC1": "sides",
+        "0xC3": "dip",
+        "0xD3": "rear_fog",
+        "0x04": "main_beam_lights_off",
+        "0xC5": "main_beam_sides",
+        "0xC7": "main_beam_dip",
+        "0xD7": "main_beam_rear_fog",
+        "0xE3": "reverse_with_dip",
+        "0x20": "lights_off_reverse",
+        "0xE1": "sides_with_reverse",
+        "0xF3": "rear_fog_with_reverse"
+      },
+      "default": "unknown",
+      "raw_path": "lighting.mode_raw",
+      "mask": "0xF7"
+    },
+    {
+      "id": "0x531",
+      "byte": 0,
+      "type": "bool",
+      "path": "lighting.front_fog",
+      "mask": "0x08",
+      "true": "0x08",
+      "false": "0x00"
+    },
+    {
+      "id": "0x531",
+      "byte": 1,
+      "type": "bitfield",
+      "path": "lighting",
+      "fields": {
+        "brake": "0x40",
+        "left_indicator": "0x01",
+        "right_indicator": "0x02",
+        "hazards": "0x08"
+      },
+      "raw": "secondary_raw"
+    },
+    {
+      "id": "0x3C3",
+      "type": "steering_angle",
+      "path": "steering.angle_degrees",
+      "bytes": [
+        0,
+        1
+      ],
+      "encoding": "sign_magnitude_15bit_little",
+      "sign_bit": {
+        "byte": 1,
+        "mask": "0x80",
+        "positive": "right"
+      },
+      "magnitude": {
+        "low_byte": 0,
+        "high_byte": 1,
+        "high_mask": "0x7F"
+      },
+      "scale": 0.04375,
+      "offset": 0,
+      "center": "0x0000",
+      "round": 3,
+      "raw_path": "steering.angle_raw",
+      "magnitude_raw_path": "steering.angle_magnitude_raw",
+      "direction_path": "steering.direction"
+    },
+    {
+      "id": "0x3E1",
+      "byte": 4,
+      "type": "scaled",
+      "path": "climate.blower_load_percent",
+      "scale": 0.4,
+      "offset": 0.0,
+      "round": 1,
+      "raw_path": "climate.blower_load_raw"
+    },
+    {
+      "id": "0x35B",
+      "byte": 3,
+      "type": "scaled",
+      "path": "engine.coolant_temp_c",
+      "scale": 0.75,
+      "offset": -49.0,
+      "round": 1,
+      "raw_path": "engine.coolant_temp_raw"
+    },
+    {
+      "id": "0x35B",
+      "type": "u16le",
+      "start_byte": 1,
+      "path": "engine.speed_rpm",
+      "scale": 0.25,
+      "offset": 0.0,
+      "round": 0,
+      "raw_path": "engine.speed_raw"
+    },
+    {
+      "id": "0x527",
+      "byte": 5,
+      "type": "scaled",
+      "path": "climate.outside_temp_regulation_c",
+      "scale": 0.5,
+      "offset": -50.0,
+      "round": 1,
+      "raw_path": "climate.outside_temp_regulation_raw"
+    },
+    {
+      "id": "0x527",
+      "byte": 6,
+      "type": "scaled",
+      "path": "climate.outside_temp_unfiltered_c",
+      "scale": 0.5,
+      "offset": -50.0,
+      "round": 1,
+      "raw_path": "climate.outside_temp_unfiltered_raw"
+    },
+    {
+      "id": "0x3E1",
+      "byte": 0,
+      "type": "bool",
+      "path": "climate.rear_window_heater_requested",
+      "mask": "0x04",
+      "true": "0x04",
+      "false": "0x00",
+      "raw_path": "climate.klima_status_raw",
+      "state": "toggle_latch",
+      "initial": false
+    },
+    {
+      "id": "0x3E1",
+      "byte": 0,
+      "type": "bool",
+      "path": "climate.compressor_active",
+      "mask": "0x10",
+      "true": "0x10",
+      "false": "0x00"
+    },
+    {
+      "id": "0x571",
+      "byte": 0,
+      "type": "scaled",
+      "path": "electrical.supply_voltage_v",
+      "scale": 0.05,
+      "offset": 5.1,
+      "round": 2,
+      "raw_path": "electrical.supply_voltage_raw"
+    },
+    {
+      "id": "0x635",
+      "byte": 0,
+      "type": "percent",
+      "path": "lighting.dimmer_percent_mirror",
+      "raw_path": "lighting.dimmer_635_raw"
+    },
+    {
+      "id": "0x575",
+      "byte": 3,
+      "type": "raw",
+      "path": "climate.rear_window_heater_raw"
+    },
+    {
+      "id": "0x65D",
+      "type": "u24le",
+      "start_byte": 1,
+      "path": "vehicle.odometer_km",
+      "scale": 1.0,
+      "offset": 0.0,
+      "round": 0,
+      "raw_path": "vehicle.odometer_raw",
+      "mask": "0x0FFFFF"
+    },
+    {
+      "id": "0x3E3",
+      "byte": 4,
+      "type": "bool",
+      "path": "climate.recirculation_active",
+      "mask": "0x80",
+      "true": "0x80",
+      "false": "0x00",
+      "raw_path": "climate.recirculation_raw"
+    }
+  ]
+}

@@ -294,6 +294,10 @@ class KeyActionTests(unittest.TestCase):
             (keys.volume_down, keys.e.KEY_VOLUMEDOWN),
             (keys.arrow_left, keys.e.KEY_LEFT),
             (keys.arrow_right, keys.e.KEY_RIGHT),
+            (keys.arrow_up, keys.e.KEY_UP),
+            (keys.arrow_down, keys.e.KEY_DOWN),
+            (keys.confirm, keys.e.KEY_ENTER),
+            (keys.back, keys.e.KEY_ESC),
         ]
         with mock.patch.object(keys, "_press") as press:
             for function, expected_code in mappings:

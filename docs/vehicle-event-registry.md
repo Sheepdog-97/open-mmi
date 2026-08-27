@@ -17,14 +17,19 @@ Registry: `open-mmi.vehicle-events` · schema version `1`
 
 | Event | Category | Payload | Delivery | Status | Meaning |
 | --- | --- | --- | --- | --- | --- |
+| `arrow_down` | navigation | None | repeatable | stable | Request one logical downward navigation step in the currently focused interface. |
 | `arrow_left` | navigation | None | repeatable | stable | Request one logical leftward navigation step in the currently focused interface. |
 | `arrow_right` | navigation | None | repeatable | stable | Request one logical rightward navigation step in the currently focused interface. |
+| `arrow_up` | navigation | None | repeatable | stable | Request one logical upward navigation step in the currently focused interface. |
+| `back` | navigation | None | edge | stable | Request one logical back or cancel step in the currently focused interface. |
 | `brightness_level` | display | Integer 0–100 percent | value | stable | Report a requested display brightness level as an integer percentage from 0 to 100. |
+| `confirm` | navigation | None | edge | stable | Activate or confirm the currently focused interface item. |
 | `mute_toggle` | media | None | edge | stable | Request inversion of the current audio mute state; this event never means mute-on or mute-off specifically. |
 | `next_track` | media | None | edge | stable | Request the next playable media item in the active playback context. |
 | `play_pause` | media | None | edge | stable | Request toggling the active playback context between playing and paused states. |
 | `previous_track` | media | None | edge | stable | Request the previous playable media item in the active playback context. |
 | `stop_playback` | media | None | edge | stable | Request stopping playback in the active playback context. |
+| `telephone` | media | None | edge | stable | Request the generic telephone control associated with a vehicle phone button; the binding defines any local phone-interface behaviour. |
 | `vehicle_present:off` | vehicle | None | state_transition | stable | Report the transition from vehicle-present to vehicle-absent after the profile presence timeout expires. |
 | `vehicle_present:on` | vehicle | None | state_transition | stable | Report the transition from vehicle-absent to vehicle-present after the configured presence frame is observed. |
 | `volume_down` | media | None | repeatable | stable | Request one relative decrease in audio volume; the binding defines the size of the step. |

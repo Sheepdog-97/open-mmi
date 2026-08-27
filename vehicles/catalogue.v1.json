@@ -7,6 +7,10 @@
       "aliases": [
         "seat_1p"
       ]
+    },
+    "skoda-superb-3t-pq46": {
+      "path": "skoda/superb/3t-pq46/config.json",
+      "aliases": []
     }
   }
 }

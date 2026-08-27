@@ -1,0 +1,489 @@
+{
+  "schema_version": 1,
+  "fixture_id": "open-mmi.vehicle-mapping-fixtures",
+  "profile_id": "skoda-superb-3t-pq46",
+  "cases": [
+    {
+      "name": "volume-up",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x5C1",
+          "data": "13 00 01 63"
+        }
+      ],
+      "expect": {
+        "events": [
+          {
+            "event": "volume_up",
+            "payload": null
+          }
+        ],
+        "statuses": {}
+      }
+    },
+    {
+      "name": "volume-down",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x5C1",
+          "data": "13 00 0F 63"
+        }
+      ],
+      "expect": {
+        "events": [
+          {
+            "event": "volume_down",
+            "payload": null
+          }
+        ],
+        "statuses": {}
+      }
+    },
+    {
+      "name": "mfd-up",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x5C1",
+          "data": "14 00 01 63"
+        }
+      ],
+      "expect": {
+        "events": [
+          {
+            "event": "arrow_up",
+            "payload": null
+          }
+        ],
+        "statuses": {}
+      }
+    },
+    {
+      "name": "mfd-down",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x5C1",
+          "data": "14 00 0F 63"
+        }
+      ],
+      "expect": {
+        "events": [
+          {
+            "event": "arrow_down",
+            "payload": null
+          }
+        ],
+        "statuses": {}
+      }
+    },
+    {
+      "name": "mfd-confirm",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x5C1",
+          "data": "28 00 00 63"
+        }
+      ],
+      "expect": {
+        "events": [
+          {
+            "event": "confirm",
+            "payload": null
+          }
+        ],
+        "statuses": {}
+      }
+    },
+    {
+      "name": "mfd-back",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x5C1",
+          "data": "29 00 00 63"
+        }
+      ],
+      "expect": {
+        "events": [
+          {
+            "event": "back",
+            "payload": null
+          }
+        ],
+        "statuses": {}
+      }
+    },
+    {
+      "name": "mute",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x5C1",
+          "data": "2A 00 00 63"
+        }
+      ],
+      "expect": {
+        "events": [
+          {
+            "event": "mute_toggle",
+            "payload": null
+          }
+        ],
+        "statuses": {}
+      }
+    },
+    {
+      "name": "telephone",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x5C1",
+          "data": "1A 00 00 63"
+        }
+      ],
+      "expect": {
+        "events": [
+          {
+            "event": "telephone",
+            "payload": null
+          }
+        ],
+        "statuses": {}
+      }
+    },
+    {
+      "name": "next-track",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x5C1",
+          "data": "02 00 00 63"
+        }
+      ],
+      "expect": {
+        "events": [
+          {
+            "event": "next_track",
+            "payload": null
+          }
+        ],
+        "statuses": {}
+      }
+    },
+    {
+      "name": "previous-track",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x5C1",
+          "data": "03 00 00 63"
+        }
+      ],
+      "expect": {
+        "events": [
+          {
+            "event": "previous_track",
+            "payload": null
+          }
+        ],
+        "statuses": {}
+      }
+    },
+    {
+      "name": "boot-and-dimmer",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x470",
+          "data": "00 60 64 64 30 00 00 1F"
+        }
+      ],
+      "expect": {
+        "events": [
+          {
+            "event": "brightness_level",
+            "payload": 100
+          }
+        ],
+        "statuses": {
+          "doors.front_right": false,
+          "doors.front_left": false,
+          "doors.rear_left": false,
+          "doors.rear_right": false,
+          "doors.boot": true,
+          "doors.any_open": true,
+          "doors.raw": 96,
+          "lighting.dimmer_raw": 100,
+          "lighting.dimmer_percent": 100
+        }
+      }
+    },
+    {
+      "name": "reverse",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x351",
+          "data": "02 00 00 00 00 00 00 00"
+        }
+      ],
+      "expect": {
+        "events": [],
+        "statuses": {
+          "vehicle.reverse_raw": 2,
+          "vehicle.reverse": true
+        }
+      }
+    },
+    {
+      "name": "handbrake",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x621",
+          "data": "20 6D 08 1B 02 36 2E"
+        }
+      ],
+      "expect": {
+        "events": [],
+        "statuses": {
+          "vehicle.handbrake_raw": 32,
+          "vehicle.handbrake": true
+        }
+      }
+    },
+    {
+      "name": "front-fog-with-dip",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x531",
+          "data": "CB 00 A0 6B"
+        }
+      ],
+      "expect": {
+        "events": [],
+        "statuses": {
+          "lighting.mode_raw": 203,
+          "lighting.mode": "dip",
+          "lighting.front_fog": true,
+          "lighting.brake": false,
+          "lighting.left_indicator": false,
+          "lighting.right_indicator": false,
+          "lighting.hazards": false,
+          "lighting.secondary_raw": 0
+        }
+      }
+    },
+    {
+      "name": "steering-right",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x3C3",
+          "data": "1A 88 00 00 80 60 D6 FD"
+        }
+      ],
+      "expect": {
+        "events": [],
+        "statuses": {
+          "steering.angle_degrees": 90.737,
+          "steering.angle_raw": 34842,
+          "steering.angle_magnitude_raw": 2074,
+          "steering.direction": "right"
+        }
+      }
+    },
+    {
+      "name": "blower-and-compressor",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x3E1",
+          "data": "30 00 0C 04 EC 00 86 00"
+        }
+      ],
+      "expect": {
+        "events": [],
+        "statuses": {
+          "climate.blower_load_raw": 236,
+          "climate.blower_load_percent": 94.4,
+          "climate.klima_status_raw": 48,
+          "climate.rear_window_heater_requested": false,
+          "climate.compressor_active": true
+        }
+      }
+    },
+    {
+      "name": "rear-window-heater-toggle",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x3E1",
+          "data": "20 00 0C 00 EC 00 84 00"
+        },
+        {
+          "id": "0x3E1",
+          "data": "24 00 0C 00 EC 00 84 00"
+        },
+        {
+          "id": "0x3E1",
+          "data": "20 00 0C 00 EC 00 84 00"
+        },
+        {
+          "id": "0x575",
+          "data": "47 20 00 A8"
+        }
+      ],
+      "expect": {
+        "events": [],
+        "statuses": {
+          "climate.blower_load_raw": 236,
+          "climate.blower_load_percent": 94.4,
+          "climate.klima_status_raw": 32,
+          "climate.rear_window_heater_requested": true,
+          "climate.compressor_active": false,
+          "climate.rear_window_heater_raw": 168
+        }
+      }
+    },
+    {
+      "name": "engine-values",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x35B",
+          "data": "00 52 0C 5A 00 18 02 23"
+        }
+      ],
+      "expect": {
+        "events": [],
+        "statuses": {
+          "engine.coolant_temp_raw": 90,
+          "engine.coolant_temp_c": 18.5,
+          "engine.speed_raw": 3154,
+          "engine.speed_rpm": 788.0
+        }
+      }
+    },
+    {
+      "name": "outside-temperature",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x527",
+          "data": "10 01 00 B0 79 8A 8A 08"
+        }
+      ],
+      "expect": {
+        "events": [],
+        "statuses": {
+          "climate.outside_temp_regulation_raw": 138,
+          "climate.outside_temp_regulation_c": 19.0,
+          "climate.outside_temp_unfiltered_raw": 138,
+          "climate.outside_temp_unfiltered_c": 19.0
+        }
+      }
+    },
+    {
+      "name": "supply-voltage",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x571",
+          "data": "B3 00 00 00 00 00"
+        }
+      ],
+      "expect": {
+        "events": [],
+        "statuses": {
+          "electrical.supply_voltage_raw": 179,
+          "electrical.supply_voltage_v": 14.05
+        }
+      }
+    },
+    {
+      "name": "dimmer-mirror",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x635",
+          "data": "64 64 0F"
+        }
+      ],
+      "expect": {
+        "events": [],
+        "statuses": {
+          "lighting.dimmer_635_raw": 100,
+          "lighting.dimmer_percent_mirror": 100
+        }
+      }
+    },
+    {
+      "name": "odometer",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x65D",
+          "data": "50 A9 44 F4 F7 2F EB 16"
+        }
+      ],
+      "expect": {
+        "events": [],
+        "statuses": {
+          "vehicle.odometer_raw": 16008361,
+          "vehicle.odometer_km": 279721.0
+        }
+      }
+    },
+    {
+      "name": "recirculation",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x3E3",
+          "data": "FF FF FF 00 80 FE 00 FF"
+        }
+      ],
+      "expect": {
+        "events": [],
+        "statuses": {
+          "climate.recirculation_raw": 128,
+          "climate.recirculation_active": true
+        }
+      }
+    },
+    {
+      "name": "presence-timeout",
+      "bus": "infotainment",
+      "frames": [
+        {
+          "id": "0x65F",
+          "data": "00 00 00 00 00 00 00 00"
+        },
+        {
+          "advance_ms": 6001
+        }
+      ],
+      "expect": {
+        "events": [
+          {
+            "event": "vehicle_present:on",
+            "payload": null
+          },
+          {
+            "event": "vehicle_present:off",
+            "payload": null
+          }
+        ],
+        "statuses": {
+          "vehicle.present": false
+        }
+      }
+    }
+  ]
+}

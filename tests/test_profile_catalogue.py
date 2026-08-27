@@ -27,10 +27,17 @@ class ProfileCatalogueTests(unittest.TestCase):
         )
         self.assertEqual(legacy["path"], canonical["path"])
 
+        superb = profile_catalogue.resolve_profile(ROOT, "skoda-superb-3t-pq46")
+        self.assertEqual(superb["id"], "skoda-superb-3t-pq46")
+        self.assertEqual(
+            superb["relative_path"],
+            "vehicles/skoda/superb/3t-pq46/config.json",
+        )
+
     def test_repository_tree_has_no_orphaned_profiles(self) -> None:
         report = profile_catalogue.verify_tree(ROOT)
         self.assertTrue(report["valid"], report)
-        self.assertEqual(report["count"], 1)
+        self.assertEqual(report["count"], 2)
         self.assertEqual(report["issues"], [])
 
     def test_catalogue_rejects_identity_and_path_collisions(self) -> None:

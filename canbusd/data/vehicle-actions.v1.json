@@ -252,6 +252,66 @@
         "audio sound volume up raise increase louder"
       ]
     },
+    "navigation.activate": {
+      "title": "Activate focused item",
+      "category": "navigation",
+      "description": "Activate or confirm the currently focused local interface item.",
+      "implementation": {
+        "module": "keys",
+        "func": "confirm"
+      },
+      "arguments": [],
+      "event_payload": {
+        "type": "none"
+      },
+      "requirements": [
+        "uinput"
+      ],
+      "status": "stable",
+      "search_terms": [
+        "navigation focus activate confirm enter select ok interface"
+      ]
+    },
+    "navigation.back": {
+      "title": "Navigate back",
+      "category": "navigation",
+      "description": "Request one local interface back or cancel step.",
+      "implementation": {
+        "module": "keys",
+        "func": "back"
+      },
+      "arguments": [],
+      "event_payload": {
+        "type": "none"
+      },
+      "requirements": [
+        "uinput"
+      ],
+      "status": "stable",
+      "search_terms": [
+        "navigation back cancel escape return interface"
+      ]
+    },
+    "navigation.focus.down": {
+      "title": "Move focus down",
+      "category": "navigation",
+      "description": "Move the currently focused local interface one logical step downward.",
+      "implementation": {
+        "module": "keys",
+        "func": "arrow_down"
+      },
+      "arguments": [],
+      "event_payload": {
+        "type": "none"
+      },
+      "requirements": [
+        "uinput"
+      ],
+      "status": "stable",
+      "search_terms": [
+        "navigation focus cursor arrow down interface"
+      ]
+    },
     "navigation.focus.left": {
       "title": "Move focus left",
       "category": "navigation",
@@ -290,6 +350,26 @@
       "status": "stable",
       "search_terms": [
         "navigation focus cursor arrow right interface"
+      ]
+    },
+    "navigation.focus.up": {
+      "title": "Move focus up",
+      "category": "navigation",
+      "description": "Move the currently focused local interface one logical step upward.",
+      "implementation": {
+        "module": "keys",
+        "func": "arrow_up"
+      },
+      "arguments": [],
+      "event_payload": {
+        "type": "none"
+      },
+      "requirements": [
+        "uinput"
+      ],
+      "status": "stable",
+      "search_terms": [
+        "navigation focus cursor arrow up interface"
       ]
     }
   },
