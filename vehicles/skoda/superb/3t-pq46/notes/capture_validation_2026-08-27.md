@@ -1,6 +1,6 @@
 # Škoda Superb 3T infotainment CAN validation — 2026-08-27
 
-**Status:** Experimental research evidence
+**Status:** Reviewed controlled hardware-capture evidence for replay-qualified candidate
 **Vehicle:** Škoda Superb II / 3T, model year 2012, RHD, 2.0 TDI engine code CFG
 **Capture point:** radio infotainment CAN
 **Bitrate:** 100 kbit/s

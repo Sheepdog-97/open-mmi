@@ -23,7 +23,7 @@ infotainment     ->  can0
 The daemon consumes an already-provisioned SocketCAN interface. It does not silently
 configure bitrate and does not bring interfaces up.
 
-For the maintainer-tested Seat Leon 1P / VAG PQ35 setup, udev currently provisions:
+For the hardware-qualified SEAT Leon Mk2 / 1P (PQ35) reference setup, udev currently provisions:
 
 ```text
 can0 at 100000

@@ -4,8 +4,11 @@ Open MMI separates reverse-engineering progress from a maintained compatibility 
 A scaffold, capture comparison, provisional decoder, or candidate fixture does not by
 itself mean that a vehicle is supported.
 
-SEAT Leon Mk2 / 1P (PQ35) remains the only maintained profile backed by real reverse
-engineering and hardware qualification in this repository.
+The current catalogue deliberately exposes different confidence levels. SEAT Leon Mk2 / 1P
+(PQ35) is the generation-wide hardware-qualified reference. Škoda Superb II / 3T (PQ46) and
+Volkswagen Passat B6 / 3C (PQ46) are replay-qualified candidates: each has complete fixture
+coverage and reviewed evidence from one controlled passive real-vehicle capture, while wider
+generation compatibility remains unqualified.
 
 ## Lifecycle
 
@@ -19,7 +22,7 @@ The corresponding profile maturity is:
 
 | Qualification | Maturity | Meaning |
 | --- | --- | --- |
-| `none` | `experimental` | No formal mapping or hardware claim. |
+| `none` | `experimental` | No formal replay/hardware qualification claim; research evidence may still exist outside qualification metadata. |
 | `replay` | `candidate` | Every declared canonical event and status is covered by passing deterministic fixtures. |
 | `hardware` | `qualified` | Replay proof is complete and the stated scope was reviewed against real passive vehicle CAN traffic. |
 
@@ -72,8 +75,10 @@ Hardware promotion additionally requires:
 - reviewed real-vehicle evidence for the stated scope.
 
 Hardware qualification does not turn experimental or diagnostic individual signals
-into stable claims. Those lifecycle limitations remain visible in the status registry
-and profile limitations.
+into stable claims. Conversely, a `replay`-qualified candidate may still cite controlled
+real-vehicle capture evidence; `replay` means the formal compatibility qualification has not
+yet advanced to the hardware level. Those boundaries remain visible in the evidence record,
+status registry and profile limitations.
 
 ## Inspect qualification
 

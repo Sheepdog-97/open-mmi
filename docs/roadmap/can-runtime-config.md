@@ -5,7 +5,7 @@
 `open-mmi` currently supports one active SocketCAN interface, resolved through a named
 CAN bus model.
 
-This matches the current maintainer-tested Seat Leon 1P / VAG PQ35 setup while avoiding a
+This matches the current hardware-qualified SEAT Leon Mk2 / 1P (PQ35) setup while avoiding a
 hard-coded `can0` assumption in the daemon and vehicle profile model.
 
 Future vehicles and installs may need multiple CAN inputs at different bitrates.
@@ -31,7 +31,7 @@ Current behaviour on `main`:
 
 * the daemon resolves an active named bus
 * the default named bus is `comfort`
-* the Seat 1P profile declares `default_bus` and `can_buses.infotainment`
+* the SEAT Leon Mk2 / 1P profile declares `default_bus` and `can_buses.infotainment`
 * the default SocketCAN interface is `can0`
 * `OPEN_MMI_CAN_BUS` can override the selected named bus
 * `OPEN_MMI_CAN_INTERFACE` can override the consumed SocketCAN interface
@@ -39,13 +39,13 @@ Current behaviour on `main`:
 * rules, presence rules, and status rules may optionally declare `bus`
 * rules without `bus` belong to the profile `default_bus`
 * `config apply-profile` can generate runtime and udev provisioning from the selected profile
-* the generated Seat 1P udev rule brings up `can0` at `100000`
+* the generated SEAT Leon Mk2 / 1P udev rule brings up `can0` at `100000`
 * the daemon consumes the already-provisioned interface and does not configure bitrate
 
 The maintainer-tested real-car path remains:
 
 ```text
-Seat Leon 1P / VAG PQ35
+SEAT Leon Mk2 / 1P (PQ35)
 bus: infotainment
 interface: can0
 bitrate metadata: 100000
@@ -180,9 +180,9 @@ The default remains `can0`.
 
 ### Phase 3: bus metadata in vehicle/profile docs
 
-Status: **done for the Seat 1P reference profile**.
+Status: **done for the SEAT Leon Mk2 / 1P reference profile**.
 
-The Seat Leon 1P / VAG PQ35 profile now declares:
+The SEAT Leon Mk2 / 1P (PQ35) profile now declares:
 
 ```text
 default bus: infotainment
@@ -197,7 +197,7 @@ Status: **implemented, lightly used**.
 
 Rules, presence rules, and status rules may declare `bus`.
 
-The current Seat 1P profile does not need explicit `bus` fields yet because all entries
+The current SEAT Leon Mk2 / 1P profile does not need explicit `bus` fields yet because all entries
 belong to the default `infotainment` bus.
 
 ### Phase 5: multiple active buses
@@ -268,5 +268,5 @@ Do not mix the current named-bus model with:
 * UI redesign
 * release/tag work
 
-The current model should preserve the tested Seat 1P behaviour while giving the project a
+The current model should preserve the tested SEAT Leon Mk2 / 1P behaviour while giving the project a
 clean path toward multiple CAN buses later.

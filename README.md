@@ -18,12 +18,14 @@ management, terminal diagnostics, and contributor tooling.
 The maintained vehicle catalogue currently includes:
 
 - **SEAT Leon Mk2 / 1P (PQ35)** — hardware-qualified reference profile;
-- **Škoda Superb II / 3T (PQ46)** — experimental profile from a bounded hardware capture; and
-- **Volkswagen Passat B6 / 3C (PQ46)** — experimental profile from a bounded hardware capture.
+- **Škoda Superb II / 3T (PQ46)** — replay-qualified candidate backed by a bounded real-vehicle capture; and
+- **Volkswagen Passat B6 / 3C (PQ46)** — replay-qualified candidate backed by a bounded real-vehicle capture.
 
-The SEAT profile remains the hardware-qualified reference. Experimental profiles are
-bounded compatibility claims and do not imply generation-wide support beyond the scope
-and limitations recorded in the [vehicle catalogue](docs/vehicle-catalogue.md).
+The SEAT profile remains the generation-wide hardware-qualified reference. The Superb and
+Passat profiles have reviewed real-car capture evidence plus complete deterministic replay,
+but their formal qualification remains `replay` and their compatibility claims stay bounded
+to the captured vehicles rather than the whole generation. See the
+[vehicle catalogue](docs/vehicle-catalogue.md) for exact evidence and limitations.
 
 Open MMI currently remains:
 
@@ -91,7 +93,7 @@ When the installer asks, log out and back in once so the existing desktop sessio
 can use Vehicle Setup or browser update actions.
 
 For the complete first-run flow, including CAN-adapter preparation and selecting
-the maintained SEAT profile, see [Getting started](docs/getting-started.md).
+a maintained profile, see [Getting started](docs/getting-started.md).
 
 ## Vehicle setup: UI first
 

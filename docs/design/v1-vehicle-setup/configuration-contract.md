@@ -56,7 +56,7 @@ Suggested profile catalogue entry:
 {
   "source": "maintained",
   "id": "seat-leon-1p-pq35",
-  "display_name": "Seat 1P",
+  "display_name": "SEAT Leon Mk2 / 1P (PQ35)",
   "valid": true,
   "revision": "sha256:…",
   "default_bus": "comfort",
@@ -433,10 +433,12 @@ Lifecycle management accepts one of three exact action schemas:
 
 Managed installation creates the shared root-owned transaction lock files before the
 dashboard is enabled. The server acquires the lifecycle lock without replacing its inode
-before re-reading the fixed custom path and expected revision. Duplicate writes a new private item and provenance
-sidecar without changing the source. Rename moves the exact inactive item and updates
-its provenance without changing its content revision. Delete first verifies that the
-custom identity is not active, then removes only that exact item and its sidecar.
+before re-reading the fixed custom path and expected revision. Duplicate requires a valid
+custom source and writes a new private item and provenance sidecar without changing the source.
+Rename may recover a valid or invalid inactive item by moving the exact identity and updating its
+provenance without changing its content revision. Delete likewise accepts valid or invalid inactive
+items, verifies that the custom identity is not active, then removes only that exact item and its
+sidecar. Invalid content remains ineligible for Review or Apply.
 Existing destinations are `custom-exists` conflicts, stale source revisions are
 `custom-stale`, active rename/delete requests are `custom-active`, and an active
 apply/update lifecycle transaction is `lifecycle-busy`. Every successful response

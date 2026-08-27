@@ -1,8 +1,8 @@
 # Vehicle profile scaffolding
 
-Open MMI currently has one reverse-engineered maintained vehicle profile: the
-SEAT Leon 1P / VAG PQ35. The scaffold command prepares a contribution workspace
-for real future research; it is not a statement that another vehicle is supported.
+Open MMI has a maintained catalogue with profiles at different confidence levels. The
+scaffold command prepares a contribution workspace for real future research; creating a
+scaffold is not a statement that the vehicle is supported or qualified.
 
 ## Review the plan first
 

@@ -11,8 +11,8 @@ not prove that the physical vehicle lacks the feature.
 | Profile | Vehicle | Maturity | Qualification | Last tested | Review | Recheck after | Events | Statuses |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `seat-leon-1p-pq35` | SEAT Leon Mk2 / 1P (PQ35) | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | 11 | 63 |
-| `volkswagen-passat-b6-3c-pq46` | Volkswagen Passat B6 / 3C (PQ46) | experimental | none | — | unreviewed | — | 10 | 50 |
-| `skoda-superb-3t-pq46` | Škoda Superb II / 3T (PQ46) | experimental | none | — | unreviewed | — | 13 | 48 |
+| `volkswagen-passat-b6-3c-pq46` | Volkswagen Passat B6 / 3C (PQ46) | candidate | replay | 2026-08-27 | approved | 2027-08-27 | 10 | 50 |
+| `skoda-superb-3t-pq46` | Škoda Superb II / 3T (PQ46) | candidate | replay | 2026-08-27 | approved | 2027-08-27 | 13 | 48 |
 
 ## Canonical events
 

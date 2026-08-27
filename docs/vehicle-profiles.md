@@ -14,18 +14,19 @@ vehicles/<brand>/<model>/<generation-platform>/config.json
 
 ---
 
-## Reference profile
+## Maintained profile confidence
 
-The maintainer-tested reference vehicle is currently:
+The maintained catalogue currently has three reverse-engineered profiles:
 
-* SEAT Leon 1P
-* VAG PQ35 platform
-* infotainment CAN at 100000 bitrate
-* SocketCAN interface currently provisioned as `can0`
+* **SEAT Leon Mk2 / 1P (PQ35)** — generation-wide hardware-qualified reference;
+* **Škoda Superb II / 3T (PQ46)** — replay-qualified candidate backed by one controlled 2012 real-vehicle capture;
+* **Volkswagen Passat B6 / 3C (PQ46)** — replay-qualified candidate backed by one controlled 2010 real-vehicle capture.
 
-This does not mean `open-mmi` is a finished Seat/VW infotainment product. The project is
-currently alpha/backend software. The SEAT profile is the sole reverse-engineered maintained
-profile and is hardware-qualified only for the scope and compatibility boundary recorded in
+All three use passive radio infotainment CAN at 100 kbit/s and currently default to `can0`.
+Qualification level and maturity are deliberately separate from the existence of real-car
+capture evidence: the PQ46 candidates have hardware observations and complete replay proof,
+but they are not yet generation-wide hardware-qualified profiles. Exact tested scope,
+compatibility boundaries and limitations are recorded in
 [`vehicle-catalogue.md`](vehicle-catalogue.md) and
 [`vehicle-qualification-workflow.md`](vehicle-qualification-workflow.md).
 
@@ -415,5 +416,5 @@ Scalar status rules may define temporary aliases while a decoded field is being 
 same value to the canonical and alias paths. Use aliases only for planned schema migrations;
 new profile rules should otherwise have one canonical path.
 
-The Seat 1P `0x3E3` bit is the HVAC recirculation state and publishes only the canonical
+The SEAT Leon Mk2 / 1P `0x3E3` bit is the HVAC recirculation state and publishes only the canonical
 `climate.recirculation_active` and `climate.recirculation_raw` fields.

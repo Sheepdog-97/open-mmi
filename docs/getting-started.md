@@ -12,7 +12,7 @@ Open MMI currently:
 - supports one active named CAN bus at a time;
 - requires a Linux system with a supported SocketCAN adapter;
 - requires the correct connection point and bitrate for the maintained profile;
-- has a hardware-qualified SEAT Leon reference profile plus experimental Superb and Passat profiles.
+- has a hardware-qualified SEAT Leon reference profile plus replay-qualified Superb and Passat candidates backed by bounded real-vehicle captures.
 
 Decoded status is informational. It is not a replacement for OEM warnings,
 diagnostics, or driver judgement.

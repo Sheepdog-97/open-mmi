@@ -96,10 +96,13 @@ fully stable capabilities.
 ## Qualification levels
 
 - `none` — no formal replay or hardware claim; `last_tested` is `null` and scope/evidence are empty.
-- `replay` — deterministic captures or fixtures were replayed; the tested scope and evidence are named.
-- `hardware` — the stated scope was tested on a real vehicle; the date and hardware evidence are named.
+- `replay` — deterministic fixture coverage is complete for the stated scope and the reviewed evidence is named.
+- `hardware` — the stated compatibility scope was formally qualified against a real vehicle; the date and hardware evidence are named.
 
-Evidence kinds are `research`, `capture`, `replay`, `hardware`, and `documentation`.
+Evidence kinds are `research`, `capture`, `replay`, `hardware`, and `documentation`. A replay-qualified
+candidate may also cite `capture` evidence from a real vehicle. That records where the mappings came
+from without implying generation-wide hardware qualification; the formal level remains `replay` until
+the separate hardware-qualification boundary is reviewed and promoted.
 
 ## One admission command
 

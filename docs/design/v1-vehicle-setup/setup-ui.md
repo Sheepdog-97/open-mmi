@@ -30,10 +30,10 @@ The collapsed overview contains:
 ```text
 Vehicle setup                                      single CAN input
 
-Configured profile  Seat 1P                     Maintained
+Configured profile  SEAT Leon Mk2 / 1P (PQ35)     Maintained
 Configured bindings Default                        Maintained
 Running CAN service Loaded revisions match configured setup
-Draft selection     Seat 1P / Default              matches configured
+Draft selection     SEAT Leon Mk2 / 1P / Default   matches configured
 Selected CAN bus    Comfort                        profile default
 CAN adapter         can0                           connected
 Expected bitrate    100 kbit/s
@@ -68,11 +68,11 @@ Profiles are grouped by source:
 
 ```text
 Maintained
-  (•) Seat 1P              VAG PQ35 · Infotainment CAN · 100 kbit/s
+  (•) SEAT Leon Mk2 / 1P   VAG PQ35 · Infotainment CAN · 100 kbit/s
 
 Custom
   ( ) My Seat              Based on SEAT Leon Mk2 / 1P (PQ35) · locally modified
-  (!) Capture experiment   Invalid JSON · not available to activate
+  (!) Capture experiment   Invalid JSON · recovery only; cannot activate
 
 [Use selected] [Create custom copy] [Cancel]
 ```
@@ -181,7 +181,7 @@ Success:
 
 ```text
 Setup applied
-Seat 1P / Default is active on infotainment via can0.
+SEAT Leon Mk2 / 1P / Default is active on infotainment via can0.
 ```
 
 Success with no adapter:
@@ -218,10 +218,11 @@ current revision; save requires that revision, validates JSON and schema semanti
 atomically replaces only the user-owned file. A stale revision preserves editor text and
 requires reload. Closing a dirty editor requires explicit discard confirmation.
 
-Custom entries also expose **Duplicate**, inactive-only **Rename**, and inactive-only
-**Delete**. Maintained entries expose only **Use maintained … as template**. Import is
-creation-only and refuses an existing identifier. Save, import and lifecycle operations
-never activate or restart the CAN service.
+Valid custom entries expose **Duplicate**; valid or invalid custom entries expose **Edit** and,
+when inactive, **Rename** and **Delete**. Invalid entries remain selectable for recovery but cannot
+be reviewed or applied. Maintained entries expose only **Use maintained … as template**. Import is
+creation-only and refuses an existing identifier. Save, import and lifecycle operations never
+activate or restart the CAN service.
 
 ## Tablet and accessibility requirements
 

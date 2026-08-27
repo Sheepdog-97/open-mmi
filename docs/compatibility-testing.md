@@ -1,6 +1,6 @@
 # Compatibility Testing
 
-This guide is for temporary, read-only compatibility checks on vehicles related to the SEAT León 1P / VW Group PQ35 family.
+This guide is for temporary, read-only compatibility checks on vehicles related to the SEAT Leon Mk2 / 1P and VW Group PQ35 family.
 
 The goal is to answer a simple question:
 
@@ -77,7 +77,7 @@ Works:
 [ ] RPM
 [ ] coolant temperature
 [ ] voltage
-[ ] range/odometer where available
+[ ] odometer where the selected profile exposes it
 [ ] indicators
 [ ] hazards
 [ ] side/position lights
@@ -101,7 +101,7 @@ Screenshots/logs:
 
 Confirmed:
 
-- SEAT León 1P reference vehicle
+- SEAT Leon Mk2 / 1P hardware-qualified reference vehicle
 
 Wanted testers:
 

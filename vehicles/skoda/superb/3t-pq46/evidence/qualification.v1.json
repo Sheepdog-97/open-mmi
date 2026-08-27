@@ -3,19 +3,39 @@
   "record_id": "open-mmi.vehicle-profile-qualification",
   "profile_id": "skoda-superb-3t-pq46",
   "current": {
-    "level": "none",
-    "tested_on": null,
-    "scope": [],
+    "level": "replay",
+    "tested_on": "2026-08-27",
+    "scope": [
+      "Controlled passive radio infotainment CAN capture at 100 kbit/s used as mapping evidence",
+      "Complete deterministic replay of every canonical event and status claimed by the profile",
+      "Claimed mappings bounded to the captured vehicle and explicitly documented cross-vehicle PQ35/PQ46 corroboration"
+    ],
     "compatibility": {
-      "equipment": [],
-      "variants": []
+      "equipment": [
+        "Controlled passive radio infotainment CAN capture at 100 kbit/s using a DSD CAN adapter"
+      ],
+      "variants": [
+        "Škoda Superb II / 3T, model year 2012, RHD, 2.0 TDI CFG"
+      ]
     },
     "review": {
-      "status": "unreviewed",
-      "reviewers": [],
-      "reviewed_on": null,
-      "recheck_after": null
+      "status": "approved",
+      "reviewers": [
+        "Open MMI maintainers"
+      ],
+      "reviewed_on": "2026-08-27",
+      "recheck_after": "2027-08-27"
     }
   },
-  "history": []
+  "history": [
+    {
+      "from": "none",
+      "to": "replay",
+      "date": "2026-08-27",
+      "reason": "Promoted after review of the controlled passive real-vehicle capture and complete deterministic replay coverage for the bounded profile claims.",
+      "reviewers": [
+        "Open MMI maintainers"
+      ]
+    }
+  ]
 }

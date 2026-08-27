@@ -1,12 +1,13 @@
 # Volkswagen Passat B6 / 3C (PQ46)
 
-This is an **experimental maintained profile** for the Volkswagen Passat B6 / 3C
+This is a **replay-qualified candidate maintained profile** for the Volkswagen Passat B6 / 3C
 on VAG PQ46. It is based on a controlled passive capture from one 2010 RHD
 vehicle at the radio infotainment CAN connection, 100 kbit/s.
 
 The profile deliberately exposes only mappings supported by that capture or by
-strong cross-vehicle PQ35/PQ46 agreement. It does not yet claim generation-wide
-hardware qualification.
+strong cross-vehicle PQ35/PQ46 agreement. Every claimed event/status has deterministic
+replay coverage. The real-car capture is recorded as mapping evidence, while wider
+generation compatibility is not yet hardware-qualified.
 
 ## Current scope
 

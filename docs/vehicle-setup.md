@@ -155,12 +155,14 @@ text and requires reload.
 
 Custom actions:
 
-- **Duplicate** — allowed for active or inactive custom items;
-- **Rename** — inactive custom items only;
-- **Delete** — inactive custom items only and requires confirmation.
+- **Edit** — valid or invalid custom items; invalid content must be repaired before it can be reviewed or applied;
+- **Duplicate** — valid active or inactive custom items;
+- **Rename** — valid or invalid inactive custom items;
+- **Delete** — valid or invalid inactive custom items and requires confirmation.
 
-All lifecycle actions are revision-bound and excluded from concurrent Apply or
-managed update transactions. They return `applied: false`.
+Invalid custom entries remain selectable for recovery and show their validation failure, but Review
+and Apply stay blocked. All lifecycle actions are revision-bound and excluded from concurrent Apply
+or managed update transactions. They return `applied: false`.
 
 Maintained entries remain immutable. Their only custom-content entry point is a
 new separate template copy.

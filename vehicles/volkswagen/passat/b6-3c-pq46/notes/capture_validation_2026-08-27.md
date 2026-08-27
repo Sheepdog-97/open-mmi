@@ -1,6 +1,6 @@
 # Volkswagen Passat B6 infotainment CAN validation — 2026-08-27
 
-**Status:** Experimental research evidence
+**Status:** Reviewed controlled hardware-capture evidence for replay-qualified candidate
 **Vehicle:** Volkswagen Passat B6 / 3C, model year 2010, RHD; operator engine entry `CBA`
 **Capture point:** radio infotainment CAN
 **Bitrate:** 100 kbit/s

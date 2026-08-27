@@ -75,4 +75,6 @@ data into shared human meaning.
 
 Each maintained profile has `evidence/qualification.v1.json`. A scaffold starts at `none` with an
 unreviewed empty record. Replay and hardware claims must be made through the formal transition
-workflow and must not be inferred from a directory name or the presence of captures alone.
+workflow and must not be inferred from a directory name or the presence of captures alone. A
+replay-qualified candidate may still reference controlled real-vehicle `capture` evidence; this makes
+the mapping confidence visible without claiming the broader hardware-qualification boundary.

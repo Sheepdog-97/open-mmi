@@ -23,8 +23,8 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 | Profile | Vehicle | Years | Maturity | Qualification | Last tested | Review | Recheck after | Legacy aliases | Compatible market names | Replay coverage | Evidence | Canonical capabilities |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [`seat-leon-1p-pq35`](#seat-leon-1p-pq35) | SEAT Leon Mk2 / 1P (PQ35) | 2005–2012 | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | `seat_1p` | — | 24 cases; 11/11 events; 63/63 statuses | hardware: 1, replay: 1, research: 3 | 11 events; 63 statuses |
-| [`volkswagen-passat-b6-3c-pq46`](#volkswagen-passat-b6-3c-pq46) | Volkswagen Passat B6 / 3C (PQ46) | 2005–2010 | experimental | none | — | unreviewed | — | — | Passat B6 | 24 cases; 10/10 events; 50/50 statuses | — | 10 events; 50 statuses |
-| [`skoda-superb-3t-pq46`](#skoda-superb-3t-pq46) | Škoda Superb II / 3T (PQ46) | 2008–2015 | experimental | none | — | unreviewed | — | — | Superb II | 24 cases; 13/13 events; 48/48 statuses | — | 13 events; 48 statuses |
+| [`volkswagen-passat-b6-3c-pq46`](#volkswagen-passat-b6-3c-pq46) | Volkswagen Passat B6 / 3C (PQ46) | 2005–2010 | candidate | replay | 2026-08-27 | approved | 2027-08-27 | — | Passat B6 | 24 cases; 10/10 events; 50/50 statuses | capture: 1, replay: 1 | 10 events; 50 statuses |
+| [`skoda-superb-3t-pq46`](#skoda-superb-3t-pq46) | Škoda Superb II / 3T (PQ46) | 2008–2015 | candidate | replay | 2026-08-27 | approved | 2027-08-27 | — | Superb II | 24 cases; 13/13 events; 48/48 statuses | capture: 1, replay: 1 | 13 events; 48 statuses |
 
 ## Profiles
 
@@ -88,10 +88,10 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 - Manufacturer / model: Volkswagen Passat
 - Generation / platform: 3C (B6) / VAG PQ46
 - Model years: 2005–2010
-- Maturity: `experimental`
-- Qualification: `none`; last tested `not recorded`
-- Review: `unreviewed` by —; recheck after `not scheduled`
-- Qualification history entries: 0
+- Maturity: `candidate`
+- Qualification: `replay`; last tested `2026-08-27`
+- Review: `approved` by Open MMI maintainers; recheck after `2027-08-27`
+- Qualification history entries: 1
 - Legacy aliases: —
 - Compatible market names: Passat B6
 - CAN buses: `infotainment`
@@ -99,20 +99,23 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 
 #### Qualification scope
 
-- No qualification scope declared.
+- Controlled passive radio infotainment CAN capture at 100 kbit/s used as mapping evidence
+- Complete deterministic replay of every canonical event and status claimed by the profile
+- Claimed mappings bounded to the captured vehicle and explicitly documented cross-vehicle PQ35/PQ46 corroboration
 
 #### Compatibility boundary
 
-- Equipment: —
-- Vehicle variants: —
+- Equipment: Controlled passive radio infotainment CAN capture at 100 kbit/s using a DSD CAN adapter
+- Vehicle variants: Volkswagen Passat B6 / 3C, model year 2010, RHD; operator engine entry CBA
 
 #### Evidence
 
-- No evidence declared.
+- `capture` — [`vehicles/volkswagen/passat/b6-3c-pq46/notes/capture_validation_2026-08-27.md`](../vehicles/volkswagen/passat/b6-3c-pq46/notes/capture_validation_2026-08-27.md): Controlled passive real-vehicle infotainment-CAN capture and mapping validation record; VIN intentionally omitted.
+- `replay` — [`vehicles/volkswagen/passat/b6-3c-pq46/fixtures/mappings.v1.json`](../vehicles/volkswagen/passat/b6-3c-pq46/fixtures/mappings.v1.json): Deterministic replay coverage for every canonical event and status output claimed by this profile.
 
 #### Limitations
 
-- Experimental profile derived from one 2010 RHD hardware capture; wider Passat B6/3C compatibility is not yet qualified.
+- Candidate profile derived from one controlled 2010 RHD hardware capture; wider Passat B6 / 3C compatibility is not hardware-qualified.
 - Road-speed decoding was not exercised in the capture and is intentionally omitted.
 - Front windscreen heater was unavailable on the captured vehicle and is intentionally omitted.
 - The captured steering wheel had a telephone button and no mute control; no mute or play/pause event is claimed.
@@ -138,10 +141,10 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 - Manufacturer / model: Škoda Superb
 - Generation / platform: 3T / VAG PQ46
 - Model years: 2008–2015
-- Maturity: `experimental`
-- Qualification: `none`; last tested `not recorded`
-- Review: `unreviewed` by —; recheck after `not scheduled`
-- Qualification history entries: 0
+- Maturity: `candidate`
+- Qualification: `replay`; last tested `2026-08-27`
+- Review: `approved` by Open MMI maintainers; recheck after `2027-08-27`
+- Qualification history entries: 1
 - Legacy aliases: —
 - Compatible market names: Superb II
 - CAN buses: `infotainment`
@@ -149,20 +152,23 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 
 #### Qualification scope
 
-- No qualification scope declared.
+- Controlled passive radio infotainment CAN capture at 100 kbit/s used as mapping evidence
+- Complete deterministic replay of every canonical event and status claimed by the profile
+- Claimed mappings bounded to the captured vehicle and explicitly documented cross-vehicle PQ35/PQ46 corroboration
 
 #### Compatibility boundary
 
-- Equipment: —
-- Vehicle variants: —
+- Equipment: Controlled passive radio infotainment CAN capture at 100 kbit/s using a DSD CAN adapter
+- Vehicle variants: Škoda Superb II / 3T, model year 2012, RHD, 2.0 TDI CFG
 
 #### Evidence
 
-- No evidence declared.
+- `capture` — [`vehicles/skoda/superb/3t-pq46/notes/capture_validation_2026-08-27.md`](../vehicles/skoda/superb/3t-pq46/notes/capture_validation_2026-08-27.md): Controlled passive real-vehicle infotainment-CAN capture and mapping validation record; VIN intentionally omitted.
+- `replay` — [`vehicles/skoda/superb/3t-pq46/fixtures/mappings.v1.json`](../vehicles/skoda/superb/3t-pq46/fixtures/mappings.v1.json): Deterministic replay coverage for every canonical event and status output claimed by this profile.
 
 #### Limitations
 
-- Experimental profile derived from one 2012 RHD 2.0 TDI hardware capture; wider 3T compatibility is not yet qualified.
+- Candidate profile derived from one controlled 2012 RHD 2.0 TDI hardware capture; wider Superb II / 3T compatibility is not hardware-qualified.
 - Road-speed decoding was not exercised in the capture and is intentionally omitted.
 - Bonnet input was not testable because the captured vehicle bonnet-switch wiring was cut.
 - Front windscreen heater was unavailable on the captured vehicle and is intentionally omitted.
