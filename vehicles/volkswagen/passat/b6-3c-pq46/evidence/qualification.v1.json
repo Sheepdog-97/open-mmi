@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "record_id": "open-mmi.vehicle-profile-qualification",
+  "profile_id": "volkswagen-passat-b6-3c-pq46",
+  "current": {
+    "level": "none",
+    "tested_on": null,
+    "scope": [],
+    "compatibility": {
+      "equipment": [],
+      "variants": []
+    },
+    "review": {
+      "status": "unreviewed",
+      "reviewers": [],
+      "reviewed_on": null,
+      "recheck_after": null
+    }
+  },
+  "history": []
+}

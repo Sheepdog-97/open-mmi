@@ -34,10 +34,19 @@ class ProfileCatalogueTests(unittest.TestCase):
             "vehicles/skoda/superb/3t-pq46/config.json",
         )
 
+        passat = profile_catalogue.resolve_profile(
+            ROOT, "volkswagen-passat-b6-3c-pq46"
+        )
+        self.assertEqual(passat["id"], "volkswagen-passat-b6-3c-pq46")
+        self.assertEqual(
+            passat["relative_path"],
+            "vehicles/volkswagen/passat/b6-3c-pq46/config.json",
+        )
+
     def test_repository_tree_has_no_orphaned_profiles(self) -> None:
         report = profile_catalogue.verify_tree(ROOT)
         self.assertTrue(report["valid"], report)
-        self.assertEqual(report["count"], 2)
+        self.assertEqual(report["count"], 3)
         self.assertEqual(report["issues"], [])
 
     def test_catalogue_rejects_identity_and_path_collisions(self) -> None:

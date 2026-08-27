@@ -11,6 +11,9 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 - **SEAT**
   - **Leon**
     - [1P — VAG PQ35](#seat-leon-1p-pq35) (`seat-leon-1p-pq35`)
+- **Volkswagen**
+  - **Passat**
+    - [3C (B6) — VAG PQ46](#volkswagen-passat-b6-3c-pq46) (`volkswagen-passat-b6-3c-pq46`)
 - **Škoda**
   - **Superb**
     - [3T — VAG PQ46](#skoda-superb-3t-pq46) (`skoda-superb-3t-pq46`)
@@ -20,6 +23,7 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 | Profile | Vehicle | Years | Maturity | Qualification | Last tested | Review | Recheck after | Legacy aliases | Compatible market names | Replay coverage | Evidence | Canonical capabilities |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [`seat-leon-1p-pq35`](#seat-leon-1p-pq35) | SEAT Leon 1P / Mk2 (PQ35) | 2005–2012 | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | `seat_1p` | — | 24 cases; 11/11 events; 63/63 statuses | hardware: 1, replay: 1, research: 3 | 11 events; 63 statuses |
+| [`volkswagen-passat-b6-3c-pq46`](#volkswagen-passat-b6-3c-pq46) | Volkswagen Passat B6 3C (PQ46) | 2005–2010 | experimental | none | — | unreviewed | — | — | Passat B6 | 24 cases; 10/10 events; 50/50 statuses | — | 10 events; 50 statuses |
 | [`skoda-superb-3t-pq46`](#skoda-superb-3t-pq46) | Škoda Superb II 3T (PQ46) | 2008–2015 | experimental | none | — | unreviewed | — | — | Superb II | 24 cases; 13/13 events; 48/48 statuses | — | 13 events; 48 statuses |
 
 ## Profiles
@@ -75,6 +79,56 @@ A listed profile is a bounded compatibility claim, not a restriction on new vehi
 #### Canonical statuses
 
 `climate.blower_load_percent`, `climate.blower_load_raw`, `climate.compressor_active`, `climate.debug_555_b1`, `climate.debug_555_b1_raw`, `climate.debug_555_b3`, `climate.debug_555_b3_raw`, `climate.debug_555_b4`, `climate.debug_555_b4_raw`, `climate.front_windscreen_heater_requested`, `climate.klima_status_raw`, `climate.outside_temp_regulation_c`, `climate.outside_temp_regulation_raw`, `climate.outside_temp_unfiltered_c`, `climate.outside_temp_unfiltered_raw`, `climate.rear_window_heater_raw`, `climate.rear_window_heater_requested`, `climate.recirculation_active`, `climate.recirculation_raw`, `doors.any_open`, `doors.bonnet`, `doors.boot`, `doors.front_left`, `doors.front_right`, `doors.raw`, `doors.rear_left`, `doors.rear_right`, `electrical.supply_voltage_raw`, `electrical.supply_voltage_v`, `engine.coolant_temp_c`, `engine.coolant_temp_raw`, `engine.speed_raw`, `engine.speed_rpm`, `fuel.level_l`, `fuel.level_raw`, `fuel.low_level_warning`, `lighting.brake`, `lighting.bulb_out`, `lighting.bulb_out_raw`, `lighting.dimmer_635_raw`, `lighting.dimmer_percent`, `lighting.dimmer_percent_mirror`, `lighting.dimmer_raw`, `lighting.front_fog`, `lighting.hazards`, `lighting.left_indicator`, `lighting.mode`, `lighting.mode_raw`, `lighting.right_indicator`, `lighting.secondary_raw`, `steering.angle_degrees`, `steering.angle_magnitude_raw`, `steering.angle_raw`, `steering.direction`, `vehicle.handbrake`, `vehicle.handbrake_raw`, `vehicle.odometer_km`, `vehicle.odometer_raw`, `vehicle.present`, `vehicle.reverse`, `vehicle.reverse_raw`, `vehicle.speed_kmh`, `vehicle.speed_raw`
+
+<a id="volkswagen-passat-b6-3c-pq46"></a>
+### Volkswagen Passat B6 3C (PQ46)
+
+- Stable ID: `volkswagen-passat-b6-3c-pq46`
+- Maintained path: `vehicles/volkswagen/passat/b6-3c-pq46/config.json`
+- Manufacturer / model: Volkswagen Passat
+- Generation / platform: 3C (B6) / VAG PQ46
+- Model years: 2005–2010
+- Maturity: `experimental`
+- Qualification: `none`; last tested `not recorded`
+- Review: `unreviewed` by —; recheck after `not scheduled`
+- Qualification history entries: 0
+- Legacy aliases: —
+- Compatible market names: Passat B6
+- CAN buses: `infotainment`
+- Replay proof: `fixtures/mappings.v1.json`; 24 cases; 10/10 events and 50/50 statuses covered
+
+#### Qualification scope
+
+- No qualification scope declared.
+
+#### Compatibility boundary
+
+- Equipment: —
+- Vehicle variants: —
+
+#### Evidence
+
+- No evidence declared.
+
+#### Limitations
+
+- Experimental profile derived from one 2010 RHD hardware capture; wider Passat B6/3C compatibility is not yet qualified.
+- Road-speed decoding was not exercised in the capture and is intentionally omitted.
+- Front windscreen heater was unavailable on the captured vehicle and is intentionally omitted.
+- The captured steering wheel had a telephone button and no mute control; no mute or play/pause event is claimed.
+- The guided right-steering-angle procedure contained operator error; steering decoding is supported by centre/left observations and cross-vehicle PQ agreement.
+- Front-fog state was not directly exercised; the lighting-mode decoder masks the known PQ front-fog bit only to preserve the base lamp mode.
+- Sleep/wake timeout was not exercised; 0x65F presence traffic itself was observed continuously.
+- Fuel-range candidates are intentionally omitted.
+- Open MMI remains passive receive-only and does not transmit vehicle CAN frames.
+
+#### Canonical events
+
+`arrow_left`, `arrow_right`, `brightness_level`, `next_track`, `previous_track`, `telephone`, `vehicle_present:off`, `vehicle_present:on`, `volume_down`, `volume_up`
+
+#### Canonical statuses
+
+`climate.blower_load_percent`, `climate.blower_load_raw`, `climate.compressor_active`, `climate.klima_status_raw`, `climate.outside_temp_regulation_c`, `climate.outside_temp_regulation_raw`, `climate.outside_temp_unfiltered_c`, `climate.outside_temp_unfiltered_raw`, `climate.rear_window_heater_raw`, `climate.rear_window_heater_requested`, `climate.recirculation_active`, `climate.recirculation_raw`, `doors.any_open`, `doors.bonnet`, `doors.boot`, `doors.front_left`, `doors.front_right`, `doors.raw`, `doors.rear_left`, `doors.rear_right`, `electrical.supply_voltage_raw`, `electrical.supply_voltage_v`, `engine.coolant_temp_c`, `engine.coolant_temp_raw`, `engine.speed_raw`, `engine.speed_rpm`, `lighting.brake`, `lighting.bulb_out`, `lighting.bulb_out_raw`, `lighting.dimmer_635_raw`, `lighting.dimmer_percent`, `lighting.dimmer_percent_mirror`, `lighting.dimmer_raw`, `lighting.hazards`, `lighting.left_indicator`, `lighting.mode`, `lighting.mode_raw`, `lighting.right_indicator`, `lighting.secondary_raw`, `steering.angle_degrees`, `steering.angle_magnitude_raw`, `steering.angle_raw`, `steering.direction`, `vehicle.handbrake`, `vehicle.handbrake_raw`, `vehicle.odometer_km`, `vehicle.odometer_raw`, `vehicle.present`, `vehicle.reverse`, `vehicle.reverse_raw`
 
 <a id="skoda-superb-3t-pq46"></a>
 ### Škoda Superb II 3T (PQ46)

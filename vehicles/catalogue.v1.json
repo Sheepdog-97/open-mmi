@@ -11,6 +11,10 @@
     "skoda-superb-3t-pq46": {
       "path": "skoda/superb/3t-pq46/config.json",
       "aliases": []
+    },
+    "volkswagen-passat-b6-3c-pq46": {
+      "path": "volkswagen/passat/b6-3c-pq46/config.json",
+      "aliases": []
     }
   }
 }
