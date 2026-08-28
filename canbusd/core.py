@@ -616,6 +616,7 @@ def main(
     _safe_publish_loaded_runtime(runtime)
     bus = None
     opened_interface: Optional[str] = None
+    link_unavailable_since: Optional[float] = None
     last_check = 0.0
     iterations = 0
 
@@ -660,16 +661,27 @@ def main(
                     _safe_reset_status()
 
                 opened_interface = IFACE
+                link_unavailable_since = None
                 last_seen.clear()
                 present_state.clear()
                 status_state.reset()
 
             if not Path(f"/sys/class/net/{IFACE}").exists():
                 if bus:
+                    if link_unavailable_since is None:
+                        link_unavailable_since = now
                     bus.shutdown()
                     bus = None
 
-                _check_presence(presence, last_seen, present_state, bindings, now, dispatch_fn=dispatch_fn)
+                if link_unavailable_since is None:
+                    _check_presence(
+                        presence,
+                        last_seen,
+                        present_state,
+                        bindings,
+                        now,
+                        dispatch_fn=dispatch_fn,
+                    )
                 time.sleep(1)
                 continue
 
@@ -698,21 +710,30 @@ def main(
                     IFACE,
                     error,
                 )
+                if link_unavailable_since is None:
+                    link_unavailable_since = now
                 try:
                     bus.shutdown()
                 except Exception:
                     logger.exception("CAN socket shutdown failed during link recovery")
                 bus = None
-                last_seen.clear()
-                present_state.clear()
                 last_codes.clear()
                 last_match_states.clear()
                 status_state.reset()
-                _safe_reset_status()
                 time.sleep(1)
                 continue
 
             now = time.monotonic()
+
+            if link_unavailable_since is not None:
+                paused_for = max(0.0, now - link_unavailable_since)
+                for cid in last_seen:
+                    last_seen[cid] += paused_for
+                link_unavailable_since = None
+                logger.info(
+                    "CAN interface '%s' recovered; presence timeout resumed",
+                    IFACE,
+                )
 
             if msg is None:
                 _check_presence(presence, last_seen, present_state, bindings, now, dispatch_fn=dispatch_fn)

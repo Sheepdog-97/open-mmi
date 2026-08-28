@@ -298,7 +298,7 @@ class CanbusdCoreTests(unittest.TestCase):
                 self.assertEqual(open_bus.call_count, 2)
                 self.assertEqual(failed_bus.shutdown_calls, 1)
                 self.assertEqual(recovered_bus.shutdown_calls, 1)
-                self.assertEqual(reset_status.call_count, 2)
+                self.assertEqual(reset_status.call_count, 1)
                 sleep.assert_called_once_with(1)
                 self.assertIn("became unavailable", "\n".join(logs.output))
 
@@ -329,6 +329,73 @@ class CanbusdCoreTests(unittest.TestCase):
         self.assertEqual(recovered_bus.shutdown_calls, 1)
         sleep.assert_called_once_with(1)
         self.assertIn("temporarily unavailable while opening", "\n".join(logs.output))
+
+    def test_recoverable_link_loss_pauses_presence_timeout_without_false_bounce(self):
+        presence_rule = {
+            "id": 0x65F,
+            "timeout_ms": 1000,
+            "status_path": "vehicle.present",
+            "on_present": "vehicle:on",
+            "on_absent": "vehicle:off",
+        }
+        presence_frame = SimpleNamespace(
+            arbitration_id=0x65F,
+            data=bytes([0]),
+            dlc=1,
+        )
+        failed_bus = FakeBus(
+            [
+                presence_frame,
+                OSError(errno.ENETDOWN, "CAN link unavailable"),
+            ]
+        )
+        recovered_bus = FakeBus([None, None, None])
+        open_bus = mock.Mock(side_effect=[failed_bus, recovered_bus])
+        monotonic = mock.Mock(
+            side_effect=[
+                0.0,
+                0.1,
+                0.2,
+                5.2,
+                5.3,
+                5.9,
+                6.0,
+                6.3,
+                6.4,
+            ]
+        )
+        dispatch_fn = mock.Mock()
+
+        with (
+            mock.patch.object(core, "_managed_configuration_mode", return_value=True),
+            mock.patch.object(
+                core,
+                "_load_config",
+                return_value=self._config(presence=[presence_rule]),
+            ),
+            mock.patch.object(core, "_load_bindings", return_value={}),
+            mock.patch.object(core.Path, "exists", return_value=True),
+            mock.patch.object(core.time, "monotonic", monotonic),
+            mock.patch.object(core.time, "sleep"),
+            mock.patch.object(core.can.interface, "Bus", open_bus),
+            mock.patch.object(core, "_safe_publish_status"),
+            mock.patch.object(core, "IFACE", "can0"),
+            mock.patch.object(core, "CAN_BUS", "comfort"),
+            self.assertLogs("canbusd", level="INFO") as logs,
+        ):
+            core.main(max_iterations=5, dispatch_fn=dispatch_fn)
+
+        self.assertEqual(
+            dispatch_fn.call_args_list,
+            [
+                mock.call("vehicle:on", None),
+                mock.call("vehicle:off", None),
+            ],
+        )
+        self.assertEqual(open_bus.call_count, 2)
+        self.assertEqual(failed_bus.shutdown_calls, 1)
+        self.assertEqual(recovered_bus.shutdown_calls, 1)
+        self.assertIn("presence timeout resumed", "\n".join(logs.output))
 
     def test_managed_main_pins_documents_until_process_restart(self):
         bus = FakeBus([None, None])
