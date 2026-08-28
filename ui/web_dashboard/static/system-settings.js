@@ -319,6 +319,16 @@
       const targetHtml = targetVersion
         ? `<div class="openmmi-settings-metric"><span data-testid="system-update-target-label">${escapeHtml(targetTitle)}</span><strong data-testid="system-update-target">${escapeHtml(targetVersion)}</strong></div>`
         : "";
+      const pipBefore = String(transaction.pip_version_before || "").trim();
+      const pipAfter = String(transaction.pip_version_after || "").trim();
+      const packagingToolsLabel = pipAfter
+        ? (pipBefore && pipBefore !== pipAfter
+          ? `pip ${pipBefore} → ${pipAfter}`
+          : `pip ${pipAfter} · up to date`)
+        : "";
+      const packagingToolsHtml = packagingToolsLabel
+        ? `<div class="openmmi-settings-metric"><span>Python packaging tools</span><strong data-testid="system-update-pip">${escapeHtml(packagingToolsLabel)}</strong></div>`
+        : "";
       const visibleMessage = String(message || "").trim();
       const updateErrorText = String(update.error || "").trim();
       const updateError = updateErrorText && updateErrorText !== visibleMessage
@@ -344,13 +354,14 @@
             <div class="openmmi-settings-metric"><span>Last checked</span><strong data-testid="system-update-checked-at">${escapeHtml(lastChecked)}</strong></div>
             <div class="openmmi-settings-metric"><span data-testid="system-update-transaction-label">${escapeHtml(transactionTitle)}</span><strong data-testid="system-update-transaction">${escapeHtml(transactionLabel)}</strong></div>
             ${targetHtml}
+            ${packagingToolsHtml}
             ${updateError}
             ${transactionErrorHtml}
             ${readinessIssueHtml}
             <div class="openmmi-config-actions openmmi-update-actions">
               <button type="button" class="openmmi-setting-pill" data-openmmi-update-check="true" data-testid="system-update-check" ${controls.canCheck ? "" : "disabled"}>${updateBusy === "checking" ? "Checking…" : "Check for updates"}</button>
-              <button type="button" class="openmmi-setting-pill" data-openmmi-update-prepare="true" data-testid="system-update-prepare" ${controls.canPrepare ? "" : "disabled"}>${updateBusy === "preparing" ? "Preparing…" : "Prepare update"}</button>
-              <button type="button" class="openmmi-setting-pill is-selected" data-openmmi-update-install="true" data-testid="system-update-install" ${controls.canInstall ? "" : "disabled"}>${updateBusy === "installing" ? "Installing…" : "Install update"}</button>
+              <button type="button" class="openmmi-setting-pill${controls.canPrepare ? " is-selected" : ""}" data-openmmi-update-prepare="true" data-testid="system-update-prepare" ${controls.canPrepare ? "" : "disabled"}>${updateBusy === "preparing" ? "Preparing…" : "Prepare update"}</button>
+              <button type="button" class="openmmi-setting-pill${controls.canInstall ? " is-selected" : ""}" data-openmmi-update-install="true" data-testid="system-update-install" ${controls.canInstall ? "" : "disabled"}>${updateBusy === "installing" ? "Installing…" : "Install update"}</button>
             </div>
             ${statusBanner("openmmi-update-feedback")}
             <p class="openmmi-update-status-note">Nightly follows the newest available Open MMI build. Updates start only when you choose them and roll back automatically if validation fails.</p>

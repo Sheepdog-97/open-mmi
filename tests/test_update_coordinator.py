@@ -156,11 +156,39 @@ class UpdateCoordinatorTests(unittest.TestCase):
             path = Path(temporary) / "state.json"
             state = update_coordinator.initial_state()
             state.pop("candidate_commit")
+            state.pop("pip_version_before")
+            state.pop("pip_version_after")
             state["schema_version"] = 1
             path.write_text(json.dumps(state), encoding="utf-8")
             migrated = update_coordinator.recover_interrupted_state(path)
-        self.assertEqual(migrated["schema_version"], 2)
+        self.assertEqual(migrated["schema_version"], 3)
         self.assertEqual(migrated["candidate_commit"], "")
+        self.assertEqual(migrated["pip_version_before"], "")
+        self.assertEqual(migrated["pip_version_after"], "")
+
+    def test_schema_two_state_imports_packaging_tools_result_from_rollback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "state.json"
+            transaction = "prepare-" + "a" * 32
+            state = update_coordinator.initial_state()
+            state.pop("pip_version_before")
+            state.pop("pip_version_after")
+            state.update({
+                "schema_version": 2,
+                "state": "complete",
+                "stage": "complete",
+                "transaction_id": transaction,
+            })
+            path.write_text(json.dumps(state), encoding="utf-8")
+            archive = root / "rollback" / transaction
+            archive.mkdir(parents=True)
+            (archive / "pip-version-before").write_text("26.1.2\n", encoding="utf-8")
+            (archive / "pip-version-after").write_text("26.2.1\n", encoding="utf-8")
+            migrated = update_coordinator.read_state(path)
+        self.assertEqual(migrated["schema_version"], 3)
+        self.assertEqual(migrated["pip_version_before"], "26.1.2")
+        self.assertEqual(migrated["pip_version_after"], "26.2.1")
 
     def test_interrupted_active_state_recovers_to_failed(self):
         with tempfile.TemporaryDirectory() as temporary:

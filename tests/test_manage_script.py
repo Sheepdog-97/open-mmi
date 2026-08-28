@@ -561,6 +561,25 @@ sudo() {{ printf '%s\\0' "$@"; }}
         self.assertIn('sudo cp "$REPO_ROOT/README.md" "$INSTALL_DIR/"', update_block)
         self.assertIn('sudo cp "$REPO_ROOT/LICENSE" "$INSTALL_DIR/"', update_block)
 
+    def test_install_and_update_share_packaging_tools_upgrade(self) -> None:
+        self.assertIn("upgrade_python_packaging_tools()", self.text)
+        install_start = self.text.index("cmd_install() {")
+        update_start = self.text.index("cmd_update() {")
+        deploy_start = self.text.index("cmd_deploy_prepared() {")
+        install_block = self.text[install_start:update_start]
+        update_block = self.text[update_start:deploy_start]
+        self.assertIn(
+            'upgrade_python_packaging_tools "$INSTALL_DIR/venv/bin/python"',
+            install_block,
+        )
+        self.assertIn(
+            'upgrade_python_packaging_tools "$INSTALL_DIR/venv/bin/python"',
+            update_block,
+        )
+        self.assertIn('pip install --upgrade pip', self.text)
+        self.assertIn('pip-version-before', self.text)
+        self.assertIn('pip-version-after', self.text)
+
     def test_installed_maintained_catalogue_is_root_owned_and_world_readable(self) -> None:
         self.assertIn("configure_maintained_catalogue_permissions()", self.text)
         self.assertEqual(
@@ -655,6 +674,15 @@ sudo() {{ printf '%s\\0' "$@"; }}
         self.assertIn("trap 'log_error \"Prepared deployment failed at stage: $deployment_stage\"' ERR", block)
         self.assertIn('trap rollback_prepared_deployment ERR', block)
         self.assertIn('Prepared deployment failed at stage: $deployment_stage', block)
+        self.assertIn('deployment_stage="packaging-tools"', block)
+        self.assertIn(
+            'upgrade_python_packaging_tools "$INSTALL_DIR/venv/bin/python" "$rollback_root"',
+            block,
+        )
+        self.assertLess(
+            block.index('deployment_stage="packaging-tools"'),
+            block.index('deployment_stage="package-build"'),
+        )
         self.assertIn('env -u PYTHONPATH "$rollback_root/installation/venv/bin/python" -I -c \'import ui.config_cli\'', block)
         self.assertIn('env -u PYTHONPATH "$INSTALL_DIR/venv/bin/python" -I -c \'import ui.config_cli\'', block)
         self.assertIn('Prepared rollback verified', block)
