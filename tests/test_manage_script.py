@@ -749,7 +749,7 @@ sleep() {{ :; }}
             "EnvironmentFile=/etc/open-mmi/vehicle-config-coordinator.env",
             unit,
         )
-        self.assertIn("PrivateNetwork=true", unit)
+        self.assertNotIn("PrivateNetwork=true", unit)
         self.assertIn("RestrictAddressFamilies=AF_UNIX", unit)
         self.assertIn("ProtectSystem=strict", unit)
         self.assertIn(
