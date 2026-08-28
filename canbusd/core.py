@@ -566,11 +566,21 @@ def _check_presence(
     bindings: Dict[str, Dict[str, Any]],
     now: float,
     dispatch_fn=None,
+    observation_started: Optional[Dict[int, float]] = None,
 ) -> None:
     for p in presence:
         cid = p["id"]
         timeout_s = p["timeout_ms"] / 1000.0
-        is_present = cid in last_seen and (now - last_seen[cid]) <= timeout_s
+        if cid in last_seen:
+            is_present = (now - last_seen[cid]) <= timeout_s
+        elif observation_started is not None:
+            started = observation_started.setdefault(cid, now)
+            if (now - started) < timeout_s:
+                continue
+            is_present = False
+        else:
+            is_present = False
+
         previous = present_state.get(cid)
 
         if previous is None or previous != is_present:
@@ -611,6 +621,7 @@ def main(
         Tuple[int, Tuple[Tuple[int, int], ...], str], bool
     ] = {}
     present_state: Dict[int, Optional[bool]] = {}
+    presence_observation_started: Dict[int, float] = {}
     status_state = StatusRuleState()
     _safe_reset_status()
     _safe_publish_loaded_runtime(runtime)
@@ -664,24 +675,16 @@ def main(
                 link_unavailable_since = None
                 last_seen.clear()
                 present_state.clear()
+                presence_observation_started.clear()
                 status_state.reset()
 
             if not Path(f"/sys/class/net/{IFACE}").exists():
+                if link_unavailable_since is None:
+                    link_unavailable_since = now
                 if bus:
-                    if link_unavailable_since is None:
-                        link_unavailable_since = now
                     bus.shutdown()
                     bus = None
 
-                if link_unavailable_since is None:
-                    _check_presence(
-                        presence,
-                        last_seen,
-                        present_state,
-                        bindings,
-                        now,
-                        dispatch_fn=dispatch_fn,
-                    )
                 time.sleep(1)
                 continue
 
@@ -692,6 +695,8 @@ def main(
                 except Exception as error:
                     if not _is_recoverable_can_link_error(error):
                         raise
+                    if link_unavailable_since is None:
+                        link_unavailable_since = now
                     logger.warning(
                         "CAN interface '%s' is temporarily unavailable while opening (%s); retrying",
                         IFACE,
@@ -729,6 +734,8 @@ def main(
                 paused_for = max(0.0, now - link_unavailable_since)
                 for cid in last_seen:
                     last_seen[cid] += paused_for
+                for cid in presence_observation_started:
+                    presence_observation_started[cid] += paused_for
                 link_unavailable_since = None
                 logger.info(
                     "CAN interface '%s' recovered; presence timeout resumed",
@@ -736,7 +743,15 @@ def main(
                 )
 
             if msg is None:
-                _check_presence(presence, last_seen, present_state, bindings, now, dispatch_fn=dispatch_fn)
+                _check_presence(
+                    presence,
+                    last_seen,
+                    present_state,
+                    bindings,
+                    now,
+                    dispatch_fn=dispatch_fn,
+                    observation_started=presence_observation_started,
+                )
                 continue
 
             last_seen[msg.arbitration_id] = now
@@ -790,7 +805,15 @@ def main(
 
                     last_codes[key] = code
 
-            _check_presence(presence, last_seen, present_state, bindings, now, dispatch_fn=dispatch_fn)
+            _check_presence(
+                presence,
+                last_seen,
+                present_state,
+                bindings,
+                now,
+                dispatch_fn=dispatch_fn,
+                observation_started=presence_observation_started,
+            )
     finally:
         if bus:
             bus.shutdown()

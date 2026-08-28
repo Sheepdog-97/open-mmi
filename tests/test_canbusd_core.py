@@ -397,6 +397,88 @@ class CanbusdCoreTests(unittest.TestCase):
         self.assertEqual(recovered_bus.shutdown_calls, 1)
         self.assertIn("presence timeout resumed", "\n".join(logs.output))
 
+    def test_startup_presence_frame_does_not_emit_false_absent(self):
+        presence_rule = {
+            "id": 0x65F,
+            "timeout_ms": 1000,
+            "status_path": "vehicle.present",
+            "on_present": "vehicle:on",
+            "on_absent": "vehicle:off",
+        }
+        presence_frame = SimpleNamespace(
+            arbitration_id=0x65F,
+            data=bytes([0]),
+            dlc=1,
+        )
+        bus = FakeBus([None, presence_frame])
+        monotonic = mock.Mock(side_effect=[0.0, 0.1, 0.2, 0.3])
+        dispatch_fn = mock.Mock()
+
+        with (
+            mock.patch.object(core, "_managed_configuration_mode", return_value=True),
+            mock.patch.object(
+                core,
+                "_load_config",
+                return_value=self._config(presence=[presence_rule]),
+            ),
+            mock.patch.object(core, "_load_bindings", return_value={}),
+            mock.patch.object(core.Path, "exists", return_value=True),
+            mock.patch.object(core.time, "monotonic", monotonic),
+            mock.patch.object(core.can.interface, "Bus", return_value=bus),
+            mock.patch.object(core, "_safe_publish_status"),
+            mock.patch.object(core, "IFACE", "can0"),
+            mock.patch.object(core, "CAN_BUS", "comfort"),
+        ):
+            core.main(max_iterations=2, dispatch_fn=dispatch_fn)
+
+        self.assertEqual(
+            dispatch_fn.call_args_list,
+            [mock.call("vehicle:on", None)],
+        )
+        self.assertEqual(bus.shutdown_calls, 1)
+
+    def test_initial_presence_absence_waits_for_full_timeout(self):
+        presence_rule = {
+            "id": 0x65F,
+            "timeout_ms": 1000,
+            "status_path": "vehicle.present",
+            "on_present": "vehicle:on",
+            "on_absent": "vehicle:off",
+        }
+        last_seen = {}
+        present_state = {}
+        observation_started = {}
+
+        with mock.patch.object(core, "_publish_presence") as publish_presence:
+            core._check_presence(
+                [presence_rule],
+                last_seen,
+                present_state,
+                {},
+                0.0,
+                observation_started=observation_started,
+            )
+            core._check_presence(
+                [presence_rule],
+                last_seen,
+                present_state,
+                {},
+                0.999,
+                observation_started=observation_started,
+            )
+            publish_presence.assert_not_called()
+            core._check_presence(
+                [presence_rule],
+                last_seen,
+                present_state,
+                {},
+                1.0,
+                observation_started=observation_started,
+            )
+
+        publish_presence.assert_called_once_with(presence_rule, False, {})
+
+
     def test_managed_main_pins_documents_until_process_restart(self):
         bus = FakeBus([None, None])
         load_config = mock.Mock(return_value=self._config())
