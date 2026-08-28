@@ -436,11 +436,17 @@ def _load_config(
             "revision": revision,
         }
 
-        if runtime.profile_has_buses and not runtime.declared:
+        if runtime.requested_name and runtime.requested_name != runtime.name:
             logger.warning(
-                "CAN bus '%s' is not declared in profile metadata; using interface '%s'",
+                "CAN bus alias '%s' resolved to canonical bus '%s'",
+                runtime.requested_name,
                 runtime.name,
-                runtime.interface,
+            )
+
+        if runtime.profile_has_buses and not runtime.declared:
+            logger.error(
+                "CAN bus '%s' is not declared in profile metadata; SocketCAN will remain closed",
+                runtime.name,
             )
 
         if runtime.bring_up:
@@ -509,6 +515,8 @@ def _loaded_runtime_payload(runtime: CanRuntimeConfig) -> Dict[str, Any]:
         errors.append("vehicle-profile-not-loaded")
     if LOADED_BINDINGS is None:
         errors.append("bindings-not-loaded")
+    if runtime.profile_has_buses and not runtime.declared:
+        errors.append("can-bus-not-declared")
     return {
         "api_version": 1,
         "state": "ready" if not errors else "invalid",
@@ -662,6 +670,17 @@ def main(
                 bindings = _load_bindings()
                 _safe_publish_loaded_runtime(runtime)
                 last_check = now
+
+            if runtime.profile_has_buses and not runtime.declared:
+                if bus:
+                    bus.shutdown()
+                    bus = None
+                if opened_interface is not None:
+                    _safe_reset_status()
+                    opened_interface = None
+                link_unavailable_since = None
+                time.sleep(1)
+                continue
 
             if opened_interface != IFACE:
                 if bus:

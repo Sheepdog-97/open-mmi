@@ -740,6 +740,51 @@ def validate_profile(
         if "bring_up" in metadata and not isinstance(metadata["bring_up"], bool):
             issues.append(_issue("error", "invalid-bring-up", f"{path}.bring_up", "must be boolean"))
 
+    raw_aliases = document.get("can_bus_aliases")
+    if raw_aliases is None:
+        raw_aliases = {}
+    elif not isinstance(raw_aliases, Mapping):
+        issues.append(
+            _issue(
+                "error",
+                "invalid-can-bus-aliases",
+                "can_bus_aliases",
+                "must be an object",
+            )
+        )
+        raw_aliases = {}
+
+    for raw_alias, raw_target in raw_aliases.items():
+        path = f"can_bus_aliases.{raw_alias}"
+        if not isinstance(raw_alias, str) or not IDENTIFIER_RE.fullmatch(raw_alias):
+            issues.append(
+                _issue("error", "invalid-bus-alias", path, "alias must be a valid identifier")
+            )
+            continue
+        if not isinstance(raw_target, str) or not IDENTIFIER_RE.fullmatch(raw_target):
+            issues.append(
+                _issue("error", "invalid-bus-alias-target", path, "target must be a valid identifier")
+            )
+            continue
+        if raw_alias in declared_buses:
+            issues.append(
+                _issue(
+                    "error",
+                    "bus-alias-conflict",
+                    path,
+                    "alias conflicts with a declared CAN bus",
+                )
+            )
+        if raw_target not in declared_buses:
+            issues.append(
+                _issue(
+                    "error",
+                    "bus-alias-target-not-declared",
+                    path,
+                    "alias target must name a declared CAN bus",
+                )
+            )
+
     if default_bus not in declared_buses:
         issues.append(_issue("warning", "default-bus-fallback", "default_bus", "default bus is not declared and will use legacy fallback metadata"))
         declared_buses.add(default_bus)
@@ -1444,13 +1489,16 @@ def status_payload(
         active_errors.append("bindings-not-found")
     elif not bindings_entry.get("valid"):
         active_errors.append("bindings-invalid")
+    if runtime.profile_has_buses and not runtime.declared:
+        active_errors.append("can-bus-not-declared")
 
+    configured_bus = runtime.requested_name or runtime.name
     revisions = {
         "vehicle": str(profile_entry.get("revision") or "") if profile_entry else "",
         "bindings": str(bindings_entry.get("revision") or "") if bindings_entry else "",
     }
     revision_input = json.dumps(
-        {**revisions, "active_bus": runtime.name, "interface": runtime.interface},
+        {**revisions, "active_bus": configured_bus, "interface": runtime.interface},
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
@@ -1474,6 +1522,7 @@ def status_payload(
             "vehicle": {**vehicle, "revision": revisions["vehicle"]},
             "bindings": {**bindings, "revision": revisions["bindings"]},
             "active_bus": runtime.name,
+            "configured_bus": configured_bus,
             "interface": runtime.interface,
             "interface_present": runtime.interface in interface_names,
             "configuration_revision": configuration_revision,
@@ -1770,7 +1819,11 @@ def preview_payload(
     for field, before, after in (
         ("vehicle", current.get("vehicle"), target["vehicle"]),
         ("bindings", current.get("bindings"), target["bindings"]),
-        ("active_bus", current.get("active_bus"), active_bus),
+        (
+            "active_bus",
+            current.get("configured_bus", current.get("active_bus")),
+            active_bus,
+        ),
         ("interface", current.get("interface"), interface),
     ):
         if before != after:

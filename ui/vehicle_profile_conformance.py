@@ -36,6 +36,7 @@ TOP_LEVEL_FIELDS = {
     "metadata",
     "default_bus",
     "can_buses",
+    "can_bus_aliases",
     "rules",
     "presence",
     "status",

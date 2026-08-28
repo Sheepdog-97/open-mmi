@@ -959,7 +959,17 @@
       const bus = (profile?.buses || []).find((entry) => entry?.name === name)
         || profile?.buses?.[0]
         || {};
-      return { name, ...bus };
+      const active = snapshot?.active || {};
+      const sameVehicle = draft?.vehicle === identityKey(activeIdentity("vehicle"));
+      const activeInterface = String(active.interface || "");
+      const preserveActiveInterface = sameVehicle
+        && String(active.active_bus || "") === String(name)
+        && INTERFACE_RE.test(activeInterface);
+      return {
+        name,
+        ...bus,
+        interface: preserveActiveInterface ? activeInterface : bus.interface,
+      };
     }
 
     function previewRequest() {

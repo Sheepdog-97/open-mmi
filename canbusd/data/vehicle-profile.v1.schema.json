@@ -111,6 +111,14 @@
     },
     "default_bus": {"type": "string"},
     "can_buses": {"type": "object"},
+    "can_bus_aliases": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"},
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+      }
+    },
     "rules": {"type": "array"},
     "presence": {"type": "array"},
     "status": {"type": "array"}

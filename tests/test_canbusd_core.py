@@ -957,6 +957,54 @@ class CanbusdCoreTests(unittest.TestCase):
         self.assertEqual(sleep.call_count, 2)
         self.assertEqual(bus.shutdown_calls, 0)
 
+    def test_undeclared_profile_bus_is_invalid_and_does_not_open_socketcan(self):
+        invalid_runtime = CanRuntimeConfig(
+            name="missing",
+            default_bus="infotainment",
+            interface="can0",
+            interface_source="default",
+            declared=False,
+            profile_has_buses=True,
+            requested_name="missing",
+        )
+        config = (
+            {},
+            1.0,
+            [],
+            {},
+            core.Path("/tmp/test-open-mmi-profile.json"),
+            invalid_runtime,
+        )
+        core.LOADED_VEHICLE = {
+            "source": "maintained",
+            "id": "seat-leon-1p-pq35",
+            "revision": "sha256:" + "a" * 64,
+        }
+        core.LOADED_BINDINGS = {
+            "source": "maintained",
+            "id": "default",
+            "revision": "sha256:" + "b" * 64,
+        }
+
+        payload = core._loaded_runtime_payload(invalid_runtime)
+        self.assertEqual(payload["state"], "invalid")
+        self.assertEqual(payload["errors"], ["can-bus-not-declared"])
+
+        with (
+            mock.patch.object(core, "_load_config", return_value=config),
+            mock.patch.object(core, "_load_bindings", return_value={}),
+            mock.patch.object(core.time, "monotonic", return_value=1.0),
+            mock.patch.object(core.time, "sleep") as sleep,
+            mock.patch.object(core.can.interface, "Bus") as open_bus,
+            mock.patch.object(core, "IFACE", "can0"),
+            mock.patch.object(core, "CAN_BUS", "missing"),
+            mock.patch.object(core, "RELOAD_INTERVAL", 60),
+        ):
+            core.main(max_iterations=2, dispatch_fn=core.dispatch)
+
+        open_bus.assert_not_called()
+        self.assertEqual(sleep.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

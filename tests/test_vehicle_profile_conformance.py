@@ -239,6 +239,15 @@ class VehicleProfileConformanceTests(unittest.TestCase):
             {issue["code"] for issue in result["errors"]},
         )
 
+
+    def test_maintained_schema_allows_profile_scoped_can_bus_aliases(self) -> None:
+        document = self.profile()
+        document["can_bus_aliases"] = {"legacy_bus": "comfort"}
+        result = vehicle_profile_conformance.validate_metadata(
+            document, expected_id="example_car"
+        )
+        self.assertTrue(result["valid"], result)
+
     def test_maintained_schema_rejects_unknown_top_level_fields(self) -> None:
         document = self.profile()
         document["private_decoder_language"] = True

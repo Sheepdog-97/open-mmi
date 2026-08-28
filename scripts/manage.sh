@@ -2004,14 +2004,14 @@ cmd_config() {
 # It does not configure bitrate and does not bring the interface up.
 #
 # Current known-working default:
-#   comfort -> can0
+#   infotainment -> can0
 #
 # The normal profile-driven setup provisions can0 at 100000 for the Seat 1P
 # reference profile.
 # Keep udev/system setup responsible for hotplug/reboot survival.
 
 [Service]
-Environment="OPEN_MMI_CAN_BUS=comfort"
+Environment="OPEN_MMI_CAN_BUS=infotainment"
 Environment="OPEN_MMI_CAN_INTERFACE=can0"
 EOF
                 chown "$REAL_USER:$REAL_USER" "$override_file"
@@ -2083,7 +2083,7 @@ Commands:
   edit-can
       Edit the CAN runtime override.
       Defaults to the known-working single bus setup:
-      OPEN_MMI_CAN_BUS=comfort
+      OPEN_MMI_CAN_BUS=infotainment
       OPEN_MMI_CAN_INTERFACE=can0
 
       This selects which already-provisioned SocketCAN interface the daemon consumes.

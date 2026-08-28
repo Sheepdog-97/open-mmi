@@ -912,6 +912,15 @@ sleep() {{ :; }}
         self.assertIn('sudo rm -f "$UPDATE_POLICY_FILE"', uninstall_block)
         self.assertIn('sudo rmdir "$(dirname "$UPDATE_POLICY_FILE")"', uninstall_block)
 
+
+    def test_edit_can_defaults_to_current_seat_infotainment_bus(self) -> None:
+        start = self.text.index("        edit-can)")
+        end = self.text.index("        show)", start)
+        block = self.text[start:end]
+        self.assertIn('#   infotainment -> can0', block)
+        self.assertIn('Environment="OPEN_MMI_CAN_BUS=infotainment"', block)
+        self.assertNotIn('Environment="OPEN_MMI_CAN_BUS=comfort"', block)
+
     def test_group_cleanup_guidance_is_safe(self) -> None:
         self.assertNotIn("sudo usermod -G $(groups", self.text)
         self.assertIn("sudo gpasswd -d $REAL_USER video", self.text)

@@ -698,6 +698,64 @@ test("the current setup can be reviewed when no alternative catalogue entry exis
   assert.doesNotMatch(html, /data-testid="vehicle-setup-apply" disabled/);
 });
 
+
+test("legacy bus migration preserves the configured adapter and reviews the canonical bus", async () => {
+  const status = payload();
+  status.active.active_bus = "infotainment";
+  status.active.configured_bus = "comfort";
+  status.active.interface = "can1";
+  status.active.loaded.active_bus = "infotainment";
+  status.active.loaded.interface = "can1";
+  status.catalogue.profiles[0].default_bus = "infotainment";
+  status.catalogue.profiles[0].buses = [
+    { name: "infotainment", interface: "can0", bitrate: 100000 },
+  ];
+  const migrationPreview = {
+    ...previewPayload(),
+    target: {
+      vehicle: { source: "maintained", id: "seat_1p", revision: "sha256:profile" },
+      bindings: { source: "maintained", id: "default", revision: "sha256:bindings" },
+      runtime: {
+        mode: "single",
+        active_bus: "infotainment",
+        buses: { infotainment: { interface: "can1" } },
+      },
+    },
+    active_bus: {
+      name: "infotainment", interface: "can1", profile_interface: "can0",
+      bitrate: 100000, provisioning: "udev",
+    },
+    interface: { name: "can1", present: false, up: false, configured_bitrate: null },
+    plan: {
+      changes: [{ field: "active_bus", from: "comfort", to: "infotainment" }],
+      effects: {
+        write_canonical_configuration: true, write_systemd_runtime: true,
+        write_udev_rules: true, reload_user_manager: true, reload_udev: true,
+        restart_can_service: true,
+      },
+    },
+  };
+  const state = fixture({ status, preview: migrationPreview });
+  const controller = vehicleSetup.createController(state);
+  await controller.refresh();
+
+  assert.deepEqual(controller.previewRequest(), {
+    vehicle: { source: "maintained", id: "seat_1p" },
+    bindings: { source: "maintained", id: "default" },
+    runtime: {
+      active_bus: "infotainment",
+      buses: { infotainment: { interface: "can1" } },
+    },
+  });
+
+  await controller.reviewDraft();
+  const html = controller.template();
+  assert.match(html, /comfort/);
+  assert.match(html, /infotainment/);
+  assert.match(html, /can1 · not detected/);
+  assert.doesNotMatch(html, /data-testid="vehicle-setup-apply" disabled/);
+});
+
 test("profile and bindings changes produce an exact read-only review request", async () => {
   const state = fixture();
   const controller = vehicleSetup.createController(state);
