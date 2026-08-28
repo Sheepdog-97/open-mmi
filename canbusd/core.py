@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Open MMI CAN Bus Daemon."""
 
+import errno
 import hashlib
 import json
 import logging
@@ -53,12 +54,22 @@ IFACE = CAN_RUNTIME.interface
 RELOAD_INTERVAL = 60
 ANY_VALUE_WILDCARD = "any"
 DEFAULT_PRESENCE_TIMEOUT = 1000
+RECOVERABLE_CAN_LINK_ERRNOS = frozenset((errno.ENETDOWN, errno.ENODEV))
 
 _need_reload = False
 _reload_lock = __import__("threading").Lock()
 
 LOADED_VEHICLE: Optional[Dict[str, str]] = None
 LOADED_BINDINGS: Optional[Dict[str, str]] = None
+
+
+def _is_recoverable_can_link_error(error: BaseException) -> bool:
+    """Return whether a SocketCAN failure can recover by reopening the link."""
+
+    error_code = getattr(error, "error_code", None)
+    if error_code is None:
+        error_code = getattr(error, "errno", None)
+    return error_code in RECOVERABLE_CAN_LINK_ERRNOS
 
 
 def _managed_configuration_mode(
@@ -664,9 +675,43 @@ def main(
 
             if bus is None:
                 logger.info("Opening CAN bus '%s' on interface '%s'", CAN_BUS, IFACE)
-                bus = can.interface.Bus(channel=IFACE, interface="socketcan")
+                try:
+                    bus = can.interface.Bus(channel=IFACE, interface="socketcan")
+                except Exception as error:
+                    if not _is_recoverable_can_link_error(error):
+                        raise
+                    logger.warning(
+                        "CAN interface '%s' is temporarily unavailable while opening (%s); retrying",
+                        IFACE,
+                        error,
+                    )
+                    time.sleep(1)
+                    continue
 
-            msg = bus.recv(timeout=0.2)
+            try:
+                msg = bus.recv(timeout=0.2)
+            except Exception as error:
+                if not _is_recoverable_can_link_error(error):
+                    raise
+                logger.warning(
+                    "CAN interface '%s' became unavailable (%s); closing socket and waiting to reopen",
+                    IFACE,
+                    error,
+                )
+                try:
+                    bus.shutdown()
+                except Exception:
+                    logger.exception("CAN socket shutdown failed during link recovery")
+                bus = None
+                last_seen.clear()
+                present_state.clear()
+                last_codes.clear()
+                last_match_states.clear()
+                status_state.reset()
+                _safe_reset_status()
+                time.sleep(1)
+                continue
+
             now = time.monotonic()
 
             if msg is None:

@@ -1,3 +1,4 @@
+import errno
 import hashlib
 import sys
 import tempfile
@@ -255,6 +256,79 @@ class CanbusdCoreTests(unittest.TestCase):
         ):
             core.main(max_iterations=iterations, dispatch_fn=core.dispatch)
         return open_bus
+
+    def test_recoverable_can_link_error_accepts_python_can_and_os_error_codes(self):
+        wrapped = RuntimeError("device removed")
+        wrapped.error_code = errno.ENODEV
+
+        self.assertTrue(core._is_recoverable_can_link_error(wrapped))
+        self.assertTrue(
+            core._is_recoverable_can_link_error(
+                OSError(errno.ENETDOWN, "network is down")
+            )
+        )
+        self.assertFalse(core._is_recoverable_can_link_error(RuntimeError("boom")))
+
+    def test_main_reopens_socketcan_after_recoverable_receive_errors(self):
+        for error_code in (errno.ENETDOWN, errno.ENODEV):
+            with self.subTest(error_code=error_code):
+                failed_bus = FakeBus([OSError(error_code, "CAN link unavailable")])
+                recovered_bus = FakeBus([None])
+                open_bus = mock.Mock(side_effect=[failed_bus, recovered_bus])
+
+                with (
+                    mock.patch.object(
+                        core, "_managed_configuration_mode", return_value=True
+                    ),
+                    mock.patch.object(
+                        core, "_load_config", return_value=self._config()
+                    ),
+                    mock.patch.object(core, "_load_bindings", return_value={}),
+                    mock.patch.object(core.Path, "exists", return_value=True),
+                    mock.patch.object(core.time, "monotonic", return_value=1.0),
+                    mock.patch.object(core.time, "sleep") as sleep,
+                    mock.patch.object(core.can.interface, "Bus", open_bus),
+                    mock.patch.object(core, "_safe_reset_status") as reset_status,
+                    mock.patch.object(core, "IFACE", "can0"),
+                    mock.patch.object(core, "CAN_BUS", "comfort"),
+                    self.assertLogs("canbusd", level="WARNING") as logs,
+                ):
+                    core.main(max_iterations=2, dispatch_fn=core.dispatch)
+
+                self.assertEqual(open_bus.call_count, 2)
+                self.assertEqual(failed_bus.shutdown_calls, 1)
+                self.assertEqual(recovered_bus.shutdown_calls, 1)
+                self.assertEqual(reset_status.call_count, 2)
+                sleep.assert_called_once_with(1)
+                self.assertIn("became unavailable", "\n".join(logs.output))
+
+    def test_main_retries_recoverable_socketcan_open_error(self):
+        recovered_bus = FakeBus([None])
+        open_bus = mock.Mock(
+            side_effect=[
+                OSError(errno.ENODEV, "CAN device removed"),
+                recovered_bus,
+            ]
+        )
+
+        with (
+            mock.patch.object(core, "_managed_configuration_mode", return_value=True),
+            mock.patch.object(core, "_load_config", return_value=self._config()),
+            mock.patch.object(core, "_load_bindings", return_value={}),
+            mock.patch.object(core.Path, "exists", return_value=True),
+            mock.patch.object(core.time, "monotonic", return_value=1.0),
+            mock.patch.object(core.time, "sleep") as sleep,
+            mock.patch.object(core.can.interface, "Bus", open_bus),
+            mock.patch.object(core, "IFACE", "can0"),
+            mock.patch.object(core, "CAN_BUS", "comfort"),
+            self.assertLogs("canbusd", level="WARNING") as logs,
+        ):
+            core.main(max_iterations=2, dispatch_fn=core.dispatch)
+
+        self.assertEqual(open_bus.call_count, 2)
+        self.assertEqual(recovered_bus.shutdown_calls, 1)
+        sleep.assert_called_once_with(1)
+        self.assertIn("temporarily unavailable while opening", "\n".join(logs.output))
 
     def test_managed_main_pins_documents_until_process_restart(self):
         bus = FakeBus([None, None])
