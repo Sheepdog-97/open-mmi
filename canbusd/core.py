@@ -282,6 +282,15 @@ def _filter_items_for_bus(
     ]
 
 
+def _parse_event_rule_value(value: Any) -> int:
+    """Normalize one event-rule byte value from JSON."""
+
+    if isinstance(value, str):
+        text = value.strip()
+        return int(text, 16) if text.lower().startswith("0x") else int(text, 10)
+    return int(value)
+
+
 def _load_config(
     prev_rules=None,
     prev_mtime=None,
@@ -356,12 +365,7 @@ def _load_config(
                 for match in r["matches"]:
                     byte_index = int(match["byte"])
                     raw_match_value = match["value"]
-                    match_value = (
-                        int(raw_match_value, 16)
-                        if isinstance(raw_match_value, str)
-                        and raw_match_value.lower().startswith("0x")
-                        else int(raw_match_value)
-                    )
+                    match_value = _parse_event_rule_value(raw_match_value)
                     matches.append((byte_index, match_value))
                 rules.setdefault(cid, []).append(
                     {
@@ -381,7 +385,7 @@ def _load_config(
             if carries_payload:
                 v = None
             elif v is not None:
-                v = int(v)
+                v = _parse_event_rule_value(v)
 
             rules.setdefault(cid, []).append((b, v, r["event"]))
 
