@@ -15,18 +15,19 @@ Open MMI is an alpha vehicle-integration project with a working local web
 dashboard, installed desktop launcher, vehicle-setup workflow, update
 management, terminal diagnostics, and contributor tooling.
 
-The only vehicle currently reverse engineered and maintained by Open MMI is:
+The maintained vehicle catalogue currently includes:
 
-```text
-SEAT Leon 1P / Mk2
-VAG PQ35
-profile: seat-leon-1p-pq35
-```
+- **SEAT Leon Mk2 / 1P (PQ35)** — hardware-qualified reference profile;
+- **Škoda Superb II / 3T (PQ46)** — replay-qualified candidate backed by a bounded real-vehicle capture; and
+- **Volkswagen Passat B6 / 3C (PQ46)** — replay-qualified candidate backed by a bounded real-vehicle capture.
 
-Templates, synthetic captures, scaffolds, and catalogue infrastructure do not
-claim support for a second vehicle. The maintained SEAT profile is qualified
-only for the equipment, connection point, vehicle variants, and signal scope
-recorded in the [vehicle catalogue](docs/vehicle-catalogue.md).
+The SEAT profile remains the generation-wide hardware-qualified reference. The Superb and
+Passat profiles have reviewed real-car capture evidence plus complete deterministic replay,
+but their formal qualification remains `replay` and their compatibility claims stay bounded
+to the captured vehicles rather than the whole generation. See the
+[vehicle catalogue](docs/vehicle-catalogue.md) for exact evidence and limitations. Likely
+related-PQ mappings that still need local truth can be preserved as structured non-runtime
+candidates, so they are easy to verify without being published as supported vehicle state.
 
 Open MMI currently remains:
 
@@ -94,7 +95,7 @@ When the installer asks, log out and back in once so the existing desktop sessio
 can use Vehicle Setup or browser update actions.
 
 For the complete first-run flow, including CAN-adapter preparation and selecting
-the maintained SEAT profile, see [Getting started](docs/getting-started.md).
+a maintained profile, see [Getting started](docs/getting-started.md).
 
 ## Vehicle setup: UI first
 

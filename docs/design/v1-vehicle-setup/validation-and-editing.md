@@ -169,11 +169,13 @@ Save sequence:
 8. return the new revision, validation result and `applied: false`.
 
 The current editor rejects invalid JSON and semantic validation errors before writing.
-Saving never restarts `canbusd` and never changes maintained content or provenance.
-For coordinator-managed exact document paths, the running daemon pins its successfully
-parsed profile and bindings revisions until restart; periodic and SIGHUP reloads cannot
-activate a saved draft. Activation remains a separate reviewed operation. Last-known-good
-user revision archives remain a later slice.
+An existing invalid custom item remains selectable for recovery: its exact JSON can be
+loaded into the editor, and the catalogue shows the first validation code/path, but Review
+and Apply remain blocked until validation passes. Saving never restarts `canbusd` and never
+changes maintained content or provenance. For coordinator-managed exact document paths, the
+running daemon pins its successfully parsed profile and bindings revisions until restart;
+periodic and SIGHUP reloads cannot activate a saved draft. Activation remains a separate
+reviewed operation. Last-known-good user revision archives remain a later slice.
 
 ## Custom lifecycle operations
 
@@ -182,13 +184,15 @@ require the exact current content revision. They never accept a path or document
 All three operations acquire the shared lifecycle lock so they cannot race a reviewed
 apply or managed update.
 
-- Duplicate is allowed for active or inactive custom items because it leaves the source
-  untouched and creates a new private destination.
-- Rename is allowed only for inactive custom items. It moves the exact profile directory
-  or bindings file, moves and updates provenance, and never changes the content revision.
-- Delete is allowed only for inactive custom items and requires explicit browser
-  confirmation. The backend hides the exact item under a private temporary name before
-  removing its content and provenance.
+- Duplicate is allowed for active or inactive valid custom items because it leaves the
+  source untouched and creates a new private destination. Invalid content must be repaired
+  before duplication.
+- Rename is allowed only for inactive custom items, including invalid items that need
+  recovery or cleanup. It moves the exact profile directory or bindings file, moves and
+  updates provenance, and never changes the content revision.
+- Delete is allowed only for inactive custom items, including invalid items, and requires
+  explicit browser confirmation. The backend hides the exact item under a private temporary
+  name before removing its content and provenance.
 - Existing destination identifiers, stale revisions, unsafe permissions, symlinks, hard
   links, unsupported profile-directory contents and active identities fail closed.
 - Lifecycle operations return `applied: false`; selection and activation remain a

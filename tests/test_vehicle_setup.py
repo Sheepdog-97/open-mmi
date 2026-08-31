@@ -160,6 +160,48 @@ class VehicleSetupTests(unittest.TestCase):
             {issue["code"] for issue in result["errors"]},
         )
 
+    def test_profile_validator_accepts_multi_byte_event_matches(self):
+        document = json.loads(self.profile().read_text(encoding="utf-8"))
+        document["rules"] = [
+            {
+                "id": "0x5C1",
+                "matches": [
+                    {"byte": 0, "value": "0x13"},
+                    {"byte": 2, "value": "0x01"},
+                ],
+                "event": "volume_up",
+            }
+        ]
+
+        result = vehicle_setup.validate_profile(document)
+        self.assertTrue(result["valid"], result)
+
+    def test_profile_validator_rejects_ambiguous_or_invalid_multi_byte_matches(self):
+        document = json.loads(self.profile().read_text(encoding="utf-8"))
+        document["rules"] = [
+            {
+                "id": "0x5C1",
+                "byte": 0,
+                "value": 0x13,
+                "matches": [
+                    {"byte": 0, "value": "0x13"},
+                    {"byte": 0, "value": "any"},
+                ],
+                "event": "volume_up",
+            }
+        ]
+
+        result = vehicle_setup.validate_profile(document)
+        self.assertFalse(result["valid"])
+        self.assertEqual(
+            {
+                "ambiguous-event-rule",
+                "duplicate-rule-match-byte",
+                "invalid-rule-match-value",
+            },
+            {issue["code"] for issue in result["errors"]},
+        )
+
     def test_profile_validator_enforces_canonical_status_paths_and_types(self):
         valid_document = json.loads(self.profile().read_text(encoding="utf-8"))
         valid_document["status"] = [
@@ -190,6 +232,35 @@ class VehicleSetupTests(unittest.TestCase):
             {issue["code"] for issue in result["errors"]},
         )
 
+    def test_profile_validator_accepts_masked_bitfield_equals(self):
+        valid_document = json.loads(self.profile().read_text(encoding="utf-8"))
+        valid_document["status"] = [
+            {
+                "id": "0x470",
+                "byte": 1,
+                "type": "bitfield",
+                "path": "doors",
+                "fields": {"front_right": "0x01"},
+                "equals": {
+                    "boot": {
+                        "mask": "0x60",
+                        "value": "0x60",
+                    }
+                },
+                "any": "any_open",
+                "raw": "raw",
+            }
+        ]
+        self.assertTrue(vehicle_setup.validate_profile(valid_document)["valid"])
+
+        valid_document["status"][0]["equals"]["boot"]["mask"] = "0x100"
+        result = vehicle_setup.validate_profile(valid_document)
+        self.assertFalse(result["valid"])
+        self.assertIn(
+            "invalid-bitfield-entry",
+            {issue["code"] for issue in result["errors"]},
+        )
+
     def test_profile_validator_supports_documented_legacy_bus_fallback(self):
         result = vehicle_setup.validate_profile(
             {
@@ -202,6 +273,35 @@ class VehicleSetupTests(unittest.TestCase):
         self.assertIn(
             "legacy-bus-fallback",
             {issue["code"] for issue in result["warnings"]},
+        )
+
+
+    def test_profile_validator_accepts_safe_bus_aliases_and_rejects_ambiguous_ones(self):
+        document = json.loads(self.profile().read_text(encoding="utf-8"))
+        document["default_bus"] = "infotainment"
+        document["can_buses"] = {"infotainment": {"interface": "can0"}}
+        document["can_bus_aliases"] = {"comfort": "infotainment"}
+        result = vehicle_setup.validate_profile(document)
+        self.assertTrue(result["valid"], result)
+
+        conflict = dict(document)
+        conflict["can_buses"] = {
+            "comfort": {"interface": "can1"},
+            "infotainment": {"interface": "can0"},
+        }
+        conflict["can_bus_aliases"] = {"comfort": "infotainment"}
+        result = vehicle_setup.validate_profile(conflict)
+        self.assertIn(
+            "bus-alias-conflict",
+            {issue["code"] for issue in result["errors"]},
+        )
+
+        missing = dict(document)
+        missing["can_bus_aliases"] = {"comfort": "missing"}
+        result = vehicle_setup.validate_profile(missing)
+        self.assertIn(
+            "bus-alias-target-not-declared",
+            {issue["code"] for issue in result["errors"]},
         )
 
     def test_bindings_validator_is_non_executing_and_flags_legacy_schema(self):
@@ -352,6 +452,61 @@ class VehicleSetupTests(unittest.TestCase):
         self.assertTrue(payload["active"]["configuration_revision"].startswith("sha256:"))
         self.assertIsNone(payload["active"]["loaded"])
         self.assertEqual(payload["compatibility"]["emitted_unbound"], ["vehicle_present:off"])
+
+
+    def test_status_canonicalizes_legacy_bus_alias_without_losing_interface_override(self):
+        profile_path = self.profile(
+            default_bus="infotainment",
+            can_buses={
+                "infotainment": {
+                    "interface": "can0",
+                    "bitrate": 100000,
+                    "provisioning": "udev",
+                    "bring_up": False,
+                }
+            },
+            can_bus_aliases={"comfort": "infotainment"},
+        )
+        bindings_path = self.bindings()
+        payload = vehicle_setup.status_payload(
+            self.roots,
+            environment={
+                "OPEN_MMI_VEHICLE": "seat_1p",
+                "OPEN_MMI_BINDINGS": "default",
+                "OPEN_MMI_VEHICLE_CONFIG": str(profile_path),
+                "OPEN_MMI_BINDINGS_FILE": str(bindings_path),
+                "OPEN_MMI_CAN_BUS": "comfort",
+                "OPEN_MMI_CAN_INTERFACE": "can1",
+            },
+            sys_class_net=self.root / "missing-sysfs",
+        )
+
+        self.assertEqual(payload["active"]["state"], "ready")
+        self.assertEqual(payload["active"]["configured_bus"], "comfort")
+        self.assertEqual(payload["active"]["active_bus"], "infotainment")
+        self.assertEqual(payload["active"]["interface"], "can1")
+
+    def test_status_fails_closed_for_undeclared_bus(self):
+        profile_path = self.profile(
+            default_bus="infotainment",
+            can_buses={"infotainment": {"interface": "can0"}},
+        )
+        bindings_path = self.bindings()
+        payload = vehicle_setup.status_payload(
+            self.roots,
+            environment={
+                "OPEN_MMI_VEHICLE": "seat_1p",
+                "OPEN_MMI_BINDINGS": "default",
+                "OPEN_MMI_VEHICLE_CONFIG": str(profile_path),
+                "OPEN_MMI_BINDINGS_FILE": str(bindings_path),
+                "OPEN_MMI_CAN_BUS": "missing",
+                "OPEN_MMI_CAN_INTERFACE": "can0",
+            },
+            sys_class_net=self.root / "missing-sysfs",
+        )
+
+        self.assertEqual(payload["active"]["state"], "invalid")
+        self.assertIn("can-bus-not-declared", payload["active"]["errors"])
 
     def test_status_surfaces_strict_daemon_loaded_runtime_evidence(self):
         profile_path = self.profile()
@@ -550,6 +705,54 @@ class VehicleSetupTests(unittest.TestCase):
         self.assertNotIn(str(self.root), rendered)
         self.assertNotIn("/opt/open-mmi", rendered)
         self.assertNotIn("manage.sh", rendered)
+
+
+    def test_preview_marks_legacy_bus_alias_for_canonical_apply(self):
+        profile_path = self.profile(
+            default_bus="infotainment",
+            can_buses={
+                "infotainment": {
+                    "interface": "can0",
+                    "bitrate": 100000,
+                    "provisioning": "udev",
+                    "bring_up": False,
+                }
+            },
+            can_bus_aliases={"comfort": "infotainment"},
+        )
+        bindings_path = self.bindings()
+        profile_revision = "sha256:" + hashlib.sha256(profile_path.read_bytes()).hexdigest()
+        bindings_revision = "sha256:" + hashlib.sha256(bindings_path.read_bytes()).hexdigest()
+        current = self.current_status(
+            profile_revision,
+            bindings_revision,
+            active_bus="infotainment",
+            configured_bus="comfort",
+            interface="can1",
+        )
+        preview = vehicle_setup.preview_payload(
+            {
+                "vehicle": {"source": "maintained", "id": "seat_1p"},
+                "bindings": {"source": "maintained", "id": "default"},
+                "runtime": {
+                    "active_bus": "infotainment",
+                    "buses": {"infotainment": {"interface": "can1"}},
+                },
+            },
+            self.roots,
+            current_status=current,
+        )
+
+        self.assertEqual(
+            preview["plan"]["changes"],
+            [{"field": "active_bus", "from": "comfort", "to": "infotainment"}],
+        )
+        self.assertTrue(preview["plan"]["effects"]["write_systemd_runtime"])
+        self.assertEqual(preview["target"]["runtime"]["active_bus"], "infotainment")
+        self.assertEqual(
+            preview["target"]["runtime"]["buses"]["infotainment"]["interface"],
+            "can1",
+        )
 
     def test_preview_reports_changes_interface_health_and_udev_effects(self):
         profile_path = self.profile()

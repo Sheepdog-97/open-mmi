@@ -156,8 +156,7 @@ A snapshot may contain state like:
     "lighting": {
       "mode": "dip",
       "mode_raw": 195,
-      "lights_on": true,
-      "lights_on_raw": 100,
+      "front_fog": false,
       "dimmer_percent": 42,
       "dimmer_raw": 42,
       "brake": false,
@@ -265,11 +264,11 @@ A dashboard or UI consumer should:
 
 ---
 
-## Seat 1P profile-specific fields
+## SEAT Leon Mk2 / 1P profile-specific fields
 
 Some vehicle profiles expose additional passive status fields when the relevant CAN signals are available.
 
-The Seat 1P infotainment-CAN profile currently publishes:
+The SEAT Leon Mk2 / 1P infotainment-CAN profile currently publishes:
 
 ```text
 state.vehicle.speed_kmh

@@ -1,3 +1,4 @@
+import errno
 import hashlib
 import sys
 import tempfile
@@ -256,6 +257,228 @@ class CanbusdCoreTests(unittest.TestCase):
             core.main(max_iterations=iterations, dispatch_fn=core.dispatch)
         return open_bus
 
+    def test_recoverable_can_link_error_accepts_python_can_and_os_error_codes(self):
+        wrapped = RuntimeError("device removed")
+        wrapped.error_code = errno.ENODEV
+
+        self.assertTrue(core._is_recoverable_can_link_error(wrapped))
+        self.assertTrue(
+            core._is_recoverable_can_link_error(
+                OSError(errno.ENETDOWN, "network is down")
+            )
+        )
+        self.assertFalse(core._is_recoverable_can_link_error(RuntimeError("boom")))
+
+    def test_main_reopens_socketcan_after_recoverable_receive_errors(self):
+        for error_code in (errno.ENETDOWN, errno.ENODEV):
+            with self.subTest(error_code=error_code):
+                failed_bus = FakeBus([OSError(error_code, "CAN link unavailable")])
+                recovered_bus = FakeBus([None])
+                open_bus = mock.Mock(side_effect=[failed_bus, recovered_bus])
+
+                with (
+                    mock.patch.object(
+                        core, "_managed_configuration_mode", return_value=True
+                    ),
+                    mock.patch.object(
+                        core, "_load_config", return_value=self._config()
+                    ),
+                    mock.patch.object(core, "_load_bindings", return_value={}),
+                    mock.patch.object(core.Path, "exists", return_value=True),
+                    mock.patch.object(core.time, "monotonic", return_value=1.0),
+                    mock.patch.object(core.time, "sleep") as sleep,
+                    mock.patch.object(core.can.interface, "Bus", open_bus),
+                    mock.patch.object(core, "_safe_reset_status") as reset_status,
+                    mock.patch.object(core, "IFACE", "can0"),
+                    mock.patch.object(core, "CAN_BUS", "comfort"),
+                    self.assertLogs("canbusd", level="WARNING") as logs,
+                ):
+                    core.main(max_iterations=2, dispatch_fn=core.dispatch)
+
+                self.assertEqual(open_bus.call_count, 2)
+                self.assertEqual(failed_bus.shutdown_calls, 1)
+                self.assertEqual(recovered_bus.shutdown_calls, 1)
+                self.assertEqual(reset_status.call_count, 1)
+                sleep.assert_called_once_with(1)
+                self.assertIn("became unavailable", "\n".join(logs.output))
+
+    def test_main_retries_recoverable_socketcan_open_error(self):
+        recovered_bus = FakeBus([None])
+        open_bus = mock.Mock(
+            side_effect=[
+                OSError(errno.ENODEV, "CAN device removed"),
+                recovered_bus,
+            ]
+        )
+
+        with (
+            mock.patch.object(core, "_managed_configuration_mode", return_value=True),
+            mock.patch.object(core, "_load_config", return_value=self._config()),
+            mock.patch.object(core, "_load_bindings", return_value={}),
+            mock.patch.object(core.Path, "exists", return_value=True),
+            mock.patch.object(core.time, "monotonic", return_value=1.0),
+            mock.patch.object(core.time, "sleep") as sleep,
+            mock.patch.object(core.can.interface, "Bus", open_bus),
+            mock.patch.object(core, "IFACE", "can0"),
+            mock.patch.object(core, "CAN_BUS", "comfort"),
+            self.assertLogs("canbusd", level="WARNING") as logs,
+        ):
+            core.main(max_iterations=2, dispatch_fn=core.dispatch)
+
+        self.assertEqual(open_bus.call_count, 2)
+        self.assertEqual(recovered_bus.shutdown_calls, 1)
+        sleep.assert_called_once_with(1)
+        self.assertIn("temporarily unavailable while opening", "\n".join(logs.output))
+
+    def test_recoverable_link_loss_pauses_presence_timeout_without_false_bounce(self):
+        presence_rule = {
+            "id": 0x65F,
+            "timeout_ms": 1000,
+            "status_path": "vehicle.present",
+            "on_present": "vehicle:on",
+            "on_absent": "vehicle:off",
+        }
+        presence_frame = SimpleNamespace(
+            arbitration_id=0x65F,
+            data=bytes([0]),
+            dlc=1,
+        )
+        failed_bus = FakeBus(
+            [
+                presence_frame,
+                OSError(errno.ENETDOWN, "CAN link unavailable"),
+            ]
+        )
+        recovered_bus = FakeBus([None, None, None])
+        open_bus = mock.Mock(side_effect=[failed_bus, recovered_bus])
+        monotonic = mock.Mock(
+            side_effect=[
+                0.0,
+                0.1,
+                0.2,
+                5.2,
+                5.3,
+                5.9,
+                6.0,
+                6.3,
+                6.4,
+            ]
+        )
+        dispatch_fn = mock.Mock()
+
+        with (
+            mock.patch.object(core, "_managed_configuration_mode", return_value=True),
+            mock.patch.object(
+                core,
+                "_load_config",
+                return_value=self._config(presence=[presence_rule]),
+            ),
+            mock.patch.object(core, "_load_bindings", return_value={}),
+            mock.patch.object(core.Path, "exists", return_value=True),
+            mock.patch.object(core.time, "monotonic", monotonic),
+            mock.patch.object(core.time, "sleep"),
+            mock.patch.object(core.can.interface, "Bus", open_bus),
+            mock.patch.object(core, "_safe_publish_status"),
+            mock.patch.object(core, "IFACE", "can0"),
+            mock.patch.object(core, "CAN_BUS", "comfort"),
+            self.assertLogs("canbusd", level="INFO") as logs,
+        ):
+            core.main(max_iterations=5, dispatch_fn=dispatch_fn)
+
+        self.assertEqual(
+            dispatch_fn.call_args_list,
+            [
+                mock.call("vehicle:on", None),
+                mock.call("vehicle:off", None),
+            ],
+        )
+        self.assertEqual(open_bus.call_count, 2)
+        self.assertEqual(failed_bus.shutdown_calls, 1)
+        self.assertEqual(recovered_bus.shutdown_calls, 1)
+        self.assertIn("presence timeout resumed", "\n".join(logs.output))
+
+    def test_startup_presence_frame_does_not_emit_false_absent(self):
+        presence_rule = {
+            "id": 0x65F,
+            "timeout_ms": 1000,
+            "status_path": "vehicle.present",
+            "on_present": "vehicle:on",
+            "on_absent": "vehicle:off",
+        }
+        presence_frame = SimpleNamespace(
+            arbitration_id=0x65F,
+            data=bytes([0]),
+            dlc=1,
+        )
+        bus = FakeBus([None, presence_frame])
+        monotonic = mock.Mock(side_effect=[0.0, 0.1, 0.2, 0.3])
+        dispatch_fn = mock.Mock()
+
+        with (
+            mock.patch.object(core, "_managed_configuration_mode", return_value=True),
+            mock.patch.object(
+                core,
+                "_load_config",
+                return_value=self._config(presence=[presence_rule]),
+            ),
+            mock.patch.object(core, "_load_bindings", return_value={}),
+            mock.patch.object(core.Path, "exists", return_value=True),
+            mock.patch.object(core.time, "monotonic", monotonic),
+            mock.patch.object(core.can.interface, "Bus", return_value=bus),
+            mock.patch.object(core, "_safe_publish_status"),
+            mock.patch.object(core, "IFACE", "can0"),
+            mock.patch.object(core, "CAN_BUS", "comfort"),
+        ):
+            core.main(max_iterations=2, dispatch_fn=dispatch_fn)
+
+        self.assertEqual(
+            dispatch_fn.call_args_list,
+            [mock.call("vehicle:on", None)],
+        )
+        self.assertEqual(bus.shutdown_calls, 1)
+
+    def test_initial_presence_absence_waits_for_full_timeout(self):
+        presence_rule = {
+            "id": 0x65F,
+            "timeout_ms": 1000,
+            "status_path": "vehicle.present",
+            "on_present": "vehicle:on",
+            "on_absent": "vehicle:off",
+        }
+        last_seen = {}
+        present_state = {}
+        observation_started = {}
+
+        with mock.patch.object(core, "_publish_presence") as publish_presence:
+            core._check_presence(
+                [presence_rule],
+                last_seen,
+                present_state,
+                {},
+                0.0,
+                observation_started=observation_started,
+            )
+            core._check_presence(
+                [presence_rule],
+                last_seen,
+                present_state,
+                {},
+                0.999,
+                observation_started=observation_started,
+            )
+            publish_presence.assert_not_called()
+            core._check_presence(
+                [presence_rule],
+                last_seen,
+                present_state,
+                {},
+                1.0,
+                observation_started=observation_started,
+            )
+
+        publish_presence.assert_called_once_with(presence_rule, False, {})
+
+
     def test_managed_main_pins_documents_until_process_restart(self):
         bus = FakeBus([None, None])
         load_config = mock.Mock(return_value=self._config())
@@ -502,6 +725,63 @@ class CanbusdCoreTests(unittest.TestCase):
             ],
         )
 
+    def test_multi_byte_event_rules_match_the_whole_predicate_and_edge_detect(self):
+        event_rules = {
+            0x5C1: [
+                {
+                    "matches": ((0, 0x13), (2, 0x01)),
+                    "event": "volume_up",
+                },
+                {
+                    "matches": ((0, 0x13), (2, 0x0F)),
+                    "event": "volume_down",
+                },
+            ]
+        }
+        messages = [
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x13, 0x00, 0x01, 0x63]), dlc=4),
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x13, 0x00, 0x01, 0x63]), dlc=4),
+            # Same direction byte from the other Superb thumbwheel must not match.
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x14, 0x00, 0x01, 0x63]), dlc=4),
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x13, 0x00, 0x01, 0x63]), dlc=4),
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x13, 0x00, 0x0F, 0x63]), dlc=4),
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x13, 0x00, 0x0F, 0x63]), dlc=4),
+        ]
+        bus = FakeBus(messages)
+
+        with mock.patch.object(core, "dispatch") as dispatch:
+            self._run_main(bus, self._config(rules=event_rules), len(messages))
+
+        self.assertEqual(
+            dispatch.call_args_list,
+            [
+                mock.call("volume_up", None),
+                mock.call("volume_up", None),
+                mock.call("volume_down", None),
+            ],
+        )
+
+    def test_multi_byte_event_rule_ignores_short_frames_without_rearming(self):
+        event_rules = {
+            0x5C1: [
+                {
+                    "matches": ((0, 0x13), (2, 0x01)),
+                    "event": "volume_up",
+                }
+            ]
+        }
+        messages = [
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x13, 0x00, 0x01]), dlc=3),
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x13]), dlc=1),
+            SimpleNamespace(arbitration_id=0x5C1, data=bytes([0x13, 0x00, 0x01]), dlc=3),
+        ]
+        bus = FakeBus(messages)
+
+        with mock.patch.object(core, "dispatch") as dispatch:
+            self._run_main(bus, self._config(rules=event_rules), len(messages))
+
+        dispatch.assert_called_once_with("volume_up", None)
+
     def test_publish_presence_updates_status_and_dispatches_configured_event(self):
         rule = {
             "id": 0x65F,
@@ -676,6 +956,54 @@ class CanbusdCoreTests(unittest.TestCase):
         open_bus.assert_not_called()
         self.assertEqual(sleep.call_count, 2)
         self.assertEqual(bus.shutdown_calls, 0)
+
+    def test_undeclared_profile_bus_is_invalid_and_does_not_open_socketcan(self):
+        invalid_runtime = CanRuntimeConfig(
+            name="missing",
+            default_bus="infotainment",
+            interface="can0",
+            interface_source="default",
+            declared=False,
+            profile_has_buses=True,
+            requested_name="missing",
+        )
+        config = (
+            {},
+            1.0,
+            [],
+            {},
+            core.Path("/tmp/test-open-mmi-profile.json"),
+            invalid_runtime,
+        )
+        core.LOADED_VEHICLE = {
+            "source": "maintained",
+            "id": "seat-leon-1p-pq35",
+            "revision": "sha256:" + "a" * 64,
+        }
+        core.LOADED_BINDINGS = {
+            "source": "maintained",
+            "id": "default",
+            "revision": "sha256:" + "b" * 64,
+        }
+
+        payload = core._loaded_runtime_payload(invalid_runtime)
+        self.assertEqual(payload["state"], "invalid")
+        self.assertEqual(payload["errors"], ["can-bus-not-declared"])
+
+        with (
+            mock.patch.object(core, "_load_config", return_value=config),
+            mock.patch.object(core, "_load_bindings", return_value={}),
+            mock.patch.object(core.time, "monotonic", return_value=1.0),
+            mock.patch.object(core.time, "sleep") as sleep,
+            mock.patch.object(core.can.interface, "Bus") as open_bus,
+            mock.patch.object(core, "IFACE", "can0"),
+            mock.patch.object(core, "CAN_BUS", "missing"),
+            mock.patch.object(core, "RELOAD_INTERVAL", 60),
+        ):
+            core.main(max_iterations=2, dispatch_fn=core.dispatch)
+
+        open_bus.assert_not_called()
+        self.assertEqual(sleep.call_count, 2)
 
 
 if __name__ == "__main__":

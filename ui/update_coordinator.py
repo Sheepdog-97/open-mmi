@@ -31,7 +31,7 @@ from ui.web_dashboard import update_status
 
 
 API_VERSION = 1
-STATE_SCHEMA_VERSION = 2
+STATE_SCHEMA_VERSION = 3
 DEFAULT_STATE_FILE = Path("/var/lib/open-mmi/update-state.json")
 DEFAULT_SOCKET = Path("/run/open-mmi/update-coordinator.sock")
 DEFAULT_LOCK = Path("/run/open-mmi/update.lock")
@@ -67,6 +67,8 @@ def initial_state() -> Dict[str, Any]:
         "target_version": "",
         "previous_version": "",
         "candidate_commit": "",
+        "pip_version_before": "",
+        "pip_version_after": "",
         "error": "",
         "recovered": False,
     }
@@ -81,10 +83,13 @@ def _validate_state(payload: object) -> Dict[str, Any]:
     state = str(payload.get("state") or "")
     if state not in ALLOWED_STATES:
         raise CoordinatorError("Coordinator transaction state is invalid")
-    for key in ("stage", "target_version", "previous_version", "candidate_commit", "error"):
+    for key in (
+        "stage", "target_version", "previous_version", "candidate_commit",
+        "pip_version_before", "pip_version_after", "error",
+    ):
         if not isinstance(payload.get(key), str):
             raise CoordinatorError("Coordinator state value is invalid")
-    for key in ("target_version", "previous_version"):
+    for key in ("target_version", "previous_version", "pip_version_before", "pip_version_after"):
         if payload[key] and not _VERSION_RE.fullmatch(payload[key]):
             raise CoordinatorError("Coordinator version value is invalid")
     if not isinstance(payload.get("recovered"), bool):
@@ -111,6 +116,32 @@ def _trusted_state_file(path: Path) -> bool:
     return stat.S_ISREG(metadata.st_mode) and metadata.st_uid == 0 and not metadata.st_mode & 0o022
 
 
+def _packaging_tool_versions(rollback_root: Path, transaction_id: object) -> tuple[str, str]:
+    transaction = str(transaction_id or "")
+    if not _TRANSACTION_RE.fullmatch(transaction):
+        return "", ""
+    archive = rollback_root / transaction
+    values = []
+    for name in ("pip-version-before", "pip-version-after"):
+        path = archive / name
+        try:
+            metadata = path.lstat()
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_nlink != 1
+                or metadata.st_mode & 0o022
+                or (rollback_root == DEFAULT_ROLLBACK_ROOT and metadata.st_uid != 0)
+            ):
+                return "", ""
+            value = path.read_text(encoding="utf-8").strip()
+        except (OSError, UnicodeError):
+            return "", ""
+        if not value or not _VERSION_RE.fullmatch(value):
+            return "", ""
+        values.append(value)
+    return values[0], values[1]
+
+
 def read_state(path: Path = DEFAULT_STATE_FILE) -> Dict[str, Any]:
     if not path.exists():
         return initial_state()
@@ -119,10 +150,26 @@ def read_state(path: Path = DEFAULT_STATE_FILE) -> Dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(payload, dict) and payload.get("schema_version") == 1:
-            expected = set(initial_state()) - {"candidate_commit"}
+            expected = set(initial_state()) - {
+                "candidate_commit", "pip_version_before", "pip_version_after",
+            }
             if set(payload) != expected:
                 raise CoordinatorError("Coordinator state schema is invalid")
-            payload = dict(payload, schema_version=STATE_SCHEMA_VERSION, candidate_commit="")
+            payload = dict(payload, schema_version=2, candidate_commit="")
+        if isinstance(payload, dict) and payload.get("schema_version") == 2:
+            expected = set(initial_state()) - {"pip_version_before", "pip_version_after"}
+            if set(payload) != expected:
+                raise CoordinatorError("Coordinator state schema is invalid")
+            before, after = _packaging_tool_versions(
+                _artifact_root(path, DEFAULT_ROLLBACK_ROOT, "rollback"),
+                payload.get("transaction_id"),
+            )
+            payload = dict(
+                payload,
+                schema_version=STATE_SCHEMA_VERSION,
+                pip_version_before=before,
+                pip_version_after=after,
+            )
         return _validate_state(payload)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise CoordinatorError("Coordinator state file is invalid") from exc

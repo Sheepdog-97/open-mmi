@@ -14,18 +14,19 @@ vehicles/<brand>/<model>/<generation-platform>/config.json
 
 ---
 
-## Reference profile
+## Maintained profile confidence
 
-The maintainer-tested reference vehicle is currently:
+The maintained catalogue currently has three reverse-engineered profiles:
 
-* SEAT Leon 1P
-* VAG PQ35 platform
-* infotainment CAN at 100000 bitrate
-* SocketCAN interface currently provisioned as `can0`
+* **SEAT Leon Mk2 / 1P (PQ35)** — generation-wide hardware-qualified reference;
+* **Škoda Superb II / 3T (PQ46)** — replay-qualified candidate backed by one controlled 2012 real-vehicle capture;
+* **Volkswagen Passat B6 / 3C (PQ46)** — replay-qualified candidate backed by one controlled 2010 real-vehicle capture.
 
-This does not mean `open-mmi` is a finished Seat/VW infotainment product. The project is
-currently alpha/backend software. The SEAT profile is the sole reverse-engineered maintained
-profile and is hardware-qualified only for the scope and compatibility boundary recorded in
+All three use passive radio infotainment CAN at 100 kbit/s and currently default to `can0`.
+Qualification level and maturity are deliberately separate from the existence of real-car
+capture evidence: the PQ46 candidates have hardware observations and complete replay proof,
+but they are not yet generation-wide hardware-qualified profiles. Exact tested scope,
+compatibility boundaries and limitations are recorded in
 [`vehicle-catalogue.md`](vehicle-catalogue.md) and
 [`vehicle-qualification-workflow.md`](vehicle-qualification-workflow.md).
 
@@ -101,6 +102,26 @@ configure bitrate and does not silently bring interfaces up.
 
 ---
 
+
+## Structured cross-profile candidates
+
+A maintained profile may keep likely related-vehicle status mappings in
+`notes/candidate_mappings.v1.json`. This is deliberately outside `config.json`: candidate
+rules are never loaded by `canbusd`, never published as vehicle state and never counted as
+canonical profile capabilities.
+
+Each record carries an exact ready-to-verify status rule, source profiles, a local evidence
+summary, verification steps and a `weak` / `moderate` / `strong` confidence label. The
+maintained conformance check validates the candidate file and rejects any candidate whose
+output has already become active, preventing stale research entries after promotion.
+Generated catalogue and capability docs show these leads in a separate non-runtime section.
+
+Use this layer for cross-pollination where a related profile strongly suggests the mapping
+but the target vehicle lacks positive local truth. Once verified, move or merge the rule
+into `config.json`, add replay coverage and remove the candidate record.
+
+---
+
 ## Selecting and applying a profile
 
 For an installed system, the intended normal path is:
@@ -152,6 +173,37 @@ rules in [`vehicle-integration-standard.md`](vehicle-integration-standard.md).
 
 Unknown event names, deprecated aliases, payload-bearing `any` rules for no-payload events,
 and no-payload rules for value events fail profile validation.
+
+A normal event rule still matches one CAN byte:
+
+```json
+{
+  "id": "0x5C1",
+  "byte": 0,
+  "value": 6,
+  "event": "volume_up"
+}
+```
+
+When one byte is not sufficient to identify a control, use `matches`. Every predicate must
+match in the same frame before the event is emitted, and the runtime edge-detects the whole
+predicate rather than any individual byte:
+
+```json
+{
+  "id": "0x5C1",
+  "matches": [
+    {"byte": 0, "value": "0x13"},
+    {"byte": 2, "value": "0x01"}
+  ],
+  "event": "volume_up"
+}
+```
+
+`matches` rules use fixed byte values and do not carry an event payload. They are intended
+for controls whose semantics are encoded across multiple bytes, such as steering-wheel
+thumbwheel selector/direction pairs. A rule must use either top-level `byte`/`value` or
+`matches`, never both.
 
 ## Universal statuses, not vehicle-specific paths
 
@@ -384,5 +436,5 @@ Scalar status rules may define temporary aliases while a decoded field is being 
 same value to the canonical and alias paths. Use aliases only for planned schema migrations;
 new profile rules should otherwise have one canonical path.
 
-The Seat 1P `0x3E3` bit is the HVAC recirculation state and publishes only the canonical
+The SEAT Leon Mk2 / 1P `0x3E3` bit is the HVAC recirculation state and publishes only the canonical
 `climate.recirculation_active` and `climate.recirculation_raw` fields.

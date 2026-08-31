@@ -79,6 +79,22 @@ def _formal_qualification(profile: Mapping[str, Any]) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
+def _candidates(profile: Mapping[str, Any]) -> Mapping[str, Any]:
+    value = profile.get("candidates", {})
+    return value if isinstance(value, Mapping) else {}
+
+
+def _candidate_outputs(profile: Mapping[str, Any]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for item in _candidates(profile).get("items", []):
+        if not isinstance(item, Mapping):
+            continue
+        confidence = str(item.get("confidence", "candidate"))
+        for output in item.get("outputs", []):
+            result[str(output)] = confidence
+    return result
+
+
 def _market_aliases(profile: Mapping[str, Any]) -> list[str]:
     metadata = profile.get("metadata", {})
     values = metadata.get("market_aliases", [])
@@ -134,8 +150,8 @@ def render_catalogue(report: Mapping[str, Any]) -> str:
             "",
             "## Catalogue summary",
             "",
-            "| Profile | Vehicle | Years | Maturity | Qualification | Last tested | Review | Recheck after | Legacy aliases | Compatible market names | Replay coverage | Evidence | Canonical capabilities |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| Profile | Vehicle | Years | Maturity | Qualification | Last tested | Review | Recheck after | Legacy aliases | Compatible market names | Replay coverage | Evidence | Canonical capabilities | Research candidates |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
     for profile in profiles:
@@ -160,7 +176,8 @@ def render_catalogue(report: Mapping[str, Any]) -> str:
             f"{_markdown(formal.get('recheck_after') or '—')} | "
             f"{_code_list(profile.get('aliases', []))} | {_text_list(_market_aliases(profile))} | "
             f"{_markdown(replay)} | {_markdown(_evidence_summary(profile))} | "
-            f"{capabilities.get('event_count', 0)} events; {capabilities.get('status_count', 0)} statuses |"
+            f"{capabilities.get('event_count', 0)} events; {capabilities.get('status_count', 0)} statuses | "
+            f"{_candidates(profile).get('count', 0)} non-runtime mappings |"
         )
 
     lines.extend(["", "## Profiles", ""])
@@ -191,6 +208,7 @@ def render_catalogue(report: Mapping[str, Any]) -> str:
                 f"- Replay proof: `{fixtures.get('path', 'not present')}`; {fixtures.get('case_count', 0)} cases; "
                 f"{coverage.get('events', 0)}/{coverage.get('event_total', 0)} events and "
                 f"{coverage.get('statuses', 0)}/{coverage.get('status_total', 0)} statuses covered",
+                f"- Non-runtime candidate mappings: {_candidates(profile).get('count', 0)}",
                 "",
                 "#### Qualification scope",
                 "",
@@ -223,6 +241,27 @@ def render_catalogue(report: Mapping[str, Any]) -> str:
         lines.extend(f"- {_markdown(item)}" for item in limitations)
         if not limitations:
             lines.append("- No limitations declared.")
+
+        lines.extend(["", "#### Non-runtime candidate mappings", ""])
+        candidate_items = _candidates(profile).get("items", [])
+        if candidate_items:
+            lines.append(
+                "These mappings are structured research only. They are not loaded by `canbusd`, "
+                "not published as canonical runtime state, and do not count as profile capabilities."
+            )
+            lines.append("")
+            for item in candidate_items:
+                if not isinstance(item, Mapping):
+                    continue
+                lines.append(
+                    f"- `{_markdown(item.get('id', 'candidate'))}` (`{_markdown(item.get('confidence', 'unknown'))}`) — "
+                    f"outputs {_code_list(item.get('outputs', []))}; sources {_code_list(item.get('source_profiles', []))}. "
+                    f"{_markdown(item.get('local_evidence', ''))} Verify: "
+                    + "; ".join(_markdown(value).rstrip(".") for value in item.get("verify", []))
+                    + "."
+                )
+        else:
+            lines.append("- No structured cross-profile candidate mappings recorded.")
 
         lines.extend(
             [
@@ -284,6 +323,31 @@ def _matrix_table(
     return lines
 
 
+def _candidate_matrix_table(profiles: list[dict[str, Any]]) -> list[str]:
+    profile_ids = [str(profile["id"]) for profile in profiles]
+    candidate_maps = [_candidate_outputs(profile) for profile in profiles]
+    outputs = sorted({output for values in candidate_maps for output in values})
+    lines = [
+        "## Non-runtime cross-profile candidates",
+        "",
+        "These cells are verification leads, not support claims. Candidate rules live under",
+        "`notes/candidate_mappings.v1.json`; runtime and canonical capability counts ignore them.",
+        "",
+        "| Canonical descriptor | " + " | ".join(f"`{identifier}`" for identifier in profile_ids) + " |",
+        "| --- | " + " | ".join("---" for _ in profile_ids) + " |",
+    ]
+    for output in outputs:
+        cells = []
+        for values in candidate_maps:
+            confidence = values.get(output)
+            cells.append(f"Candidate ({confidence})" if confidence else "—")
+        lines.append(f"| `{_markdown(output)}` | " + " | ".join(cells) + " |")
+    if not outputs:
+        lines.append("| — | " + " | ".join("—" for _ in profile_ids) + " |")
+    lines.append("")
+    return lines
+
+
 def render_capability_matrix(report: Mapping[str, Any]) -> str:
     profiles = _valid_profiles(report)
     lines = [
@@ -293,12 +357,13 @@ def render_capability_matrix(report: Mapping[str, Any]) -> str:
         "",
         "The matrix compares canonical event and status coverage across maintained integrations.",
         "A blank cell means the maintained profile does not currently claim that capability; it does",
-        "not prove that the physical vehicle lacks the feature.",
+        "not prove that the physical vehicle lacks the feature. Structured cross-profile candidates are",
+        "listed separately and never count as runtime capabilities until promoted into `config.json`.",
         "",
         "## Profile key",
         "",
-        "| Profile | Vehicle | Maturity | Qualification | Last tested | Review | Recheck after | Events | Statuses |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Profile | Vehicle | Maturity | Qualification | Last tested | Review | Recheck after | Events | Statuses | Candidates |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for profile in profiles:
         metadata = profile["metadata"]
@@ -311,11 +376,13 @@ def render_capability_matrix(report: Mapping[str, Any]) -> str:
             f"{_markdown(qualification.get('last_tested') or '—')} | "
             f"{_markdown(formal.get('review_status') or '—')} | "
             f"{_markdown(formal.get('recheck_after') or '—')} | "
-            f"{capabilities.get('event_count', 0)} | {capabilities.get('status_count', 0)} |"
+            f"{capabilities.get('event_count', 0)} | {capabilities.get('status_count', 0)} | "
+            f"{_candidates(profile).get('count', 0)} |"
         )
     lines.append("")
     lines.extend(_matrix_table(profiles, capability_key="events", label="Canonical events"))
     lines.extend(_matrix_table(profiles, capability_key="statuses", label="Canonical statuses"))
+    lines.extend(_candidate_matrix_table(profiles))
     lines.extend(
         [
             "## Regeneration",

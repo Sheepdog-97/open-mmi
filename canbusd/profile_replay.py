@@ -117,6 +117,41 @@ def _events_for_frame(
         try:
             if _parse_int(rule.get("id")) != can_id:
                 continue
+        except ValueError:
+            continue
+
+        if "matches" in rule:
+            raw_matches = rule.get("matches")
+            if not isinstance(raw_matches, list) or not raw_matches:
+                continue
+            matched = True
+            for match in raw_matches:
+                if not isinstance(match, Mapping):
+                    matched = False
+                    break
+                try:
+                    byte_index = _parse_int(match.get("byte"))
+                    expected = _parse_int(match.get("value"))
+                except ValueError:
+                    matched = False
+                    break
+                if (
+                    byte_index < 0
+                    or byte_index >= len(data)
+                    or data[byte_index] != expected
+                ):
+                    matched = False
+                    break
+            if matched:
+                events.append(
+                    {
+                        "event": str(rule.get("event")),
+                        "payload": None,
+                    }
+                )
+            continue
+
+        try:
             byte_index = _parse_int(rule.get("byte", 0))
         except ValueError:
             continue

@@ -89,6 +89,59 @@ class CanRuntimeTests(unittest.TestCase):
         self.assertTrue(item_matches_bus(item, "replay", "comfort"))
         self.assertFalse(item_matches_bus(item, "powertrain", "comfort"))
 
+    def test_profile_bus_alias_resolves_to_canonical_bus_and_preserves_interface_override(self):
+        runtime = resolve_can_runtime(
+            {
+                "default_bus": "infotainment",
+                "can_buses": {
+                    "infotainment": {"interface": "can0", "bitrate": 100000}
+                },
+                "can_bus_aliases": {"comfort": "infotainment"},
+            },
+            env={
+                "OPEN_MMI_CAN_BUS": "comfort",
+                "OPEN_MMI_CAN_INTERFACE": "can1",
+            },
+        )
+
+        self.assertEqual(runtime.requested_name, "comfort")
+        self.assertEqual(runtime.name, "infotainment")
+        self.assertEqual(runtime.default_bus, "infotainment")
+        self.assertEqual(runtime.interface, "can1")
+        self.assertEqual(runtime.interface_source, "env:OPEN_MMI_CAN_INTERFACE")
+        self.assertEqual(runtime.bitrate, 100000)
+        self.assertTrue(runtime.declared)
+
+    def test_declared_bus_wins_over_conflicting_alias_metadata(self):
+        runtime = resolve_can_runtime(
+            {
+                "default_bus": "comfort",
+                "can_buses": {
+                    "comfort": {"interface": "can2"},
+                    "infotainment": {"interface": "can0"},
+                },
+                "can_bus_aliases": {"comfort": "infotainment"},
+            },
+            env={"OPEN_MMI_CAN_BUS": "comfort"},
+        )
+
+        self.assertEqual(runtime.name, "comfort")
+        self.assertEqual(runtime.interface, "can2")
+        self.assertTrue(runtime.declared)
+
+    def test_alias_to_undeclared_bus_does_not_make_runtime_declared(self):
+        runtime = resolve_can_runtime(
+            {
+                "default_bus": "infotainment",
+                "can_buses": {"infotainment": {"interface": "can0"}},
+                "can_bus_aliases": {"comfort": "missing"},
+            },
+            env={"OPEN_MMI_CAN_BUS": "comfort"},
+        )
+
+        self.assertEqual(runtime.name, "comfort")
+        self.assertFalse(runtime.declared)
+
 
 if __name__ == "__main__":
     unittest.main()

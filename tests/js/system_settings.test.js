@@ -183,6 +183,10 @@ test("system and Jellyfin templates expose the fixed managed update flow without
   assert.match(systemHtml, /Check for updates/);
   assert.match(systemHtml, /Prepare update/);
   assert.match(systemHtml, /Install update/);
+  assert.doesNotMatch(
+    systemHtml,
+    /class="openmmi-setting-pill is-selected" data-openmmi-update-(prepare|install)="true"/,
+  );
   assert.match(systemHtml, /Nightly follows the newest available Open MMI build/);
   assert.match(systemHtml, /roll back automatically if validation fails/);
   assert.doesNotMatch(systemHtml, /data-testid="system-update-target"/);
@@ -222,6 +226,14 @@ test("manual update check sends only fixed confirmation and refreshes the panel"
   assert.match(html, /def5678abc90/);
   assert.match(html, /2026-07-18 14:32:00 UTC/);
   assert.equal(controller.updateControlState().canPrepare, true);
+  assert.match(
+    html,
+    /class="openmmi-setting-pill is-selected" data-openmmi-update-prepare="true"/,
+  );
+  assert.doesNotMatch(
+    html,
+    /class="openmmi-setting-pill is-selected" data-openmmi-update-install="true"/,
+  );
 });
 
 test("source mismatch blocks prepare even when detailed readiness is stale", async () => {
@@ -335,6 +347,15 @@ test("managed prepare and install require confirmation and send no caller-select
   const prepared = await controller.prepareUpdate();
   assert.equal(prepared.state.state, "prepared");
   assert.equal(controller.updateControlState().canInstall, true);
+  const preparedHtml = controller.systemTemplate();
+  assert.doesNotMatch(
+    preparedHtml,
+    /class="openmmi-setting-pill is-selected" data-openmmi-update-prepare="true"/,
+  );
+  assert.match(
+    preparedHtml,
+    /class="openmmi-setting-pill is-selected" data-openmmi-update-install="true"/,
+  );
   assert.deepEqual(
     state.calls.find((call) => call[0] === "POST" && call[1] === "/api/system/update-prepare"),
     ["POST", "/api/system/update-prepare", { confirm: true }],
@@ -349,6 +370,33 @@ test("managed prepare and install require confirmation and send no caller-select
   assert.equal(state.confirmMessages.length, 2);
   assert.match(state.confirmMessages[0], /Download and verify/);
   assert.match(state.confirmMessages[1], /services will restart automatically/);
+});
+
+test("completed update shows the pip packaging tools result", async () => {
+  const state = fixture({
+    coordinatorState: {
+      state: "complete",
+      stage: "complete",
+      pip_version_before: "26.1.2",
+      pip_version_after: "26.2.1",
+    },
+  });
+  const controller = settings.createController(state);
+  await controller.refresh();
+  assert.match(controller.systemTemplate(), /Python packaging tools/);
+  assert.match(controller.systemTemplate(), /pip 26\.1\.2 → 26\.2\.1/);
+
+  const unchanged = fixture({
+    coordinatorState: {
+      state: "complete",
+      stage: "complete",
+      pip_version_before: "26.2.1",
+      pip_version_after: "26.2.1",
+    },
+  });
+  const unchangedController = settings.createController(unchanged);
+  await unchangedController.refresh();
+  assert.match(unchangedController.systemTemplate(), /pip 26\.2\.1 · up to date/);
 });
 
 test("an active transaction resumes polling after a dashboard page reload", async () => {

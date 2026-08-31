@@ -13,13 +13,13 @@ vehicle state → dashboard → media → settings → events/overlays → docs 
 ## Current baseline
 
 - Local web dashboard is now the main project face.
-- Drive page shows live speed, RPM, coolant, voltage, range, outside temperature and lighting state.
+- Drive page shows live speed, RPM, coolant, voltage, outside temperature and lighting state; the range tile remains a placeholder because no maintained canonical fuel-range source is currently registered.
 - Media page supports optional Jellyfin-backed local playback and browser media keys.
 - Climate page shows decoded HVAC-related state.
 - Vehicle/status page shows doors, handbrake, reverse, indicators, hazards and related status.
 - Footer tell-tales are stable and use local icon assets.
 - Demo mode can run without a vehicle.
-- SEAT León 1P is the confirmed reference vehicle.
+- SEAT Leon Mk2 / 1P is the hardware-qualified reference; Superb II / 3T and Passat B6 / 3C are replay-qualified PQ46 candidates backed by bounded real-vehicle captures.
 - Dashboard is receive-only from the vehicle side.
 
 ## Required before V1
@@ -104,7 +104,7 @@ Wanted test vehicles:
 - Škoda Octavia 1Z
 - Škoda Yeti
 
-Compatibility claims should stay conservative until tested. The current confirmed vehicle remains SEAT León 1P.
+Compatibility claims should stay conservative until tested. SEAT Leon Mk2 / 1P remains the PQ35 hardware-qualified reference; the separately captured Superb II / 3T and Passat B6 / 3C are PQ46 replay-qualified candidates and do not extend PQ35 compatibility claims.
 
 ### 7. V1 release docs
 
@@ -196,7 +196,7 @@ Still pending before calling V1 complete:
 
 - [ ] Final public README/docs pass after all dashboard wording is reviewed.
 - [ ] Release notes/changelog for the V1 checkpoint.
-- [ ] Compatibility reports beyond the confirmed SEAT León 1P development vehicle.
+- [ ] Additional PQ35-family compatibility reports beyond the SEAT Leon Mk2 / 1P reference vehicle.
 - [ ] PQ35-family validation using reversible, listen-only test setups.
 - [ ] Keep the dashboard receive-only with respect to vehicle CAN; no transmit/control path from the web UI.
 <!-- OPENMMI_V1_STATUS_END -->

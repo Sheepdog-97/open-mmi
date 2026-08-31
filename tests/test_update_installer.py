@@ -68,6 +68,32 @@ class UpdateInstallerTests(unittest.TestCase):
         environment = run.call_args.args[1]
         self.assertEqual(environment["OPEN_MMI_PREPARED_COMMIT"], completed["candidate_commit"])
 
+    def test_successful_deployment_records_packaging_tools_versions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, state_path, lock_path, staging = self.prepared(root)
+            rollback = root / "rollback"
+
+            def deploy(command, environment):
+                archive = rollback / environment["OPEN_MMI_PREPARED_TRANSACTION"]
+                archive.mkdir(parents=True)
+                (archive / "pip-version-before").write_text("26.1.2\n", encoding="utf-8")
+                (archive / "pip-version-after").write_text("26.2.1\n", encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, stdout="")
+
+            with patch.object(update_installer.update_status, "_read_source_descriptor", return_value=(source, "configured")), patch.object(
+                update_installer.update_policy, "read_policy", return_value=({"channel": "nightly"}, "configured")
+            ), patch.object(update_installer.update_status, "_repository_snapshot", return_value={"state": "ready"}
+            ), patch.object(update_installer.pwd, "getpwuid", return_value=type("Account", (), {"pw_name": "tester"})()), patch.object(
+                update_installer, "_run_deployment", side_effect=deploy
+            ):
+                completed = update_installer.install_prepared(
+                    state_path, lock_path, staging,
+                    command=("fixed-deploy",), rollback_root=rollback,
+                )
+        self.assertEqual(completed["pip_version_before"], "26.1.2")
+        self.assertEqual(completed["pip_version_after"], "26.2.1")
+
     def test_wrong_channel_and_tampered_candidate_fail_before_deployment(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -116,6 +142,10 @@ class UpdateInstallerTests(unittest.TestCase):
         self.assertEqual(
             update_installer._deployment_failure("Prepared deployment failed at stage: repository-fetch"),
             "Prepared deployment failed during repository-fetch; rollback unverified",
+        )
+        self.assertEqual(
+            update_installer._deployment_failure("Prepared deployment failed at stage: packaging-tools"),
+            "Prepared deployment failed during packaging-tools; rollback unverified",
         )
         self.assertEqual(
             update_installer._deployment_failure("Prepared deployment failed at stage: package-build"),

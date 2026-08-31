@@ -44,8 +44,9 @@ function payload() {
           validation: { valid: true, errors: [], warnings: [] },
         },
         {
-          source: "custom", id: "broken", display_name: "Broken", valid: false,
-          validation: { valid: false, errors: [{ code: "invalid-document" }], warnings: [] },
+          source: "custom", id: "broken", display_name: "Broken", valid: false, revision: "sha256:broken-profile",
+          default_bus: "comfort", buses: [{ name: "comfort", interface: "can0", bitrate: 100000 }],
+          validation: { valid: false, errors: [{ code: "invalid-document", path: "status[25].primary" }], warnings: [] },
         },
       ],
       bindings: [
@@ -165,6 +166,7 @@ function fixture(options = {}) {
   const statusPayload = options.status || payload();
   const customDocuments = {
     "profile:my-seat": options.profileContent || '{\n  "rules": [],\n  "note": "<custom>"\n}\n',
+    "profile:broken": options.brokenProfileContent || '{\n  "status": []\n}\n',
     "bindings:my-controls": options.bindingsContent || '{}\n',
   };
   const timers = [];
@@ -343,7 +345,7 @@ test("vehicle setup renders maintained and custom draft choices before review", 
   assert.match(html, /Maintained/);
   assert.match(html, /Custom/);
   assert.match(html, /My &lt;Seat&gt;/);
-  assert.match(html, /value="custom:broken" disabled/);
+  assert.match(html, /value="custom:broken">Broken — invalid<\/option>/);
   assert.match(html, /can0 · not detected/);
   assert.match(html, /100 kbit\/s/);
   assert.match(html, /Review current setup/);
@@ -483,6 +485,35 @@ test("custom lifecycle controls are custom-only and active items stay protected"
   assert.match(html, /data-testid="vehicle-setup-rename-bindings"/);
   assert.doesNotMatch(html, /data-testid="vehicle-setup-rename-bindings" disabled/);
   assert.doesNotMatch(controller.template(), /Rename maintained|Delete maintained/);
+});
+
+test("invalid custom profiles stay recoverable but cannot be reviewed or applied", async () => {
+  const state = fixture();
+  const controller = vehicleSetup.createController(state);
+  await controller.refresh();
+
+  assert.equal(controller.setDraft("vehicle", "custom:broken"), true);
+  let html = controller.template();
+  assert.match(html, /Broken — invalid/);
+  assert.match(html, /1 validation error · invalid-document · status\[25\]\.primary/);
+  assert.doesNotMatch(html, /data-testid="vehicle-setup-edit-vehicle" disabled/);
+  assert.match(html, /data-testid="vehicle-setup-duplicate-vehicle" disabled/);
+  assert.doesNotMatch(html, /data-testid="vehicle-setup-rename-vehicle" disabled/);
+  assert.doesNotMatch(html, /data-testid="vehicle-setup-delete-vehicle" disabled/);
+  assert.match(html, /Duplicate, Review and Apply remain blocked until validation passes/);
+  assert.match(html, /data-testid="vehicle-setup-review" disabled/);
+  assert.equal(controller.previewRequest(), null);
+  assert.equal(await controller.manageCustomItem("duplicate", "vehicle"), null);
+
+  await controller.openCustomEditor("vehicle");
+  assert.equal(controller.editor().id, "broken");
+  assert.match(controller.template(), /data-testid="vehicle-custom-editor"/);
+  assert.equal(controller.closeCustomEditor(), true);
+
+  const deleted = await controller.manageCustomItem("delete", "vehicle");
+  assert.equal(deleted.operation, "delete");
+  assert.equal(controller.draft().vehicle, "maintained:seat_1p");
+  assert.equal(state.calls.some((call) => call[1] === vehicleSetup.APPLY_ENDPOINT), false);
 });
 
 test("custom duplicate and rename are exact-revision operations and remain unapplied", async () => {
@@ -667,6 +698,64 @@ test("the current setup can be reviewed when no alternative catalogue entry exis
   assert.doesNotMatch(html, /data-testid="vehicle-setup-apply" disabled/);
 });
 
+
+test("legacy bus migration preserves the configured adapter and reviews the canonical bus", async () => {
+  const status = payload();
+  status.active.active_bus = "infotainment";
+  status.active.configured_bus = "comfort";
+  status.active.interface = "can1";
+  status.active.loaded.active_bus = "infotainment";
+  status.active.loaded.interface = "can1";
+  status.catalogue.profiles[0].default_bus = "infotainment";
+  status.catalogue.profiles[0].buses = [
+    { name: "infotainment", interface: "can0", bitrate: 100000 },
+  ];
+  const migrationPreview = {
+    ...previewPayload(),
+    target: {
+      vehicle: { source: "maintained", id: "seat_1p", revision: "sha256:profile" },
+      bindings: { source: "maintained", id: "default", revision: "sha256:bindings" },
+      runtime: {
+        mode: "single",
+        active_bus: "infotainment",
+        buses: { infotainment: { interface: "can1" } },
+      },
+    },
+    active_bus: {
+      name: "infotainment", interface: "can1", profile_interface: "can0",
+      bitrate: 100000, provisioning: "udev",
+    },
+    interface: { name: "can1", present: false, up: false, configured_bitrate: null },
+    plan: {
+      changes: [{ field: "active_bus", from: "comfort", to: "infotainment" }],
+      effects: {
+        write_canonical_configuration: true, write_systemd_runtime: true,
+        write_udev_rules: true, reload_user_manager: true, reload_udev: true,
+        restart_can_service: true,
+      },
+    },
+  };
+  const state = fixture({ status, preview: migrationPreview });
+  const controller = vehicleSetup.createController(state);
+  await controller.refresh();
+
+  assert.deepEqual(controller.previewRequest(), {
+    vehicle: { source: "maintained", id: "seat_1p" },
+    bindings: { source: "maintained", id: "default" },
+    runtime: {
+      active_bus: "infotainment",
+      buses: { infotainment: { interface: "can1" } },
+    },
+  });
+
+  await controller.reviewDraft();
+  const html = controller.template();
+  assert.match(html, /comfort/);
+  assert.match(html, /infotainment/);
+  assert.match(html, /can1 · not detected/);
+  assert.doesNotMatch(html, /data-testid="vehicle-setup-apply" disabled/);
+});
+
 test("profile and bindings changes produce an exact read-only review request", async () => {
   const state = fixture();
   const controller = vehicleSetup.createController(state);
@@ -682,7 +771,10 @@ test("profile and bindings changes produce an exact read-only review request", a
   assert.match(controller.template(), /Draft selections are not applied/);
   assert.match(controller.template(), /can1/);
   assert.doesNotMatch(controller.template(), /data-testid="vehicle-setup-review" disabled/);
-  assert.equal(controller.setDraft("vehicle", "custom:broken"), false);
+  assert.equal(controller.setDraft("vehicle", "custom:broken"), true);
+  assert.equal(controller.previewRequest(), null);
+  assert.match(controller.template(), /data-testid="vehicle-setup-review" disabled/);
+  assert.equal(controller.setDraft("vehicle", "custom:my-seat"), true);
 
   const request = controller.previewRequest();
   assert.deepEqual(request, {

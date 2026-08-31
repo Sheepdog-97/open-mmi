@@ -343,7 +343,16 @@ def evaluate_rule(
             _set_path(update, _join_path(prefix, name), value)
 
         for name, expected in rule.get("equals", {}).items():
-            value = raw == parse_int(expected)
+            if isinstance(expected, dict):
+                expected_value = parse_int(expected["value"])
+                observed = (
+                    raw & parse_int(expected["mask"])
+                    if "mask" in expected
+                    else raw
+                )
+                value = observed == expected_value
+            else:
+                value = raw == parse_int(expected)
             bools[name] = value
             _set_path(update, _join_path(prefix, name), value)
 

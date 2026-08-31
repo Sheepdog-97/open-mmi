@@ -161,7 +161,7 @@
       "frames": [
         {
           "id": "0x470",
-          "data": "00 01 49 00 10 00 00 00"
+          "data": "00 61 49 00 20 00 00 00"
         }
       ],
       "expect": {
@@ -177,13 +177,13 @@
           "doors.rear_left": false,
           "doors.rear_right": false,
           "doors.bonnet": false,
-          "doors.boot": false,
+          "doors.boot": true,
           "doors.any_open": true,
-          "doors.raw": 1,
+          "doors.raw": 97,
           "lighting.dimmer_raw": 73,
           "lighting.dimmer_percent": 73,
-          "lighting.bulb_out_raw": 16,
-          "lighting.bulb_out": true
+          "lighting.bulb_out_raw": 32,
+          "lighting.bulb_out": false
         }
       }
     },
@@ -269,14 +269,15 @@
       "frames": [
         {
           "id": "0x531",
-          "data": "C3 4B 00 00 00 00 00 00"
+          "data": "CB 4B 00 00 00 00 00 00"
         }
       ],
       "expect": {
         "events": [],
         "statuses": {
-          "lighting.mode_raw": 195,
+          "lighting.mode_raw": 203,
           "lighting.mode": "dip",
+          "lighting.front_fog": true,
           "lighting.brake": true,
           "lighting.left_indicator": true,
           "lighting.right_indicator": true,
@@ -423,13 +424,13 @@
       "frames": [
         {
           "id": "0x65D",
-          "data": "00 39 30 00 00 00 00 00"
+          "data": "00 39 30 F0 00 00 00 00"
         }
       ],
       "expect": {
         "events": [],
         "statuses": {
-          "vehicle.odometer_raw": 12345,
+          "vehicle.odometer_raw": 15740985,
           "vehicle.odometer_km": 12345.0
         }
       }

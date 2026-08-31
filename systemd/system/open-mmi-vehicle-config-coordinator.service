@@ -21,7 +21,8 @@ StateDirectoryMode=0755
 UMask=0027
 NoNewPrivileges=true
 PrivateDevices=true
-PrivateNetwork=true
+# Host network namespace visibility is required for read-only SocketCAN discovery.
+# Socket creation remains confined to AF_UNIX below.
 PrivateTmp=true
 ProtectClock=true
 ProtectControlGroups=true

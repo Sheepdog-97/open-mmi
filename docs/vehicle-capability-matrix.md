@@ -4,96 +4,121 @@
 
 The matrix compares canonical event and status coverage across maintained integrations.
 A blank cell means the maintained profile does not currently claim that capability; it does
-not prove that the physical vehicle lacks the feature.
+not prove that the physical vehicle lacks the feature. Structured cross-profile candidates are
+listed separately and never count as runtime capabilities until promoted into `config.json`.
 
 ## Profile key
 
-| Profile | Vehicle | Maturity | Qualification | Last tested | Review | Recheck after | Events | Statuses |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `seat-leon-1p-pq35` | SEAT Leon 1P / Mk2 (PQ35) | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | 11 | 62 |
+| Profile | Vehicle | Maturity | Qualification | Last tested | Review | Recheck after | Events | Statuses | Candidates |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `seat-leon-1p-pq35` | SEAT Leon Mk2 / 1P (PQ35) | qualified | hardware | 2026-07-20 | approved | 2027-07-20 | 11 | 63 | 0 |
+| `volkswagen-passat-b6-3c-pq46` | Volkswagen Passat B6 / 3C (PQ46) | candidate | replay | 2026-08-27 | approved | 2027-08-27 | 10 | 50 | 5 |
+| `skoda-superb-3t-pq46` | Škoda Superb II / 3T (PQ46) | candidate | replay | 2026-08-27 | approved | 2027-08-27 | 13 | 52 | 4 |
 
 ## Canonical events
 
-| Canonical descriptor | `seat-leon-1p-pq35` |
-| --- | --- |
-| `arrow_left` | Yes |
-| `arrow_right` | Yes |
-| `brightness_level` | Yes |
-| `mute_toggle` | Yes |
-| `next_track` | Yes |
-| `play_pause` | Yes |
-| `previous_track` | Yes |
-| `vehicle_present:off` | Yes |
-| `vehicle_present:on` | Yes |
-| `volume_down` | Yes |
-| `volume_up` | Yes |
+| Canonical descriptor | `seat-leon-1p-pq35` | `volkswagen-passat-b6-3c-pq46` | `skoda-superb-3t-pq46` |
+| --- | --- | --- | --- |
+| `arrow_down` | — | — | Yes |
+| `arrow_left` | Yes | Yes | — |
+| `arrow_right` | Yes | Yes | — |
+| `arrow_up` | — | — | Yes |
+| `back` | — | — | Yes |
+| `brightness_level` | Yes | Yes | Yes |
+| `confirm` | — | — | Yes |
+| `mute_toggle` | Yes | — | Yes |
+| `next_track` | Yes | Yes | Yes |
+| `play_pause` | Yes | — | — |
+| `previous_track` | Yes | Yes | Yes |
+| `telephone` | — | Yes | Yes |
+| `vehicle_present:off` | Yes | Yes | Yes |
+| `vehicle_present:on` | Yes | Yes | Yes |
+| `volume_down` | Yes | Yes | Yes |
+| `volume_up` | Yes | Yes | Yes |
 
 ## Canonical statuses
 
-| Canonical descriptor | `seat-leon-1p-pq35` |
-| --- | --- |
-| `climate.blower_load_percent` | Yes |
-| `climate.blower_load_raw` | Yes |
-| `climate.compressor_active` | Yes |
-| `climate.debug_555_b1` | Yes |
-| `climate.debug_555_b1_raw` | Yes |
-| `climate.debug_555_b3` | Yes |
-| `climate.debug_555_b3_raw` | Yes |
-| `climate.debug_555_b4` | Yes |
-| `climate.debug_555_b4_raw` | Yes |
-| `climate.front_windscreen_heater_requested` | Yes |
-| `climate.klima_status_raw` | Yes |
-| `climate.outside_temp_regulation_c` | Yes |
-| `climate.outside_temp_regulation_raw` | Yes |
-| `climate.outside_temp_unfiltered_c` | Yes |
-| `climate.outside_temp_unfiltered_raw` | Yes |
-| `climate.rear_window_heater_raw` | Yes |
-| `climate.rear_window_heater_requested` | Yes |
-| `climate.recirculation_active` | Yes |
-| `climate.recirculation_raw` | Yes |
-| `doors.any_open` | Yes |
-| `doors.bonnet` | Yes |
-| `doors.boot` | Yes |
-| `doors.front_left` | Yes |
-| `doors.front_right` | Yes |
-| `doors.raw` | Yes |
-| `doors.rear_left` | Yes |
-| `doors.rear_right` | Yes |
-| `electrical.supply_voltage_raw` | Yes |
-| `electrical.supply_voltage_v` | Yes |
-| `engine.coolant_temp_c` | Yes |
-| `engine.coolant_temp_raw` | Yes |
-| `engine.speed_raw` | Yes |
-| `engine.speed_rpm` | Yes |
-| `fuel.level_l` | Yes |
-| `fuel.level_raw` | Yes |
-| `fuel.low_level_warning` | Yes |
-| `lighting.brake` | Yes |
-| `lighting.bulb_out` | Yes |
-| `lighting.bulb_out_raw` | Yes |
-| `lighting.dimmer_635_raw` | Yes |
-| `lighting.dimmer_percent` | Yes |
-| `lighting.dimmer_percent_mirror` | Yes |
-| `lighting.dimmer_raw` | Yes |
-| `lighting.hazards` | Yes |
-| `lighting.left_indicator` | Yes |
-| `lighting.mode` | Yes |
-| `lighting.mode_raw` | Yes |
-| `lighting.right_indicator` | Yes |
-| `lighting.secondary_raw` | Yes |
-| `steering.angle_degrees` | Yes |
-| `steering.angle_magnitude_raw` | Yes |
-| `steering.angle_raw` | Yes |
-| `steering.direction` | Yes |
-| `vehicle.handbrake` | Yes |
-| `vehicle.handbrake_raw` | Yes |
-| `vehicle.odometer_km` | Yes |
-| `vehicle.odometer_raw` | Yes |
-| `vehicle.present` | Yes |
-| `vehicle.reverse` | Yes |
-| `vehicle.reverse_raw` | Yes |
-| `vehicle.speed_kmh` | Yes |
-| `vehicle.speed_raw` | Yes |
+| Canonical descriptor | `seat-leon-1p-pq35` | `volkswagen-passat-b6-3c-pq46` | `skoda-superb-3t-pq46` |
+| --- | --- | --- | --- |
+| `climate.blower_load_percent` | Yes | Yes | Yes |
+| `climate.blower_load_raw` | Yes | Yes | Yes |
+| `climate.compressor_active` | Yes | Yes | Yes |
+| `climate.debug_555_b1` | Yes | — | — |
+| `climate.debug_555_b1_raw` | Yes | — | — |
+| `climate.debug_555_b3` | Yes | — | — |
+| `climate.debug_555_b3_raw` | Yes | — | — |
+| `climate.debug_555_b4` | Yes | — | — |
+| `climate.debug_555_b4_raw` | Yes | — | — |
+| `climate.front_windscreen_heater_requested` | Yes | — | — |
+| `climate.klima_status_raw` | Yes | Yes | Yes |
+| `climate.outside_temp_regulation_c` | Yes | Yes | Yes |
+| `climate.outside_temp_regulation_raw` | Yes | Yes | Yes |
+| `climate.outside_temp_unfiltered_c` | Yes | Yes | Yes |
+| `climate.outside_temp_unfiltered_raw` | Yes | Yes | Yes |
+| `climate.rear_window_heater_raw` | Yes | Yes | Yes |
+| `climate.rear_window_heater_requested` | Yes | Yes | Yes |
+| `climate.recirculation_active` | Yes | Yes | Yes |
+| `climate.recirculation_raw` | Yes | Yes | Yes |
+| `doors.any_open` | Yes | Yes | Yes |
+| `doors.bonnet` | Yes | Yes | — |
+| `doors.boot` | Yes | Yes | Yes |
+| `doors.front_left` | Yes | Yes | Yes |
+| `doors.front_right` | Yes | Yes | Yes |
+| `doors.raw` | Yes | Yes | Yes |
+| `doors.rear_left` | Yes | Yes | Yes |
+| `doors.rear_right` | Yes | Yes | Yes |
+| `electrical.supply_voltage_raw` | Yes | Yes | Yes |
+| `electrical.supply_voltage_v` | Yes | Yes | Yes |
+| `engine.coolant_temp_c` | Yes | Yes | Yes |
+| `engine.coolant_temp_raw` | Yes | Yes | Yes |
+| `engine.speed_raw` | Yes | Yes | Yes |
+| `engine.speed_rpm` | Yes | Yes | Yes |
+| `fuel.level_l` | Yes | — | — |
+| `fuel.level_raw` | Yes | — | — |
+| `fuel.low_level_warning` | Yes | — | — |
+| `lighting.brake` | Yes | Yes | Yes |
+| `lighting.bulb_out` | Yes | Yes | Yes |
+| `lighting.bulb_out_raw` | Yes | Yes | Yes |
+| `lighting.dimmer_635_raw` | Yes | Yes | Yes |
+| `lighting.dimmer_percent` | Yes | Yes | Yes |
+| `lighting.dimmer_percent_mirror` | Yes | Yes | Yes |
+| `lighting.dimmer_raw` | Yes | Yes | Yes |
+| `lighting.front_fog` | Yes | — | Yes |
+| `lighting.hazards` | Yes | Yes | Yes |
+| `lighting.left_indicator` | Yes | Yes | Yes |
+| `lighting.mode` | Yes | Yes | Yes |
+| `lighting.mode_raw` | Yes | Yes | Yes |
+| `lighting.right_indicator` | Yes | Yes | Yes |
+| `lighting.secondary_raw` | Yes | Yes | Yes |
+| `steering.angle_degrees` | Yes | Yes | Yes |
+| `steering.angle_magnitude_raw` | Yes | Yes | Yes |
+| `steering.angle_raw` | Yes | Yes | Yes |
+| `steering.direction` | Yes | Yes | Yes |
+| `vehicle.handbrake` | Yes | Yes | Yes |
+| `vehicle.handbrake_raw` | Yes | Yes | Yes |
+| `vehicle.odometer_km` | Yes | Yes | Yes |
+| `vehicle.odometer_raw` | Yes | Yes | Yes |
+| `vehicle.present` | Yes | Yes | Yes |
+| `vehicle.reverse` | Yes | Yes | Yes |
+| `vehicle.reverse_raw` | Yes | Yes | Yes |
+| `vehicle.speed_kmh` | Yes | — | Yes |
+| `vehicle.speed_raw` | Yes | — | Yes |
+
+## Non-runtime cross-profile candidates
+
+These cells are verification leads, not support claims. Candidate rules live under
+`notes/candidate_mappings.v1.json`; runtime and canonical capability counts ignore them.
+
+| Canonical descriptor | `seat-leon-1p-pq35` | `volkswagen-passat-b6-3c-pq46` | `skoda-superb-3t-pq46` |
+| --- | --- | --- | --- |
+| `climate.front_windscreen_heater_requested` | — | Candidate (moderate) | Candidate (moderate) |
+| `doors.bonnet` | — | — | Candidate (strong) |
+| `fuel.level_l` | — | Candidate (strong) | Candidate (strong) |
+| `fuel.level_raw` | — | Candidate (strong) | Candidate (strong) |
+| `fuel.low_level_warning` | — | Candidate (moderate) | Candidate (moderate) |
+| `lighting.front_fog` | — | Candidate (strong) | — |
+| `vehicle.speed_kmh` | — | Candidate (strong) | — |
+| `vehicle.speed_raw` | — | Candidate (strong) | — |
 
 ## Regeneration
 

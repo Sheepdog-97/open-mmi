@@ -274,7 +274,7 @@ retry blocking.
 
 ## Device qualification
 
-On the reference tablet and Seat 1P profile verify:
+On the reference tablet and SEAT Leon Mk2 / 1P profile verify:
 
 - fresh installation default;
 - selecting and reapplying the maintained profile;

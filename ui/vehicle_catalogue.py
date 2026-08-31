@@ -1407,7 +1407,7 @@ def manage_custom_item(
                 "Custom catalogue item changed; refresh Vehicle Setup and try again",
                 "custom-stale",
             )
-        if validation.get("valid") is not True:
+        if action == "duplicate" and validation.get("valid") is not True:
             _raise_invalid_custom(kind, validation)
         provenance, _provenance_token = _read_provenance_optional(
             selected_roots.custom,

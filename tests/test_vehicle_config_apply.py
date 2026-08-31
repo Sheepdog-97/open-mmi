@@ -162,6 +162,20 @@ class VehicleConfigurationApplyOperationsTests(unittest.TestCase):
         with self.assertRaisesRegex(apply.ApplyOperationError, "changed"):
             apply.render_artifacts(changed, self.roots)
 
+    def test_runtime_dropin_writes_canonical_bus_name(self) -> None:
+        target = json.loads(json.dumps(self.target))
+        target["runtime"] = {
+            "mode": "single",
+            "active_bus": "infotainment",
+            "buses": {"infotainment": {"interface": "can1"}},
+        }
+        rendered = apply._runtime_dropin_text(
+            target, self.profile_path, self.bindings_path
+        )
+        self.assertIn("OPEN_MMI_CAN_BUS=infotainment", rendered)
+        self.assertIn("OPEN_MMI_CAN_INTERFACE=can1", rendered)
+        self.assertNotIn("OPEN_MMI_CAN_BUS=comfort", rendered)
+
     def test_vcan_qualification_suppresses_hardware_udev_provisioning(self) -> None:
         target = json.loads(json.dumps(self.target))
         target["runtime"]["buses"]["comfort"]["interface"] = "vcan0"

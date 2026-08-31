@@ -2,6 +2,16 @@
   "schema_version": 1,
   "registry_id": "open-mmi.vehicle-events",
   "events": {
+    "arrow_down": {
+      "title": "Navigate down",
+      "category": "navigation",
+      "description": "Request one logical downward navigation step in the currently focused interface.",
+      "payload": {
+        "type": "none"
+      },
+      "delivery": "repeatable",
+      "status": "stable"
+    },
     "arrow_left": {
       "title": "Navigate left",
       "category": "navigation",
@@ -22,6 +32,26 @@
       "delivery": "repeatable",
       "status": "stable"
     },
+    "arrow_up": {
+      "title": "Navigate up",
+      "category": "navigation",
+      "description": "Request one logical upward navigation step in the currently focused interface.",
+      "payload": {
+        "type": "none"
+      },
+      "delivery": "repeatable",
+      "status": "stable"
+    },
+    "back": {
+      "title": "Navigate back",
+      "category": "navigation",
+      "description": "Request one logical back or cancel step in the currently focused interface.",
+      "payload": {
+        "type": "none"
+      },
+      "delivery": "edge",
+      "status": "stable"
+    },
     "brightness_level": {
       "title": "Brightness level",
       "category": "display",
@@ -33,6 +63,16 @@
         "unit": "percent"
       },
       "delivery": "value",
+      "status": "stable"
+    },
+    "confirm": {
+      "title": "Confirm selection",
+      "category": "navigation",
+      "description": "Activate or confirm the currently focused interface item.",
+      "payload": {
+        "type": "none"
+      },
+      "delivery": "edge",
       "status": "stable"
     },
     "mute_toggle": {
@@ -79,6 +119,16 @@
       "title": "Stop playback",
       "category": "media",
       "description": "Request stopping playback in the active playback context.",
+      "payload": {
+        "type": "none"
+      },
+      "delivery": "edge",
+      "status": "stable"
+    },
+    "telephone": {
+      "title": "Telephone control",
+      "category": "media",
+      "description": "Request the generic telephone control associated with a vehicle phone button; the binding defines any local phone-interface behaviour.",
       "payload": {
         "type": "none"
       },

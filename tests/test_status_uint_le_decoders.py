@@ -11,6 +11,7 @@ class StatusUintLeDecoderTests(unittest.TestCase):
                 "type": "u24le",
                 "start_byte": 1,
                 "path": "vehicle.odometer_km",
+                "mask": "0x0FFFFF",
                 "scale": 1.0,
                 "round": 0,
                 "raw_path": "vehicle.odometer_raw",
@@ -19,11 +20,11 @@ class StatusUintLeDecoderTests(unittest.TestCase):
 
         update = evaluate_status_rules(
             grouped[0x65D],
-            bytes([0x21, 0x7E, 0xDA, 0x04, 0x00, 0x30, 0x37, 0x14]),
+            bytes([0x21, 0x7E, 0xDA, 0xF4, 0x00, 0x30, 0x37, 0x14]),
             8,
         )
 
-        self.assertEqual(update["vehicle"]["odometer_raw"], 318078)
+        self.assertEqual(update["vehicle"]["odometer_raw"], 16046718)
         self.assertEqual(update["vehicle"]["odometer_km"], 318078.0)
 
     def test_u24le_ignores_short_frames(self):

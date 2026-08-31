@@ -127,7 +127,7 @@ def _run_deployment(command: Sequence[str], environment: Mapping[str, str]) -> s
 
 
 _DEPLOYMENT_STAGES = {
-    "backup", "repository-head", "repository-clean", "repository-fetch",
+    "backup", "packaging-tools", "repository-head", "repository-clean", "repository-fetch",
     "repository-merge", "package-build", "files", "package", "system-services",
     "user-services", "vehicle-config-coordinator", "power-manager",
     "service-health", "api-health", "version-health",
@@ -178,7 +178,7 @@ def install_prepared(
         state.update({
             "state": "installing", "stage": "installing",
             "updated_at": update_coordinator._timestamp(), "completed_at": None,
-            "error": "",
+            "pip_version_before": "", "pip_version_after": "", "error": "",
         })
         update_coordinator.write_state(state, state_path)
         deployment_command = list(command or (stage / "scripts/manage.sh", "_deploy-prepared"))
@@ -200,10 +200,15 @@ def install_prepared(
                 failed, staging_root, rollback_root
             )
             raise InstallerError(failure)
+        pip_before, pip_after = update_coordinator._packaging_tool_versions(
+            rollback_root, transaction_id
+        )
         state.update({
             "state": "complete", "stage": "complete",
             "updated_at": update_coordinator._timestamp(),
-            "completed_at": update_coordinator._timestamp(), "error": "",
+            "completed_at": update_coordinator._timestamp(),
+            "pip_version_before": pip_before, "pip_version_after": pip_after,
+            "error": "",
         })
         completed = update_coordinator.write_state(state, state_path)
         update_coordinator._best_effort_artifact_cleanup(

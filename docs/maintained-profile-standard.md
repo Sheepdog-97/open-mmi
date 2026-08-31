@@ -29,7 +29,7 @@ A maintained profile starts with:
   "schema_version": 1,
   "metadata": {
     "id": "seat-leon-1p-pq35",
-    "display_name": "SEAT Leon 1P / Mk2 (PQ35)",
+    "display_name": "SEAT Leon Mk2 / 1P (PQ35)",
     "manufacturer": "SEAT",
     "model": "Leon",
     "generation": "1P",
@@ -71,10 +71,14 @@ A maintained profile starts with:
 ```
 
 `metadata.id` must match the stable identity declared in `vehicles/catalogue.v1.json`.
-The catalogue maps that ID to `vehicles/<brand>/<model>/<generation-platform>/config.json`
-and may retain deprecated IDs for installed compatibility. Optional `market_aliases` records
-compatible regional or rebadged names without duplicating a profile solely for branding. Evidence
-paths are repository-relative and must resolve to regular files in the same source tree.
+For user-facing consistency, `metadata.display_name` uses the form
+`Manufacturer Model market-generation / type-code (platform-code)` when both a familiar
+market generation and an OEM type/chassis code are known, for example
+`Volkswagen Passat B6 / 3C (PQ46)`. The catalogue maps the stable ID to
+`vehicles/<brand>/<model>/<generation-platform>/config.json` and may retain deprecated IDs
+for installed compatibility. Optional `market_aliases` records compatible regional or
+rebadged names without duplicating a profile solely for branding. Evidence paths are
+repository-relative and must resolve to regular files in the same source tree.
 
 ## Maturity levels
 
@@ -92,10 +96,13 @@ fully stable capabilities.
 ## Qualification levels
 
 - `none` — no formal replay or hardware claim; `last_tested` is `null` and scope/evidence are empty.
-- `replay` — deterministic captures or fixtures were replayed; the tested scope and evidence are named.
-- `hardware` — the stated scope was tested on a real vehicle; the date and hardware evidence are named.
+- `replay` — deterministic fixture coverage is complete for the stated scope and the reviewed evidence is named.
+- `hardware` — the stated compatibility scope was formally qualified against a real vehicle; the date and hardware evidence are named.
 
-Evidence kinds are `research`, `capture`, `replay`, `hardware`, and `documentation`.
+Evidence kinds are `research`, `capture`, `replay`, `hardware`, and `documentation`. A replay-qualified
+candidate may also cite `capture` evidence from a real vehicle. That records where the mappings came
+from without implying generation-wide hardware qualification; the formal level remains `replay` until
+the separate hardware-qualification boundary is reviewed and promoted.
 
 ## One admission command
 
@@ -120,6 +127,7 @@ The command verifies:
 - CAN bus metadata and decoder structure;
 - canonical event and status contracts;
 - deterministic `fixtures/mappings.v1.json` replay with complete event/status coverage;
+- optional structured non-runtime candidates in `notes/candidate_mappings.v1.json`;
 - a capability inventory derived from the profile rather than handwritten claims.
 
 CI runs the same complete-catalogue command. A failed report blocks admission to the maintained
@@ -136,12 +144,33 @@ vehicles/<brand>/<model>/<generation-platform>/
 ├── fixtures/mappings.v1.json
 ├── evidence/
 └── notes/
+    └── candidate_mappings.v1.json   # optional, non-runtime research queue
 ```
 
 The folder explains where a vehicle belongs. The profile ID remains the stable
 machine contract and therefore does not need to mirror every path component.
 Existing IDs can be retained as deprecated aliases while the maintained tree is
 reorganised.
+
+
+### Structured candidate mappings
+
+Related vehicles often provide enough evidence to make a mapping worth preserving before it
+is safe to claim as a runtime capability. An optional
+`notes/candidate_mappings.v1.json` file records those leads without adding them to
+`config.json`. The envelope must set `runtime_authority` to `false`; conformance validates
+that each candidate is a canonical, technically valid status rule and that none of its
+outputs are already active capabilities.
+
+Candidate confidence (`weak`, `moderate`, or `strong`) describes the quality of the lead,
+not support status. Generated catalogue/matrix documentation lists candidates separately.
+`canbusd`, replay coverage totals, dashboard state and canonical capability counts ignore
+these files entirely.
+
+Promotion is explicit: verify the candidate on the target vehicle, move or merge the rule
+into `config.json`, add deterministic replay coverage, remove the candidate entry, and
+update the capture/evidence note. This makes cross-platform verification fast without
+allowing likely-but-unverified mappings to acquire runtime authority by accident.
 
 Replay one profile, using either its canonical ID or a legacy alias:
 

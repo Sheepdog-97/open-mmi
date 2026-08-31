@@ -404,13 +404,96 @@ def _validate_profile_item(
         issues.append(_issue("error", "undeclared-default-bus", f"{path}.bus", "implicit default bus is not declared"))
 
     if kind == "rule":
-        _validate_byte(item.get("byte", 0), f"{path}.byte", issues)
         event_definition = _validate_event_reference(
             item.get("event"),
             path=f"{path}.event",
             registry=event_registry,
             issues=issues,
         )
+
+        if "matches" in item:
+            if "byte" in item or "value" in item:
+                issues.append(
+                    _issue(
+                        "error",
+                        "ambiguous-event-rule",
+                        path,
+                        "must use either byte/value or matches, not both",
+                    )
+                )
+
+            matches = item.get("matches")
+            if not isinstance(matches, list) or not 1 <= len(matches) <= 8:
+                issues.append(
+                    _issue(
+                        "error",
+                        "invalid-rule-matches",
+                        f"{path}.matches",
+                        "must be an array containing 1 to 8 byte/value predicates",
+                    )
+                )
+                matches = []
+
+            seen_bytes: set[int] = set()
+            for index, match in enumerate(matches):
+                match_path = f"{path}.matches[{index}]"
+                if not isinstance(match, Mapping) or set(match) != {"byte", "value"}:
+                    issues.append(
+                        _issue(
+                            "error",
+                            "invalid-rule-match",
+                            match_path,
+                            "must contain exactly byte and value",
+                        )
+                    )
+                    continue
+
+                _validate_byte(match.get("byte"), f"{match_path}.byte", issues)
+                try:
+                    byte_index = _parse_int(match.get("byte"))
+                except (TypeError, ValueError):
+                    byte_index = -1
+                if 0 <= byte_index <= 7:
+                    if byte_index in seen_bytes:
+                        issues.append(
+                            _issue(
+                                "error",
+                                "duplicate-rule-match-byte",
+                                f"{match_path}.byte",
+                                "each matched byte may appear only once",
+                            )
+                        )
+                    seen_bytes.add(byte_index)
+
+                try:
+                    parsed = _parse_int(match.get("value"))
+                except (TypeError, ValueError):
+                    parsed = -1
+                if not 0 <= parsed <= 255:
+                    issues.append(
+                        _issue(
+                            "error",
+                            "invalid-rule-match-value",
+                            f"{match_path}.value",
+                            "must be a fixed byte value from 0 to 255",
+                        )
+                    )
+
+            if (
+                event_definition is not None
+                and event_definition["payload"]["type"] != "none"
+            ):
+                issues.append(
+                    _issue(
+                        "error",
+                        "missing-event-payload",
+                        f"{path}.matches",
+                        "multi-byte match rules do not supply an event payload",
+                    )
+                )
+            return
+
+        _validate_byte(item.get("byte", 0), f"{path}.byte", issues)
         value = item.get("value")
         carries_payload = isinstance(value, str) and value.lower() == "any"
         if event_definition is not None:
@@ -533,11 +616,33 @@ def _validate_profile_item(
                 continue
             fields_present = fields_present or bool(values)
             for name, value in values.items():
-                try:
-                    parsed = _parse_int(value)
-                except (TypeError, ValueError):
-                    parsed = -1
-                if not _bounded_text(name, maximum=64) or not 0 <= parsed <= 255:
+                valid_entry = _bounded_text(name, maximum=64)
+                if key == "equals" and isinstance(value, Mapping):
+                    if set(value) - {"mask", "value"} or "value" not in value:
+                        valid_entry = False
+                    else:
+                        try:
+                            parsed_value = _parse_int(value["value"])
+                            parsed_mask = (
+                                _parse_int(value["mask"])
+                                if "mask" in value
+                                else 0xFF
+                            )
+                        except (TypeError, ValueError):
+                            parsed_value = -1
+                            parsed_mask = -1
+                        valid_entry = (
+                            valid_entry
+                            and 0 <= parsed_value <= 255
+                            and 0 <= parsed_mask <= 255
+                        )
+                else:
+                    try:
+                        parsed = _parse_int(value)
+                    except (TypeError, ValueError):
+                        parsed = -1
+                    valid_entry = valid_entry and 0 <= parsed <= 255
+                if not valid_entry:
                     issues.append(_issue("error", "invalid-bitfield-entry", f"{path}.{key}.{name}", "must have a bounded name and 0..255 value"))
         if not fields_present:
             issues.append(_issue("error", "empty-bitfield", path, "must declare fields or equals"))
@@ -634,6 +739,51 @@ def validate_profile(
             issues.append(_issue("error", "invalid-provisioning", f"{path}.provisioning", "must be manual or udev"))
         if "bring_up" in metadata and not isinstance(metadata["bring_up"], bool):
             issues.append(_issue("error", "invalid-bring-up", f"{path}.bring_up", "must be boolean"))
+
+    raw_aliases = document.get("can_bus_aliases")
+    if raw_aliases is None:
+        raw_aliases = {}
+    elif not isinstance(raw_aliases, Mapping):
+        issues.append(
+            _issue(
+                "error",
+                "invalid-can-bus-aliases",
+                "can_bus_aliases",
+                "must be an object",
+            )
+        )
+        raw_aliases = {}
+
+    for raw_alias, raw_target in raw_aliases.items():
+        path = f"can_bus_aliases.{raw_alias}"
+        if not isinstance(raw_alias, str) or not IDENTIFIER_RE.fullmatch(raw_alias):
+            issues.append(
+                _issue("error", "invalid-bus-alias", path, "alias must be a valid identifier")
+            )
+            continue
+        if not isinstance(raw_target, str) or not IDENTIFIER_RE.fullmatch(raw_target):
+            issues.append(
+                _issue("error", "invalid-bus-alias-target", path, "target must be a valid identifier")
+            )
+            continue
+        if raw_alias in declared_buses:
+            issues.append(
+                _issue(
+                    "error",
+                    "bus-alias-conflict",
+                    path,
+                    "alias conflicts with a declared CAN bus",
+                )
+            )
+        if raw_target not in declared_buses:
+            issues.append(
+                _issue(
+                    "error",
+                    "bus-alias-target-not-declared",
+                    path,
+                    "alias target must name a declared CAN bus",
+                )
+            )
 
     if default_bus not in declared_buses:
         issues.append(_issue("warning", "default-bus-fallback", "default_bus", "default bus is not declared and will use legacy fallback metadata"))
@@ -1339,13 +1489,16 @@ def status_payload(
         active_errors.append("bindings-not-found")
     elif not bindings_entry.get("valid"):
         active_errors.append("bindings-invalid")
+    if runtime.profile_has_buses and not runtime.declared:
+        active_errors.append("can-bus-not-declared")
 
+    configured_bus = runtime.requested_name or runtime.name
     revisions = {
         "vehicle": str(profile_entry.get("revision") or "") if profile_entry else "",
         "bindings": str(bindings_entry.get("revision") or "") if bindings_entry else "",
     }
     revision_input = json.dumps(
-        {**revisions, "active_bus": runtime.name, "interface": runtime.interface},
+        {**revisions, "active_bus": configured_bus, "interface": runtime.interface},
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
@@ -1369,6 +1522,7 @@ def status_payload(
             "vehicle": {**vehicle, "revision": revisions["vehicle"]},
             "bindings": {**bindings, "revision": revisions["bindings"]},
             "active_bus": runtime.name,
+            "configured_bus": configured_bus,
             "interface": runtime.interface,
             "interface_present": runtime.interface in interface_names,
             "configuration_revision": configuration_revision,
@@ -1665,7 +1819,11 @@ def preview_payload(
     for field, before, after in (
         ("vehicle", current.get("vehicle"), target["vehicle"]),
         ("bindings", current.get("bindings"), target["bindings"]),
-        ("active_bus", current.get("active_bus"), active_bus),
+        (
+            "active_bus",
+            current.get("configured_bus", current.get("active_bus")),
+            active_bus,
+        ),
         ("interface", current.get("interface"), interface),
     ):
         if before != after:

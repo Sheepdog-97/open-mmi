@@ -5,10 +5,10 @@ text logs into deterministic JSON and for comparing captures taken before and
 after a physical action.
 
 This tooling **does not claim vehicle support, infer human meaning, or edit a
-maintained profile**. SEAT Leon 1P remains the only reverse-engineered maintained
-vehicle. Generated reports and candidate fixtures must stay outside `vehicles/`
-until a contributor has manually confirmed the signal meaning and reviewed the
-mapping.
+maintained profile**. The maintained catalogue may contain profiles whose mappings were
+originally derived from controlled captures, but generated reports and candidate fixtures
+must stay outside `vehicles/` until a contributor has manually confirmed the signal meaning,
+reviewed the mapping, and supplied the required replay/evidence record.
 
 ## Supported input
 

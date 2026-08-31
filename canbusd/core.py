@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Open MMI CAN Bus Daemon."""
 
+import errno
 import hashlib
 import json
 import logging
@@ -53,12 +54,22 @@ IFACE = CAN_RUNTIME.interface
 RELOAD_INTERVAL = 60
 ANY_VALUE_WILDCARD = "any"
 DEFAULT_PRESENCE_TIMEOUT = 1000
+RECOVERABLE_CAN_LINK_ERRNOS = frozenset((errno.ENETDOWN, errno.ENODEV))
 
 _need_reload = False
 _reload_lock = __import__("threading").Lock()
 
 LOADED_VEHICLE: Optional[Dict[str, str]] = None
 LOADED_BINDINGS: Optional[Dict[str, str]] = None
+
+
+def _is_recoverable_can_link_error(error: BaseException) -> bool:
+    """Return whether a SocketCAN failure can recover by reopening the link."""
+
+    error_code = getattr(error, "error_code", None)
+    if error_code is None:
+        error_code = getattr(error, "errno", None)
+    return error_code in RECOVERABLE_CAN_LINK_ERRNOS
 
 
 def _managed_configuration_mode(
@@ -282,6 +293,15 @@ def _filter_items_for_bus(
     ]
 
 
+def _parse_event_rule_value(value: Any) -> int:
+    """Normalize one event-rule byte value from JSON."""
+
+    if isinstance(value, str):
+        text = value.strip()
+        return int(text, 16) if text.lower().startswith("0x") else int(text, 10)
+    return int(value)
+
+
 def _load_config(
     prev_rules=None,
     prev_mtime=None,
@@ -336,18 +356,36 @@ def _load_config(
         all_rule_items = cfg.get("rules", [])
         for item in all_rule_items:
             raw_value = item.get("value")
+            carries_payload = (
+                "matches" not in item
+                and isinstance(raw_value, str)
+                and raw_value.lower() == ANY_VALUE_WILDCARD
+            )
             event_registry.require_event(
                 item["event"],
-                carries_payload=(
-                    isinstance(raw_value, str)
-                    and raw_value.lower() == ANY_VALUE_WILDCARD
-                ),
+                carries_payload=carries_payload,
             )
         rule_items = _filter_items_for_bus(all_rule_items, runtime)
 
-        rules: Dict[int, List[Tuple[int, Optional[int], str]]] = {}
+        rules: Dict[int, List[Any]] = {}
         for r in rule_items:
             cid = int(r["id"], 16) if isinstance(r["id"], str) else int(r["id"])
+
+            if "matches" in r:
+                matches = []
+                for match in r["matches"]:
+                    byte_index = int(match["byte"])
+                    raw_match_value = match["value"]
+                    match_value = _parse_event_rule_value(raw_match_value)
+                    matches.append((byte_index, match_value))
+                rules.setdefault(cid, []).append(
+                    {
+                        "matches": tuple(matches),
+                        "event": r["event"],
+                    }
+                )
+                continue
+
             b = int(r.get("byte", 0))
             v = r.get("value")
             carries_payload = (
@@ -358,7 +396,7 @@ def _load_config(
             if carries_payload:
                 v = None
             elif v is not None:
-                v = int(v)
+                v = _parse_event_rule_value(v)
 
             rules.setdefault(cid, []).append((b, v, r["event"]))
 
@@ -398,11 +436,17 @@ def _load_config(
             "revision": revision,
         }
 
-        if runtime.profile_has_buses and not runtime.declared:
+        if runtime.requested_name and runtime.requested_name != runtime.name:
             logger.warning(
-                "CAN bus '%s' is not declared in profile metadata; using interface '%s'",
+                "CAN bus alias '%s' resolved to canonical bus '%s'",
+                runtime.requested_name,
                 runtime.name,
-                runtime.interface,
+            )
+
+        if runtime.profile_has_buses and not runtime.declared:
+            logger.error(
+                "CAN bus '%s' is not declared in profile metadata; SocketCAN will remain closed",
+                runtime.name,
             )
 
         if runtime.bring_up:
@@ -471,6 +515,8 @@ def _loaded_runtime_payload(runtime: CanRuntimeConfig) -> Dict[str, Any]:
         errors.append("vehicle-profile-not-loaded")
     if LOADED_BINDINGS is None:
         errors.append("bindings-not-loaded")
+    if runtime.profile_has_buses and not runtime.declared:
+        errors.append("can-bus-not-declared")
     return {
         "api_version": 1,
         "state": "ready" if not errors else "invalid",
@@ -528,11 +574,21 @@ def _check_presence(
     bindings: Dict[str, Dict[str, Any]],
     now: float,
     dispatch_fn=None,
+    observation_started: Optional[Dict[int, float]] = None,
 ) -> None:
     for p in presence:
         cid = p["id"]
         timeout_s = p["timeout_ms"] / 1000.0
-        is_present = cid in last_seen and (now - last_seen[cid]) <= timeout_s
+        if cid in last_seen:
+            is_present = (now - last_seen[cid]) <= timeout_s
+        elif observation_started is not None:
+            started = observation_started.setdefault(cid, now)
+            if (now - started) < timeout_s:
+                continue
+            is_present = False
+        else:
+            is_present = False
+
         previous = present_state.get(cid)
 
         if previous is None or previous != is_present:
@@ -569,12 +625,17 @@ def main(
 
     last_seen: Dict[int, float] = {}
     last_codes: Dict[Tuple[int, int, Optional[int]], int] = {}
+    last_match_states: Dict[
+        Tuple[int, Tuple[Tuple[int, int], ...], str], bool
+    ] = {}
     present_state: Dict[int, Optional[bool]] = {}
+    presence_observation_started: Dict[int, float] = {}
     status_state = StatusRuleState()
     _safe_reset_status()
     _safe_publish_loaded_runtime(runtime)
     bus = None
     opened_interface: Optional[str] = None
+    link_unavailable_since: Optional[float] = None
     last_check = 0.0
     iterations = 0
 
@@ -610,6 +671,17 @@ def main(
                 _safe_publish_loaded_runtime(runtime)
                 last_check = now
 
+            if runtime.profile_has_buses and not runtime.declared:
+                if bus:
+                    bus.shutdown()
+                    bus = None
+                if opened_interface is not None:
+                    _safe_reset_status()
+                    opened_interface = None
+                link_unavailable_since = None
+                time.sleep(1)
+                continue
+
             if opened_interface != IFACE:
                 if bus:
                     bus.shutdown()
@@ -619,28 +691,86 @@ def main(
                     _safe_reset_status()
 
                 opened_interface = IFACE
+                link_unavailable_since = None
                 last_seen.clear()
                 present_state.clear()
+                presence_observation_started.clear()
                 status_state.reset()
 
             if not Path(f"/sys/class/net/{IFACE}").exists():
+                if link_unavailable_since is None:
+                    link_unavailable_since = now
                 if bus:
                     bus.shutdown()
                     bus = None
 
-                _check_presence(presence, last_seen, present_state, bindings, now, dispatch_fn=dispatch_fn)
                 time.sleep(1)
                 continue
 
             if bus is None:
                 logger.info("Opening CAN bus '%s' on interface '%s'", CAN_BUS, IFACE)
-                bus = can.interface.Bus(channel=IFACE, interface="socketcan")
+                try:
+                    bus = can.interface.Bus(channel=IFACE, interface="socketcan")
+                except Exception as error:
+                    if not _is_recoverable_can_link_error(error):
+                        raise
+                    if link_unavailable_since is None:
+                        link_unavailable_since = now
+                    logger.warning(
+                        "CAN interface '%s' is temporarily unavailable while opening (%s); retrying",
+                        IFACE,
+                        error,
+                    )
+                    time.sleep(1)
+                    continue
 
-            msg = bus.recv(timeout=0.2)
+            try:
+                msg = bus.recv(timeout=0.2)
+            except Exception as error:
+                if not _is_recoverable_can_link_error(error):
+                    raise
+                logger.warning(
+                    "CAN interface '%s' became unavailable (%s); closing socket and waiting to reopen",
+                    IFACE,
+                    error,
+                )
+                if link_unavailable_since is None:
+                    link_unavailable_since = now
+                try:
+                    bus.shutdown()
+                except Exception:
+                    logger.exception("CAN socket shutdown failed during link recovery")
+                bus = None
+                last_codes.clear()
+                last_match_states.clear()
+                status_state.reset()
+                time.sleep(1)
+                continue
+
             now = time.monotonic()
 
+            if link_unavailable_since is not None:
+                paused_for = max(0.0, now - link_unavailable_since)
+                for cid in last_seen:
+                    last_seen[cid] += paused_for
+                for cid in presence_observation_started:
+                    presence_observation_started[cid] += paused_for
+                link_unavailable_since = None
+                logger.info(
+                    "CAN interface '%s' recovered; presence timeout resumed",
+                    IFACE,
+                )
+
             if msg is None:
-                _check_presence(presence, last_seen, present_state, bindings, now, dispatch_fn=dispatch_fn)
+                _check_presence(
+                    presence,
+                    last_seen,
+                    present_state,
+                    bindings,
+                    now,
+                    dispatch_fn=dispatch_fn,
+                    observation_started=presence_observation_started,
+                )
                 continue
 
             last_seen[msg.arbitration_id] = now
@@ -657,7 +787,25 @@ def main(
                     _safe_publish_status(status_update)
 
             if cid in rules:
-                for b, v, event in rules[cid]:
+                for rule in rules[cid]:
+                    if isinstance(rule, dict) and "matches" in rule:
+                        matches = tuple(rule["matches"])
+                        if any(msg.dlc <= byte_index for byte_index, _ in matches):
+                            continue
+
+                        matched = all(
+                            msg.data[byte_index] == expected
+                            for byte_index, expected in matches
+                        )
+                        event = rule["event"]
+                        key = (cid, matches, event)
+                        previous = last_match_states.get(key, False)
+                        if matched and not previous:
+                            dispatch_fn(event, bindings.get(event))
+                        last_match_states[key] = matched
+                        continue
+
+                    b, v, event = rule
                     if msg.dlc <= b:
                         continue
 
@@ -676,7 +824,15 @@ def main(
 
                     last_codes[key] = code
 
-            _check_presence(presence, last_seen, present_state, bindings, now, dispatch_fn=dispatch_fn)
+            _check_presence(
+                presence,
+                last_seen,
+                present_state,
+                bindings,
+                now,
+                dispatch_fn=dispatch_fn,
+                observation_started=presence_observation_started,
+            )
     finally:
         if bus:
             bus.shutdown()

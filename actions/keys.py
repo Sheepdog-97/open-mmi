@@ -18,7 +18,8 @@ logger = logging.getLogger("canbusd.actions.keys")
 _caps = {
     e.EV_KEY: [
         e.KEY_PLAYPAUSE, e.KEY_NEXTSONG, e.KEY_PREVIOUSSONG, e.KEY_STOPCD,
-        e.KEY_MUTE, e.KEY_VOLUMEUP, e.KEY_VOLUMEDOWN, e.KEY_LEFT, e.KEY_RIGHT
+        e.KEY_MUTE, e.KEY_VOLUMEUP, e.KEY_VOLUMEDOWN, e.KEY_LEFT, e.KEY_RIGHT,
+        e.KEY_UP, e.KEY_DOWN, e.KEY_ENTER, e.KEY_ESC
     ]
 }
 
@@ -82,3 +83,15 @@ def arrow_left() -> None:
 
 def arrow_right() -> None:
     _press(e.KEY_RIGHT)
+
+def arrow_up() -> None:
+    _press(e.KEY_UP)
+
+def arrow_down() -> None:
+    _press(e.KEY_DOWN)
+
+def confirm() -> None:
+    _press(e.KEY_ENTER)
+
+def back() -> None:
+    _press(e.KEY_ESC)

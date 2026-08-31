@@ -264,6 +264,21 @@ meaning, distinguish causation from counters or unrelated traffic, or promote a 
 Candidate replay export deliberately leaves event and status expectations empty and refuses
 to write under `vehicles/`. See [`vehicle-capture-analysis.md`](vehicle-capture-analysis.md).
 
+
+## Preserve related-vehicle leads without claiming support
+
+When a maintained sibling profile provides a likely mapping but the target vehicle has not
+produced enough local truth, preserve the lead in
+`notes/candidate_mappings.v1.json` instead of copying it into the active profile. The
+structured candidate contains the exact canonical status rule, source profiles, confidence,
+local evidence and the steps needed to verify it.
+
+Candidate files explicitly have no runtime authority. They do not publish state, do not
+count toward replay/capability totals and are shown separately in generated documentation.
+After real verification, promote the rule into `config.json`, add a replay fixture and remove
+the candidate entry. This is the preferred way to cross-pollinate related platforms quickly
+without turning correlation into an implicit support claim.
+
 ## Contribution sequence
 
 ```text

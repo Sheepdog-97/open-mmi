@@ -420,6 +420,47 @@ verify_console_commands() {
     done
 }
 
+upgrade_python_packaging_tools() {
+    local python="${1:-$INSTALL_DIR/venv/bin/python}"
+    local result_dir="${2:-}"
+    local before after
+
+    if [ ! -x "$python" ]; then
+        log_error "Deployment Python is missing or not executable: $python"
+        return 1
+    fi
+
+    before=$(env -u PYTHONPATH "$python" -m pip --version 2>/dev/null | awk 'NR == 1 {print $2}')
+    if [ -z "$before" ]; then
+        log_error "Could not determine installed pip version"
+        return 1
+    fi
+
+    log_info "Preparing Python packaging tools (pip $before)..."
+    if ! env -u PYTHONPATH "$python" -m pip install --upgrade pip; then
+        log_error "Failed to upgrade pip"
+        return 1
+    fi
+
+    after=$(env -u PYTHONPATH "$python" -m pip --version 2>/dev/null | awk 'NR == 1 {print $2}')
+    if [ -z "$after" ]; then
+        log_error "Could not verify pip after upgrade"
+        return 1
+    fi
+
+    if [ -n "$result_dir" ]; then
+        printf '%s\n' "$before" > "$result_dir/pip-version-before"
+        printf '%s\n' "$after" > "$result_dir/pip-version-after"
+        chmod 0600 "$result_dir/pip-version-before" "$result_dir/pip-version-after"
+    fi
+
+    if [ "$before" = "$after" ]; then
+        log_success "Python packaging tools ready (pip $after · up to date)"
+    else
+        log_success "Python packaging tools updated (pip $before → $after)"
+    fi
+}
+
 install_open_mmi_package() {
     local python="$INSTALL_DIR/venv/bin/python"
     local package_source="${1:-$INSTALL_DIR}"
@@ -1188,9 +1229,7 @@ cmd_install() {
         return 1
     fi
     
-    log_info "Preparing Python packaging tools..."
-    if ! "$INSTALL_DIR/venv/bin/python" -m pip install --upgrade pip; then
-        log_error "Failed to upgrade pip"
+    if ! upgrade_python_packaging_tools "$INSTALL_DIR/venv/bin/python"; then
         return 1
     fi
     
@@ -1349,6 +1388,10 @@ cmd_update() {
     # PHASE 2: SYSTEM DEPLOY (SUDO REQUIRED)
     # =========================================================
     log_info "Deploying to system..."
+
+    if ! upgrade_python_packaging_tools "$INSTALL_DIR/venv/bin/python"; then
+        return 1
+    fi
 
     sudo rm -rf         "$INSTALL_DIR/canbusd"         "$INSTALL_DIR/vehicles"         "$INSTALL_DIR/bindings"         "$INSTALL_DIR/actions"         "$INSTALL_DIR/powerd"         "$INSTALL_DIR/ui"         "$INSTALL_DIR/scripts"         "$INSTALL_DIR/packaging"
 
@@ -1586,6 +1629,9 @@ cmd_deploy_prepared() {
             systemctl --user restart canbusd.service open-mmi-dashboard.service >/dev/null 2>&1 || true
     }
     trap rollback_prepared_deployment ERR
+
+    deployment_stage="packaging-tools"
+    upgrade_python_packaging_tools "$INSTALL_DIR/venv/bin/python" "$rollback_root"
 
     deployment_stage="package-build"
     install -d -m 0700 -o root -g root "$candidate_wheel_dir"
@@ -1958,14 +2004,14 @@ cmd_config() {
 # It does not configure bitrate and does not bring the interface up.
 #
 # Current known-working default:
-#   comfort -> can0
+#   infotainment -> can0
 #
 # The normal profile-driven setup provisions can0 at 100000 for the Seat 1P
 # reference profile.
 # Keep udev/system setup responsible for hotplug/reboot survival.
 
 [Service]
-Environment="OPEN_MMI_CAN_BUS=comfort"
+Environment="OPEN_MMI_CAN_BUS=infotainment"
 Environment="OPEN_MMI_CAN_INTERFACE=can0"
 EOF
                 chown "$REAL_USER:$REAL_USER" "$override_file"
@@ -2037,7 +2083,7 @@ Commands:
   edit-can
       Edit the CAN runtime override.
       Defaults to the known-working single bus setup:
-      OPEN_MMI_CAN_BUS=comfort
+      OPEN_MMI_CAN_BUS=infotainment
       OPEN_MMI_CAN_INTERFACE=can0
 
       This selects which already-provisioned SocketCAN interface the daemon consumes.

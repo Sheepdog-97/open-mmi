@@ -456,6 +456,55 @@ class VehicleCatalogueTests(unittest.TestCase):
             list((self.custom / "vehicles").glob(".open-mmi-delete-*")), []
         )
 
+    def test_invalid_custom_profile_can_be_loaded_renamed_and_deleted_but_not_duplicated(self):
+        source = self._copy_custom("profile", "broken-seat")
+        document = dict(self.profile_document)
+        document["rules"] = [
+            {"id": "0x100", "byte": 0, "value": 1, "event": "not_registered"}
+        ]
+        source.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+        source.chmod(0o600)
+        revision = self._revision(source)
+
+        loaded = vehicle_catalogue.load_custom_item(
+            {"kind": "profile", "source": "custom", "id": "broken-seat"},
+            roots=self.roots,
+        )
+        self.assertFalse(loaded["validation"]["valid"])
+        self.assertEqual(loaded["custom"]["revision"], revision)
+
+        with self.assertRaises(vehicle_catalogue.VehicleCatalogueError):
+            vehicle_catalogue.manage_custom_item(
+                self.lifecycle_request(
+                    "duplicate", "profile", "broken-seat", revision, "broken-copy"
+                ),
+                roots=self.roots,
+                active=self.inactive_setup(),
+                lifecycle_lock=self.lifecycle_lock,
+            )
+        self.assertFalse((self.custom / "vehicles" / "broken-copy").exists())
+
+        renamed = vehicle_catalogue.manage_custom_item(
+            self.lifecycle_request(
+                "rename", "profile", "broken-seat", revision, "broken-renamed"
+            ),
+            roots=self.roots,
+            active=self.inactive_setup(),
+            lifecycle_lock=self.lifecycle_lock,
+        )
+        renamed_path = self.custom / "vehicles" / "broken-renamed" / "config.json"
+        self.assertTrue(renamed_path.exists())
+        self.assertEqual(renamed["custom"]["revision"], revision)
+
+        deleted = vehicle_catalogue.manage_custom_item(
+            self.lifecycle_request("delete", "profile", "broken-renamed", revision),
+            roots=self.roots,
+            active=self.inactive_setup(),
+            lifecycle_lock=self.lifecycle_lock,
+        )
+        self.assertFalse(renamed_path.parent.exists())
+        self.assertEqual(deleted["deleted"]["revision"], revision)
+
     def test_active_custom_items_cannot_be_renamed_or_deleted(self):
         profile = self._copy_custom("profile", "active-seat")
         bindings = self._copy_custom("bindings", "active-controls")

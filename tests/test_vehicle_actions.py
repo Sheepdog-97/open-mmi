@@ -16,7 +16,7 @@ class VehicleActionRegistryTests(unittest.TestCase):
         registry = action_registry.registry_payload()
 
         self.assertEqual(registry["registry_id"], "open-mmi.vehicle-actions")
-        self.assertEqual(len(registry["actions"]), 13)
+        self.assertEqual(len(registry["actions"]), 17)
         self.assertIn("media.mute.toggle", registry["actions"])
         self.assertIn("display.brightness.set", registry["actions"])
 

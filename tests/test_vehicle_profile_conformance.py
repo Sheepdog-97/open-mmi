@@ -239,6 +239,15 @@ class VehicleProfileConformanceTests(unittest.TestCase):
             {issue["code"] for issue in result["errors"]},
         )
 
+
+    def test_maintained_schema_allows_profile_scoped_can_bus_aliases(self) -> None:
+        document = self.profile()
+        document["can_bus_aliases"] = {"legacy_bus": "comfort"}
+        result = vehicle_profile_conformance.validate_metadata(
+            document, expected_id="example_car"
+        )
+        self.assertTrue(result["valid"], result)
+
     def test_maintained_schema_rejects_unknown_top_level_fields(self) -> None:
         document = self.profile()
         document["private_decoder_language"] = True
@@ -280,6 +289,101 @@ class VehicleProfileConformanceTests(unittest.TestCase):
                 for issue in report["profiles"][0]["validation"]["errors"]
             },
         )
+
+    def test_structured_candidate_mappings_are_validated_but_not_capabilities(self) -> None:
+        profile_path = self.write_profile("example_car", self.profile())
+        candidate_path = profile_path.parent / "notes" / "candidate_mappings.v1.json"
+        candidate_path.parent.mkdir(exist_ok=True)
+        candidate_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "record_id": "open-mmi.vehicle-candidate-mappings",
+                    "profile_id": "example_car",
+                    "runtime_authority": False,
+                    "candidates": [
+                        {
+                            "id": "fuel-level",
+                            "status": "candidate",
+                            "confidence": "strong",
+                            "rule": {
+                                "id": "0x621",
+                                "byte": 3,
+                                "type": "scaled",
+                                "path": "fuel.level_l",
+                                "mask": "0x7F",
+                                "scale": 1.0,
+                                "offset": 0.0,
+                                "round": 0,
+                                "raw_path": "fuel.level_raw",
+                            },
+                            "source_profiles": ["related_car"],
+                            "local_evidence": "Plausible local value with related-profile corroboration.",
+                            "verify": ["Compare against an independent fuel quantity."],
+                        }
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        report = vehicle_profile_conformance.catalogue_report(self.root)
+        self.assertTrue(report["valid"], report)
+        profile = report["profiles"][0]
+        self.assertEqual(profile["candidates"]["count"], 1)
+        self.assertEqual(
+            profile["candidates"]["items"][0]["outputs"],
+            ["fuel.level_l", "fuel.level_raw"],
+        )
+        self.assertNotIn("fuel.level_l", profile["capabilities"]["statuses"])
+        self.assertNotIn("fuel.level_raw", profile["capabilities"]["statuses"])
+
+    def test_candidate_mappings_cannot_gain_runtime_authority_or_duplicate_active_output(self) -> None:
+        profile_path = self.write_profile("example_car", self.profile())
+        candidate_path = profile_path.parent / "notes" / "candidate_mappings.v1.json"
+        candidate_path.parent.mkdir(exist_ok=True)
+        candidate_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "record_id": "open-mmi.vehicle-candidate-mappings",
+                    "profile_id": "example_car",
+                    "runtime_authority": True,
+                    "candidates": [
+                        {
+                            "id": "front-right-door",
+                            "status": "candidate",
+                            "confidence": "strong",
+                            "rule": {
+                                "id": "0x101",
+                                "byte": 0,
+                                "type": "bool",
+                                "path": "doors.front_right",
+                                "true": "0x01",
+                                "false": "0x00",
+                            },
+                            "source_profiles": ["related_car"],
+                            "local_evidence": "Example overlap.",
+                            "verify": ["Do not allow an already-active output to remain a candidate."],
+                        }
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        report = vehicle_profile_conformance.catalogue_report(self.root)
+        self.assertFalse(report["valid"])
+        codes = {
+            issue["code"]
+            for issue in report["profiles"][0]["validation"]["errors"]
+        }
+        self.assertIn("candidate-runtime-authority", codes)
+        self.assertIn("candidate-already-active", codes)
 
     def test_catalogue_report_rejects_duplicate_json_keys(self) -> None:
         relative = "example/car/one-platform/config.json"

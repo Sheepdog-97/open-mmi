@@ -1,4 +1,4 @@
-# SEAT Leon 1P / Mk2 (PQ35)
+# SEAT Leon Mk2 / 1P (PQ35)
 
 - Canonical profile ID: `seat-leon-1p-pq35`
 - Deprecated compatibility ID: `seat_1p`

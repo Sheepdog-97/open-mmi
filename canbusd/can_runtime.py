@@ -25,6 +25,7 @@ class CanRuntimeConfig:
     declared: bool = False
     profile_has_buses: bool = False
     metadata: Dict[str, Any] = field(default_factory=dict)
+    requested_name: str = ""
 
 
 def _optional_int(value: Any) -> Optional[int]:
@@ -83,11 +84,28 @@ def resolve_can_runtime(
     env = env or {}
 
     profile_default_bus = str(profile.get("default_bus") or default_bus)
-    selected_bus = str(env.get("OPEN_MMI_CAN_BUS") or profile_default_bus)
+    requested_bus = str(env.get("OPEN_MMI_CAN_BUS") or profile_default_bus)
 
     can_buses = profile.get("can_buses") or {}
     if not isinstance(can_buses, Mapping):
         can_buses = {}
+
+    raw_aliases = profile.get("can_bus_aliases") or {}
+    aliases = raw_aliases if isinstance(raw_aliases, Mapping) else {}
+
+    def canonical_bus(name: str) -> str:
+        # A declared bus always wins. This prevents malformed/custom alias metadata
+        # from redefining a real logical bus. Aliases are accepted only when they
+        # point directly at a declared canonical bus.
+        if name in can_buses:
+            return name
+        target = aliases.get(name)
+        if isinstance(target, str) and target in can_buses:
+            return target
+        return name
+
+    selected_bus = canonical_bus(requested_bus)
+    resolved_default_bus = canonical_bus(profile_default_bus)
 
     raw_metadata = can_buses.get(selected_bus) or {}
     if not isinstance(raw_metadata, Mapping):
@@ -111,7 +129,7 @@ def resolve_can_runtime(
 
     return CanRuntimeConfig(
         name=selected_bus,
-        default_bus=profile_default_bus,
+        default_bus=resolved_default_bus,
         interface=interface,
         interface_source=interface_source,
         bitrate=_optional_int(metadata.get("bitrate")),
@@ -121,6 +139,7 @@ def resolve_can_runtime(
         declared=selected_bus in can_buses,
         profile_has_buses=bool(can_buses),
         metadata=metadata,
+        requested_name=requested_bus,
     )
 
 

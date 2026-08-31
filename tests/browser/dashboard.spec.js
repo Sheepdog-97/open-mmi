@@ -261,7 +261,7 @@ async function loadDashboard(page, options = {}) {
       issues: [],
       profiles: [
         {
-          source: "maintained", id: "seat-leon-1p-pq35", display_name: "SEAT Leon 1P / Mk2 (PQ35)", valid: true,
+          source: "maintained", id: "seat-leon-1p-pq35", display_name: "SEAT Leon Mk2 / 1P (PQ35)", valid: true,
           revision: "sha256:profile", default_bus: "comfort",
           buses: [{ name: "comfort", interface: "can0", bitrate: 100000, provisioning: "udev" }],
           validation: { valid: true, errors: [], warnings: [] },
@@ -1982,7 +1982,7 @@ test("vehicle setup reviews and applies an exact confirmed draft", async ({ page
 
   await openSettingsSection(page, "vehicle-setup");
   await expect(page.locator('[data-openmmi-vehicle-setup-ready="true"]')).toBeVisible();
-  await expect(page.getByTestId("vehicle-setup-active-profile")).toHaveText("SEAT Leon 1P / Mk2 (PQ35) · Maintained");
+  await expect(page.getByTestId("vehicle-setup-active-profile")).toHaveText("SEAT Leon Mk2 / 1P (PQ35) · Maintained");
   await expect(page.getByTestId("vehicle-setup-active-bindings")).toHaveText("Default · Maintained");
   await expect(page.getByTestId("vehicle-setup-profile")).toHaveValue("maintained:seat-leon-1p-pq35");
   await expect(page.getByTestId("vehicle-setup-bindings")).toHaveValue("maintained:default");

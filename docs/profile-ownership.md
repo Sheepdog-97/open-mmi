@@ -130,10 +130,12 @@ paths. The custom files remain untouched.
 
 ## Custom lifecycle restrictions
 
-- **Duplicate** may copy an active or inactive custom item because the source is
+- **Edit** may open valid or invalid custom content for recovery; invalid content remains
+  ineligible for Review or Apply until repaired.
+- **Duplicate** may copy an active or inactive **valid** custom item because the source is
   unchanged.
-- **Rename** is allowed only when the custom identity is inactive.
-- **Delete** is allowed only when the custom identity is inactive and the user
+- **Rename** is allowed for valid or invalid custom identities only when inactive.
+- **Delete** is allowed for valid or invalid custom identities only when inactive and the user
   explicitly confirms it.
 - Every operation requires the exact current revision and participates in the
   shared lifecycle lock.

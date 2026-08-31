@@ -25,8 +25,12 @@ Registry: `open-mmi.vehicle-actions` · schema version `1`
 | `media.playback.toggle` | media | None | None | `bluez-or-playerctl-or-uinput` | stable | Toggle the active playback context between playing and paused states. |
 | `media.volume.decrease` | media | `step` (string, optional, default `-5%`) | None | `pactl` | stable | Decrease the local default audio-sink volume by an optional configured percentage step. |
 | `media.volume.increase` | media | `step` (string, optional, default `+5%`) | None | `pactl` | stable | Increase the local default audio-sink volume by an optional configured percentage step. |
+| `navigation.activate` | navigation | None | None | `uinput` | stable | Activate or confirm the currently focused local interface item. |
+| `navigation.back` | navigation | None | None | `uinput` | stable | Request one local interface back or cancel step. |
+| `navigation.focus.down` | navigation | None | None | `uinput` | stable | Move the currently focused local interface one logical step downward. |
 | `navigation.focus.left` | navigation | None | None | `uinput` | stable | Move the currently focused local interface one logical step to the left. |
 | `navigation.focus.right` | navigation | None | None | `uinput` | stable | Move the currently focused local interface one logical step to the right. |
+| `navigation.focus.up` | navigation | None | None | `uinput` | stable | Move the currently focused local interface one logical step upward. |
 
 ## Binding example
 

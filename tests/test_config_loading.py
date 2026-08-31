@@ -329,6 +329,72 @@ class ConfigLoadingTests(unittest.TestCase):
         self.assertEqual(core.CAN_BUS, "powertrain")
         self.assertEqual(core.IFACE, "can1")
 
+    def test_load_config_normalizes_single_byte_hex_event_values(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write_json(
+                Path(tmp) / "config.json",
+                {
+                    "rules": [
+                        {
+                            "id": "0x5C1",
+                            "byte": 0,
+                            "value": "0x06",
+                            "event": "volume_up",
+                        },
+                        {
+                            "id": "0x5C1",
+                            "byte": 0,
+                            "value": "7",
+                            "event": "volume_down",
+                        },
+                    ]
+                },
+            )
+            with mock.patch.object(core, "_resolve_vehicle_config_path", return_value=path):
+                rules, *_ = core._load_config()
+
+        self.assertEqual(
+            rules,
+            {
+                0x5C1: [
+                    (0, 0x06, "volume_up"),
+                    (0, 7, "volume_down"),
+                ]
+            },
+        )
+
+    def test_load_config_normalizes_multi_byte_event_matches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write_json(
+                Path(tmp) / "config.json",
+                {
+                    "rules": [
+                        {
+                            "id": "0x5C1",
+                            "matches": [
+                                {"byte": 0, "value": "0x13"},
+                                {"byte": 2, "value": "0x01"},
+                            ],
+                            "event": "volume_up",
+                        }
+                    ]
+                },
+            )
+            with mock.patch.object(core, "_resolve_vehicle_config_path", return_value=path):
+                rules, *_ = core._load_config()
+
+        self.assertEqual(
+            rules,
+            {
+                0x5C1: [
+                    {
+                        "matches": ((0, 0x13), (2, 0x01)),
+                        "event": "volume_up",
+                    }
+                ]
+            },
+        )
+
     def test_unchanged_config_returns_existing_objects(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = self._write_json(Path(tmp) / "config.json", {})
