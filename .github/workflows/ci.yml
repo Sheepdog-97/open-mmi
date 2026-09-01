@@ -106,7 +106,7 @@ jobs:
         run: |
           python tools/verify_trust_manifest.py
           python tools/vendor_bootstrap.py --check
-          python -m unittest tests.test_trust_invariants
+          python -m unittest tests.test_trust_invariants tests.test_telemetry_guard
 
       - name: Verify CSS module cascade
         run: python tools/verify_css_split.py
@@ -166,6 +166,7 @@ jobs:
           import json
           import bindings
           import canbusd
+          import open_mmi_telemetry
           import open_mmi_trust
           import ui.web_dashboard
           from canbusd import event_registry as vehicle_events
@@ -182,6 +183,7 @@ jobs:
 
           roots = {
               "bindings": Path(bindings.__file__).parent / "default.json",
+              "telemetry_guard": Path(open_mmi_telemetry.__file__),
               "vehicle_events": vehicle_events.DEFAULT_REGISTRY_PATH,
               "vehicle_statuses": vehicle_statuses.DEFAULT_REGISTRY_PATH,
               "bluetooth": Path(bluetooth.__file__),
