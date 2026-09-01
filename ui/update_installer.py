@@ -146,7 +146,7 @@ def _run_deployment(command: Sequence[str], environment: Mapping[str, str]) -> s
 
 
 _DEPLOYMENT_STAGES = {
-    "backup", "packaging-tools", "repository-head", "repository-clean", "repository-fetch",
+    "backup", "install-root", "packaging-tools", "repository-head", "repository-clean", "repository-fetch",
     "repository-merge", "package-build", "package-artifact", "files", "package", "system-services",
     "user-services", "vehicle-config-coordinator", "power-manager",
     "service-health", "api-health", "version-health",
@@ -233,9 +233,16 @@ def install_prepared(
             # evaluating a future candidate's trust-boundary transition.  Both current
             # and candidate signatures are verified offline against the owner-pinned
             # signer root before any candidate-controlled build/deployment can begin.
-            current_integrity = release_integrity.require_current_integrity(
-                integrity_state_path, integrity_install_root, integrity_package_root
-            )
+            if state_path == update_coordinator.DEFAULT_STATE_FILE:
+                current_integrity = release_integrity.require_current_privileged_integrity(
+                    integrity_state_path,
+                    install_root=integrity_install_root,
+                    package_root=integrity_package_root,
+                )
+            else:
+                current_integrity = release_integrity.require_current_integrity(
+                    integrity_state_path, integrity_install_root, integrity_package_root
+                )
             if current_integrity["candidate_commit"] != str(source["installed_commit"]).lower():
                 raise release_integrity.ReleaseIntegrityError(
                     "installed integrity commit does not match managed update source identity"
@@ -327,19 +334,28 @@ def install_prepared(
                 failed, staging_root, rollback_root
             )
             raise InstallerError(failure)
-        verification = release_integrity.verify_runtime_inventory(
-            inventory=expected_release["inventory"],
-            trust_manifest_digest=expected_release["trust_manifest_digest"],
-            candidate_commit=expected_release["candidate_commit"],
-            install_root=integrity_install_root,
-            package_root=integrity_package_root,
-        )
+        if state_path == update_coordinator.DEFAULT_STATE_FILE:
+            verification = release_integrity.verify_privileged_runtime_inventory(
+                inventory=expected_release["inventory"],
+                trust_manifest_digest=expected_release["trust_manifest_digest"],
+                candidate_commit=expected_release["candidate_commit"],
+                install_root=integrity_install_root,
+                package_root=integrity_package_root,
+            )
+        else:
+            verification = release_integrity.verify_runtime_inventory(
+                inventory=expected_release["inventory"],
+                trust_manifest_digest=expected_release["trust_manifest_digest"],
+                candidate_commit=expected_release["candidate_commit"],
+                install_root=integrity_install_root,
+                package_root=integrity_package_root,
+            )
         if not verification["matches"]:
             state.update({
                 "state": "failed", "stage": "integrity-verification",
                 "updated_at": update_coordinator._timestamp(),
                 "completed_at": update_coordinator._timestamp(),
-                "error": "Prepared deployment completed but installed runtime failed byte-integrity verification",
+                "error": "Prepared deployment completed but installed privileged runtime failed byte-integrity verification",
             })
             failed = update_coordinator.write_state(state, state_path)
             update_coordinator._best_effort_artifact_cleanup(failed, staging_root, rollback_root)

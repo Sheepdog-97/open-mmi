@@ -102,6 +102,16 @@ check_root() {
     fi
 }
 
+harden_install_root_ownership() {
+    [ -e "$INSTALL_DIR" ] || return 0
+    [[ -d "$INSTALL_DIR" && ! -L "$INSTALL_DIR" ]] || {
+        log_error "Installed Open MMI root is not a trusted directory"
+        return 1
+    }
+    chown root:root "$INSTALL_DIR"
+    chmod 0755 "$INSTALL_DIR"
+}
+
 check_dependencies() {
     local missing=()
     
@@ -1219,8 +1229,7 @@ cmd_install() {
     
     # Create install directory
     log_info "Creating install directory..."
-    sudo mkdir -p "$INSTALL_DIR"
-    sudo chown -R "$REAL_USER:$REAL_USER" "$INSTALL_DIR"
+    sudo install -d -m 0755 -o root -g root "$INSTALL_DIR"
     
     # Create Python virtual environment
     log_info "Creating Python virtual environment..."
@@ -1329,6 +1338,7 @@ cmd_update() {
         return 1
     fi
 
+    harden_install_root_ownership
     harden_custom_catalogue_permissions
 
     local old_version
@@ -1493,6 +1503,10 @@ cmd_deploy_prepared() {
     # Failures before the rollback function is installed still need a
     # user-visible, allowlisted stage instead of a generic deployment error.
     trap 'log_error "Prepared deployment failed at stage: $deployment_stage"' ERR
+
+    deployment_stage="install-root"
+    harden_install_root_ownership
+    deployment_stage="backup"
 
     install -d -m 0700 -o root -g root "$rollback_root"
     if [ -e "$INSTALL_DIR" ]; then

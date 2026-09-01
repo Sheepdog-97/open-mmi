@@ -57,6 +57,12 @@ SOURCE_RELEASE_ROOTS = (*SOURCE_RUNTIME_ROOTS, "scripts", "packaging", "systemd"
 SOURCE_RELEASE_FILES = ("LICENSE", "README.md", "pyproject.toml")
 INVENTORY_ROOTS = (*PACKAGE_RUNTIME_ROOTS, "scripts", "packaging", "systemd")
 DEFAULT_INSTALL_ROOT = Path("/opt/open-mmi")
+DEFAULT_SYSTEMD_UNIT_ROOT = Path("/etc/systemd/system")
+PRIVILEGED_SYSTEM_UNITS = (
+    "open-mmi-update-coordinator.service",
+    "open-mmi-update-installer.service",
+)
+_PYTHON_LIB_RE = re.compile(r"^python[0-9]+\.[0-9]+$")
 PACKAGE_SOURCE_ONLY_PATHS = {"ui/web_dashboard/README.md"}
 MAX_INVENTORY_FILES = 4096
 MAX_FILE_BYTES = 16 * 1024 * 1024
@@ -510,6 +516,63 @@ def _same_root(left: Path, right: Path) -> bool:
         return left == right
 
 
+def production_package_root(install_root: Path = DEFAULT_INSTALL_ROOT) -> Path:
+    """Resolve the one production venv site-packages directory without executing it."""
+
+    lib_root = Path(install_root) / "venv" / "lib"
+    try:
+        metadata = lib_root.lstat()
+    except OSError as exc:
+        raise ReleaseIntegrityError(
+            "production Open MMI venv library root is unavailable"
+        ) from exc
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        raise ReleaseIntegrityError("production Open MMI venv library root is untrusted")
+
+    candidates: list[Path] = []
+    try:
+        children = sorted(lib_root.iterdir(), key=lambda path: path.name)
+    except OSError as exc:
+        raise ReleaseIntegrityError(
+            "production Open MMI venv library root cannot be enumerated"
+        ) from exc
+
+    for child in children:
+        if not _PYTHON_LIB_RE.fullmatch(child.name):
+            continue
+        try:
+            child_metadata = child.lstat()
+        except OSError as exc:
+            raise ReleaseIntegrityError(
+                "production Open MMI Python library path is unavailable"
+            ) from exc
+        if stat.S_ISLNK(child_metadata.st_mode) or not stat.S_ISDIR(child_metadata.st_mode):
+            raise ReleaseIntegrityError(
+                "production Open MMI Python library path is untrusted"
+            )
+
+        site_packages = child / "site-packages"
+        try:
+            package_metadata = site_packages.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise ReleaseIntegrityError(
+                "production Open MMI site-packages path is unavailable"
+            ) from exc
+        if stat.S_ISLNK(package_metadata.st_mode) or not stat.S_ISDIR(package_metadata.st_mode):
+            raise ReleaseIntegrityError(
+                "production Open MMI site-packages path is untrusted"
+            )
+        candidates.append(site_packages)
+
+    if len(candidates) != 1:
+        raise ReleaseIntegrityError(
+            "production Open MMI site-packages identity is missing or ambiguous"
+        )
+    return candidates[0]
+
+
 def _verify_inventory_root(
     entries: Sequence[Mapping[str, Any]],
     root: Path,
@@ -697,6 +760,286 @@ def verify_runtime_inventory(
     }
 
 
+def _verify_privileged_ownership(
+    entries: Sequence[Mapping[str, Any]],
+    source_root: Path,
+    package_root: Path,
+) -> dict[str, Any]:
+    """Verify root control of the production privileged execution path."""
+
+    if not _same_root(source_root, DEFAULT_INSTALL_ROOT):
+        return {"matches": True, "paths_checked": 0, "unsafe": []}
+
+    unsafe: list[str] = []
+    checked: set[Path] = set()
+
+    def check_directory(path: Path, label: str) -> None:
+        if path in checked:
+            return
+        checked.add(path)
+        try:
+            metadata = path.lstat()
+        except OSError:
+            unsafe.append(label)
+            return
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or not stat.S_ISDIR(metadata.st_mode)
+            or metadata.st_uid != 0
+            or metadata.st_mode & 0o022
+        ):
+            unsafe.append(label)
+
+    def check_ancestors(path: Path, label: str) -> None:
+        current = path
+        index = 0
+        while True:
+            check_directory(current, label if index == 0 else f"{label}:ancestor:{current}")
+            if current == current.parent:
+                break
+            current = current.parent
+            index += 1
+
+    check_ancestors(source_root, "source-root")
+    check_ancestors(package_root, "package-root")
+    check_directory(source_root / "venv" / "bin", "python-bin-root")
+
+    python_path = source_root / "venv" / "bin" / "python"
+    try:
+        python_metadata = python_path.lstat()
+        resolved_python = python_path.resolve(strict=True)
+        resolved_metadata = resolved_python.lstat()
+    except OSError:
+        unsafe.append("python-executable")
+    else:
+        if python_metadata.st_uid != 0:
+            unsafe.append("python-executable")
+        if (
+            not stat.S_ISREG(resolved_metadata.st_mode)
+            or resolved_metadata.st_uid != 0
+            or resolved_metadata.st_mode & 0o022
+            or not resolved_metadata.st_mode & 0o111
+            or not resolved_python.is_relative_to(Path("/usr/bin"))
+        ):
+            unsafe.append("python-executable-target")
+        else:
+            check_ancestors(resolved_python.parent, "python-system-root")
+
+    normalized = validate_inventory(list(entries))
+    for entry in normalized:
+        relative = str(entry["path"])
+        item = PurePosixPath(relative)
+        first = item.parts[0] if item.parts else ""
+        targets: list[tuple[str, Path]] = []
+        if relative in SOURCE_RELEASE_FILES or first in SOURCE_RELEASE_ROOTS:
+            targets.append(("source", source_root / relative))
+        if _is_package_runtime_path(relative):
+            targets.append(("package", package_root / relative))
+
+        for kind, path in targets:
+            label = f"{kind}:{relative}"
+            try:
+                metadata = path.lstat()
+            except OSError:
+                unsafe.append(label)
+                continue
+            if metadata.st_uid != 0 or metadata.st_mode & 0o022:
+                unsafe.append(label)
+            parent = path.parent
+            while True:
+                check_directory(parent, f"{kind}-directory:{parent}")
+                if parent == (source_root if kind == "source" else package_root):
+                    break
+                if parent == parent.parent:
+                    unsafe.append(f"{kind}-directory:outside-root:{path}")
+                    break
+                parent = parent.parent
+
+    unsafe = sorted(set(unsafe))
+    return {
+        "matches": not unsafe,
+        "paths_checked": len(checked),
+        "unsafe": unsafe,
+    }
+
+
+def _verify_privileged_units(
+    entries: Sequence[Mapping[str, Any]],
+    unit_root: Path,
+) -> dict[str, Any]:
+    inventory = {
+        str(entry["path"]): entry for entry in validate_inventory(list(entries))
+    }
+    missing: list[str] = []
+    modified: list[str] = []
+    unsafe: list[str] = []
+    production = _same_root(Path(unit_root), DEFAULT_SYSTEMD_UNIT_ROOT)
+    if production:
+        try:
+            root_metadata = Path(unit_root).lstat()
+        except OSError as exc:
+            raise ReleaseIntegrityError(
+                "privileged systemd unit root is unavailable"
+            ) from exc
+        if (
+            stat.S_ISLNK(root_metadata.st_mode)
+            or not stat.S_ISDIR(root_metadata.st_mode)
+            or root_metadata.st_uid != 0
+            or root_metadata.st_mode & 0o022
+        ):
+            raise ReleaseIntegrityError("privileged systemd unit root is untrusted")
+
+    for unit in PRIVILEGED_SYSTEM_UNITS:
+        relative = f"systemd/system/{unit}"
+        expected = inventory.get(relative)
+        if expected is None:
+            raise ReleaseIntegrityError(
+                f"integrity inventory omits privileged systemd unit: {unit}"
+            )
+
+        path = Path(unit_root) / unit
+        try:
+            metadata = path.lstat()
+        except FileNotFoundError:
+            missing.append(unit)
+            continue
+        except OSError:
+            unsafe.append(unit)
+            continue
+
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or (production and (metadata.st_uid != 0 or metadata.st_mode & 0o022))
+        ):
+            unsafe.append(unit)
+            continue
+
+        try:
+            data = path.read_bytes()
+        except OSError:
+            unsafe.append(unit)
+            continue
+        digest = "sha256:" + hashlib.sha256(data).hexdigest()
+        if len(data) != expected["size"] or digest != expected["sha256"]:
+            modified.append(unit)
+
+    missing = sorted(set(missing))
+    modified = sorted(set(modified))
+    unsafe = sorted(set(unsafe))
+    return {
+        "matches": not (missing or modified or unsafe),
+        "files_expected": len(PRIVILEGED_SYSTEM_UNITS),
+        "unit_root": str(unit_root),
+        "missing": missing,
+        "modified": modified,
+        "unsafe": unsafe,
+    }
+
+
+def verify_privileged_runtime_inventory(
+    *,
+    inventory: Sequence[Mapping[str, Any]],
+    trust_manifest_digest: str,
+    candidate_commit: str,
+    install_root: Path = DEFAULT_INSTALL_ROOT,
+    package_root: Path | None = None,
+    systemd_unit_root: Path = DEFAULT_SYSTEMD_UNIT_ROOT,
+) -> dict[str, Any]:
+    """Verify the bytes actually used by privileged update execution."""
+
+    entries = validate_inventory(list(inventory))
+    source_root = Path(install_root)
+    packages = (
+        Path(package_root)
+        if package_root is not None
+        else production_package_root(source_root)
+    )
+    runtime = verify_runtime_inventory(
+        inventory=inventory,
+        trust_manifest_digest=trust_manifest_digest,
+        candidate_commit=candidate_commit,
+        install_root=source_root,
+        package_root=packages,
+    )
+    units = _verify_privileged_units(inventory, Path(systemd_unit_root))
+    ownership = _verify_privileged_ownership(entries, source_root, packages)
+
+    missing = list(runtime["missing"]) + [
+        f"systemd:{item}" for item in units["missing"]
+    ]
+    modified = list(runtime["modified"]) + [
+        f"systemd:{item}" for item in units["modified"]
+    ]
+    unsafe = list(runtime["unsafe"]) + [
+        f"systemd:{item}" for item in units["unsafe"]
+    ] + [
+        f"ownership:{item}" for item in ownership["unsafe"]
+    ]
+    return {
+        "matches": bool(
+            runtime["matches"] and units["matches"] and ownership["matches"]
+        ),
+        "files_expected": int(runtime["files_expected"]) + int(units["files_expected"]),
+        "inventory_files": runtime["inventory_files"],
+        "inventory_digest": runtime["inventory_digest"],
+        "candidate_commit": candidate_commit,
+        "trust_manifest_digest": trust_manifest_digest,
+        "source_root": str(source_root),
+        "package_root": str(packages),
+        "systemd_unit_root": str(systemd_unit_root),
+        "missing": sorted(set(missing)),
+        "modified": sorted(set(modified)),
+        "extra": list(runtime["extra"]),
+        "unsafe": sorted(set(unsafe)),
+        "runtime": runtime,
+        "privileged_units": units,
+        "privileged_ownership": ownership,
+    }
+
+
+def verify_privileged_installed_runtime(
+    state: Mapping[str, Any],
+    install_root: Path = DEFAULT_INSTALL_ROOT,
+    package_root: Path | None = None,
+    systemd_unit_root: Path = DEFAULT_SYSTEMD_UNIT_ROOT,
+) -> dict[str, Any]:
+    normalized = validate_integrity_state(state)
+    return verify_privileged_runtime_inventory(
+        inventory=normalized["inventory"],
+        trust_manifest_digest=normalized["trust_manifest_digest"],
+        candidate_commit=normalized["candidate_commit"],
+        install_root=install_root,
+        package_root=package_root,
+        systemd_unit_root=systemd_unit_root,
+    )
+
+
+def require_current_privileged_integrity(
+    state_path: Path = DEFAULT_INTEGRITY_STATE_PATH,
+    install_root: Path = DEFAULT_INSTALL_ROOT,
+    package_root: Path | None = None,
+    systemd_unit_root: Path = DEFAULT_SYSTEMD_UNIT_ROOT,
+) -> dict[str, Any]:
+    state = read_integrity_state(state_path)
+    if state is None:
+        raise ReleaseIntegrityError(
+            "Installed Release/File Integrity is not established; "
+            "local bootstrap is required before updates"
+        )
+    verification = verify_privileged_installed_runtime(
+        state,
+        install_root=install_root,
+        package_root=package_root,
+        systemd_unit_root=systemd_unit_root,
+    )
+    if not verification["matches"]:
+        raise ReleaseIntegrityError(
+            "privileged Open MMI runtime bytes do not match recorded integrity state"
+        )
+    return state
+
+
 def verify_installed_runtime(
     state: Mapping[str, Any],
     install_root: Path,
@@ -804,15 +1147,16 @@ def current_trust_anchors(accepted_state_path: Path, lineage_path: Path) -> tupl
     return accepted, digest
 
 
-def default_package_root() -> Path:
+def default_install_root() -> Path:
+    # Production presence wins over the interpreter that happened to invoke the
+    # verifier. This prevents an editable checkout from silently standing in for
+    # the separately deployed privileged runtime.
+    if DEFAULT_INSTALL_ROOT.is_dir():
+        return DEFAULT_INSTALL_ROOT
     return Path(__file__).resolve().parents[1]
 
 
-def default_install_root() -> Path:
-    package_root = default_package_root()
-    # Editable/developer installs execute directly from the checkout even when an
-    # unrelated /opt/open-mmi installation exists. Bind integrity to the bytes this
-    # interpreter is actually importing, not merely to a conventional install path.
-    if (package_root / ".git").is_dir():
-        return package_root
-    return DEFAULT_INSTALL_ROOT if DEFAULT_INSTALL_ROOT.is_dir() else package_root
+def default_package_root() -> Path:
+    if DEFAULT_INSTALL_ROOT.is_dir():
+        return production_package_root(DEFAULT_INSTALL_ROOT)
+    return Path(__file__).resolve().parents[1]

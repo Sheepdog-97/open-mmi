@@ -41,6 +41,7 @@ from .release_integrity import (
     integrity_state_digest,
     read_integrity_state,
     verify_installed_runtime,
+    verify_privileged_installed_runtime,
 )
 from .release_provenance import (
     DEFAULT_PROVENANCE_ROOT_PATH,
@@ -360,6 +361,64 @@ def _inspect_release_integrity(
             ),
         ),
         state,
+    )
+
+
+def _inspect_privileged_runtime_integrity(
+    integrity_state: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if integrity_state is None:
+        return _check(
+            "release.privileged-runtime-integrity",
+            UNVERIFIED,
+            "Privileged runtime binding cannot be evaluated without "
+            "Installed Release/File Integrity.",
+            established=False,
+        )
+
+    try:
+        verification = verify_privileged_installed_runtime(integrity_state)
+    except ReleaseIntegrityError as exc:
+        return _check(
+            "release.privileged-runtime-integrity",
+            FAIL,
+            "The production privileged Open MMI runtime could not be bound "
+            "to the recorded release.",
+            error=str(exc),
+        )
+
+    evidence = {
+        "candidate_commit": integrity_state["candidate_commit"],
+        "inventory_digest": integrity_state["inventory_digest"],
+        "source_root": verification["source_root"],
+        "package_root": verification["package_root"],
+        "systemd_unit_root": verification["systemd_unit_root"],
+        "files_expected": verification["files_expected"],
+    }
+    if not verification["matches"]:
+        return _check(
+            "release.privileged-runtime-integrity",
+            FAIL,
+            "The production source, installed Python package, or privileged "
+            "update units differ from the recorded release.",
+            **evidence,
+            missing=verification["missing"],
+            modified=verification["modified"],
+            extra=verification["extra"],
+            unsafe=verification["unsafe"],
+        )
+
+    return _check(
+        "release.privileged-runtime-integrity",
+        PASS,
+        "The production source, installed Python package, and privileged "
+        "update units match the recorded release.",
+        **evidence,
+        note=(
+            "The privileged systemd units execute the verified installed Python "
+            "modules directly; pip-generated console wrappers are not part of "
+            "this trust handoff."
+        ),
     )
 
 
@@ -1039,7 +1098,9 @@ def _inspect_updater_transition_gate_source(root: Path) -> dict[str, Any]:
         return sorted(lines)
 
     installer_gate = call_lines(installer_tree, "require_prepared_candidate_allowed")
-    installer_integrity = call_lines(installer_tree, "require_current_integrity")
+    installer_integrity = call_lines(
+        installer_tree, "require_current_privileged_integrity"
+    )
     installer_current_provenance = call_lines(installer_tree, "require_current_release_provenance")
     installer_candidate_provenance = call_lines(installer_tree, "require_candidate_release_provenance")
     installer_activate = call_lines(installer_tree, "activate_acknowledged_expansion")
@@ -1132,7 +1193,7 @@ def _inspect_updater_transition_gate_source(root: Path) -> dict[str, Any]:
     return _check(
         "updater.preinstallation-trust-gate",
         PASS,
-        "Installed updater verifies current bytes plus pinned-signer provenance for both current and candidate commits before trust transition evaluation or candidate-controlled build/deployment begins, then verifies the built artifact and installed runtime.",
+        "Installed updater verifies the current privileged runtime plus pinned-signer provenance for both current and candidate commits before trust transition evaluation or candidate-controlled build/deployment begins, then verifies the built artifact and installed privileged runtime.",
         installer_gate_line=min(installer_gate),
         installer_integrity_line=min(installer_integrity),
         installer_current_provenance_line=min(installer_current_provenance),
@@ -1143,7 +1204,7 @@ def _inspect_updater_transition_gate_source(root: Path) -> dict[str, Any]:
         coordinator_gate_line=min(coordinator_gate),
         candidate_manifest_source="git-object-data",
         note=(
-            "The trusted installer checks current runtime integrity, verifies current and candidate commit signatures offline against the owner-pinned signer root, and only then evaluates the Trust Transition Gate. After trust acceptance, pip may execute the candidate PEP 517 build backend; the resulting wheel is verified against the Git-object inventory before manage.sh deployment, and installed runtime bytes are rechecked afterward. This is still source-level evidence, not an OS sandbox against arbitrary privileged replacement code."
+            "The trusted installer checks the production source, installed package, and privileged update-unit byte binding, verifies current and candidate commit signatures offline against the owner-pinned signer root, and only then evaluates the Trust Transition Gate. After trust acceptance, pip may execute the candidate PEP 517 build backend; the resulting wheel is verified against the Git-object inventory before manage.sh deployment, and the privileged runtime binding is rechecked afterward. This is still local byte-integrity evidence, not an OS sandbox against arbitrary privileged replacement code."
         ),
     )
 
@@ -1366,6 +1427,11 @@ def inspect_system(
     checks.extend(
         [
             integrity_check,
+            *(
+                [_inspect_privileged_runtime_integrity(integrity_state)]
+                if install_root is None and package_root is None
+                else []
+            ),
             provenance_check,
             _inspect_transition_lineage(Path(lineage_path), Path(accepted_state_path)),
             _inspect_updater_transition_gate_source(root),

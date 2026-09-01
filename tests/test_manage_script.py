@@ -756,11 +756,33 @@ sleep() {{ :; }}
             self.assertEqual(failure.returncode, 0, failure.stderr)
             self.assertIn("post-install health check", failure.stderr)
 
+    def test_install_root_is_root_owned_and_prepared_deploy_hardens_legacy_root(self) -> None:
+        install_start = self.text.index("cmd_install() {")
+        update_start = self.text.index("cmd_update() {")
+        install_block = self.text[install_start:update_start]
+        self.assertIn(
+            'sudo install -d -m 0755 -o root -g root "$INSTALL_DIR"',
+            install_block,
+        )
+        self.assertNotIn(
+            'sudo chown -R "$REAL_USER:$REAL_USER" "$INSTALL_DIR"',
+            install_block,
+        )
+        self.assertIn("harden_install_root_ownership() {", self.text)
+        deploy_start = self.text.index("cmd_deploy_prepared() {")
+        deploy_end = self.text.index("\n# =============================================================================", deploy_start)
+        deploy_block = self.text[deploy_start:deploy_end]
+        self.assertIn('deployment_stage="install-root"', deploy_block)
+        self.assertIn("harden_install_root_ownership", deploy_block)
+
     def test_installer_unit_is_one_shot_and_accepts_no_arguments(self) -> None:
         unit = (ROOT / "systemd/system/open-mmi-update-installer.service").read_text(encoding="utf-8")
         self.assertIn("Type=oneshot", unit)
         self.assertIn("Environment=OPEN_MMI_PREPARED_DEPLOYMENT=1", unit)
-        self.assertIn("ExecStart=/opt/open-mmi/venv/bin/open-mmi-update-installer\n", unit)
+        self.assertIn(
+            "ExecStart=/opt/open-mmi/venv/bin/python -I -m ui.update_installer\n",
+            unit,
+        )
         self.assertIn("/run/open-mmi", unit)
         self.assertIn("ProtectHome=false", unit)
         self.assertNotIn("ProtectHome=read-only", unit)
@@ -770,6 +792,18 @@ sleep() {{ :; }}
         self.assertNotIn("ReadWritePaths=/opt/open-mmi ", unit)
         self.assertNotIn("%i", unit)
         self.assertIn("ProtectSystem=strict", unit)
+
+        coordinator = (
+            ROOT / "systemd/system/open-mmi-update-coordinator.service"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "ExecStart=/opt/open-mmi/venv/bin/python -I -m ui.update_coordinator serve\n",
+            coordinator,
+        )
+        self.assertNotIn(
+            "ExecStart=/opt/open-mmi/venv/bin/open-mmi-update-coordinator serve\n",
+            coordinator,
+        )
 
     def test_vehicle_configuration_coordinator_is_publicly_read_only_and_hardened(self) -> None:
         unit = (ROOT / "systemd/system/open-mmi-vehicle-config-coordinator.service").read_text(encoding="utf-8")

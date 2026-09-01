@@ -23,6 +23,7 @@ from .release_integrity import (
     DEFAULT_SOURCE_DESCRIPTOR,
     ReleaseIntegrityError,
     _git,
+    _production_path,
     _record_integrity_state,
     current_trust_anchors,
     default_install_root,
@@ -32,6 +33,7 @@ from .release_integrity import (
     read_integrity_state,
     validate_integrity_state,
     verify_installed_runtime,
+    verify_privileged_installed_runtime,
 )
 
 
@@ -131,6 +133,16 @@ def _proposed_state(
     return proposed, verification
 
 
+def _verify_active_runtime(
+    state: dict[str, Any],
+    install_root: Path,
+    package_root: Path,
+) -> dict[str, Any]:
+    if _production_path(DEFAULT_INTEGRITY_STATE_PATH):
+        return verify_privileged_installed_runtime(state, install_root, package_root)
+    return verify_installed_runtime(state, install_root, package_root)
+
+
 def _cmd_status(args: argparse.Namespace) -> int:
     del args
     _require_root()
@@ -144,7 +156,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
             "install_root": str(install_root),
         }, indent=2, sort_keys=True))
         return 3
-    verification = verify_installed_runtime(state, install_root, package_root)
+    verification = _verify_active_runtime(state, install_root, package_root)
     print(json.dumps({
         "established": True,
         "state": "established" if verification["matches"] else "mismatch",
@@ -176,6 +188,12 @@ def _cmd_bootstrap(args: argparse.Namespace) -> int:
         lineage_path=DEFAULT_TRANSITION_LINEAGE_DIR,
         package_root=package_root,
     )
+    verification = _verify_active_runtime(proposed, install_root, package_root)
+    if not verification["matches"]:
+        raise ReleaseIntegrityError(
+            "active privileged Open MMI runtime does not match "
+            "the exact committed runtime inventory"
+        )
     print("Current installed runtime will become the File Integrity v1 baseline:")
     print(json.dumps({
         "candidate_commit": proposed["candidate_commit"],
@@ -216,7 +234,7 @@ def _cmd_bootstrap(args: argparse.Namespace) -> int:
         record_source="baseline-existing-state",
         path=DEFAULT_INTEGRITY_STATE_PATH,
     )
-    final_verification = verify_installed_runtime(state, install_root, package_root)
+    final_verification = _verify_active_runtime(state, install_root, package_root)
     if not final_verification["matches"]:
         raise ReleaseIntegrityError("installed runtime changed while integrity baseline was being recorded")
     print(json.dumps({

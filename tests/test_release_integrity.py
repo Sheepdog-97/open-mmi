@@ -22,6 +22,7 @@ from open_mmi_trust.release_integrity import (
     inventory_from_git_commit,
     read_integrity_state,
     verify_installed_runtime,
+    verify_privileged_installed_runtime,
     verify_wheel_against_inventory,
 )
 
@@ -47,6 +48,14 @@ class ReleaseIntegrityTests(unittest.TestCase):
         (repo / "packaging" / "tmpfiles" / "open-mmi.conf").write_text("d /run/open-mmi 0755 root root -\n", encoding="utf-8")
         (repo / "systemd" / "system").mkdir(parents=True)
         (repo / "systemd" / "system" / "open-mmi-test.service").write_text("[Service]\nExecStart=/bin/true\n", encoding="utf-8")
+        (repo / "systemd" / "system" / "open-mmi-update-coordinator.service").write_text(
+            "[Service]\nExecStart=/opt/open-mmi/venv/bin/python -I -m ui.update_coordinator serve\n",
+            encoding="utf-8",
+        )
+        (repo / "systemd" / "system" / "open-mmi-update-installer.service").write_text(
+            "[Service]\nExecStart=/opt/open-mmi/venv/bin/python -I -m ui.update_installer\n",
+            encoding="utf-8",
+        )
         (repo / "ui" / "web_dashboard").mkdir(parents=True)
         (repo / "ui" / "web_dashboard" / "README.md").write_text("managed dashboard source\n", encoding="utf-8")
         (repo / "README.md").write_text("Open MMI test release\n", encoding="utf-8")
@@ -228,6 +237,83 @@ class ReleaseIntegrityTests(unittest.TestCase):
         self.assertFalse(result["matches"])
         self.assertIn("source:scripts/manage.sh", result["modified"])
 
+    def test_privileged_runtime_binding_covers_site_packages_and_deployed_update_units(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo, commit = self.repository(root)
+            expected, state, _ = self.state(root, repo, commit)
+            source_root = root / "source-runtime"
+            package_root = root / "site-packages"
+            unit_root = root / "systemd"
+            self.materialize(repo, expected, source_root)
+            self.materialize(repo, expected, package_root)
+            unit_root.mkdir()
+
+            for unit in release_integrity.PRIVILEGED_SYSTEM_UNITS:
+                (unit_root / unit).write_bytes(
+                    (repo / "systemd" / "system" / unit).read_bytes()
+                )
+
+            exact = verify_privileged_installed_runtime(
+                state, source_root, package_root, unit_root
+            )
+            self.assertTrue(exact["matches"], exact)
+
+            package_file = package_root / "open_mmi_trust" / "__init__.py"
+            original_package = package_file.read_bytes()
+            package_file.write_text("VALUE = 99\n", encoding="utf-8")
+            stale_package = verify_privileged_installed_runtime(
+                state, source_root, package_root, unit_root
+            )
+            self.assertFalse(stale_package["matches"])
+            self.assertIn(
+                "package:open_mmi_trust/__init__.py", stale_package["modified"]
+            )
+            package_file.write_bytes(original_package)
+
+            unit = unit_root / "open-mmi-update-installer.service"
+            unit.write_text("[Service]\nExecStart=/bin/false\n", encoding="utf-8")
+            stale_unit = verify_privileged_installed_runtime(
+                state, source_root, package_root, unit_root
+            )
+
+        self.assertFalse(stale_unit["matches"])
+        self.assertIn(
+            "systemd:open-mmi-update-installer.service", stale_unit["modified"]
+        )
+
+    def test_production_privileged_binding_rejects_user_owned_install_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo, commit = self.repository(root)
+            expected, state, _ = self.state(root, repo, commit)
+            source_root = root / "source-runtime"
+            package_root = root / "site-packages"
+            unit_root = root / "systemd"
+            self.materialize(repo, expected, source_root)
+            self.materialize(repo, expected, package_root)
+            unit_root.mkdir()
+            for unit in release_integrity.PRIVILEGED_SYSTEM_UNITS:
+                (unit_root / unit).write_bytes(
+                    (repo / "systemd" / "system" / unit).read_bytes()
+                )
+
+            # The temp root is deliberately owned by the test user. Treating it as
+            # the fixed production install root must therefore fail even though all
+            # bytes are an exact inventory match.
+            with mock.patch.object(
+                release_integrity, "DEFAULT_INSTALL_ROOT", source_root
+            ):
+                result = verify_privileged_installed_runtime(
+                    state, source_root, package_root, unit_root
+                )
+
+        self.assertFalse(result["matches"])
+        self.assertTrue(
+            any(item.startswith("ownership:") for item in result["unsafe"]),
+            result,
+        )
+
     def test_wheel_runtime_payload_must_exactly_match_git_inventory(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -309,7 +395,7 @@ class ReleaseIntegrityTests(unittest.TestCase):
             with self.assertRaisesRegex(ReleaseIntegrityError, "not clean"):
                 release_integrity_cli._bootstrap_source(repo)
 
-    def test_default_install_root_prefers_active_editable_checkout(self):
+    def test_default_install_root_prefers_production_installation_when_present(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             checkout = root / "checkout"
@@ -319,7 +405,7 @@ class ReleaseIntegrityTests(unittest.TestCase):
             with mock.patch.object(release_integrity, "default_package_root", return_value=checkout), mock.patch.object(
                 release_integrity, "DEFAULT_INSTALL_ROOT", conventional
             ):
-                self.assertEqual(release_integrity.default_install_root(), checkout)
+                self.assertEqual(release_integrity.default_install_root(), conventional)
 
     def test_owner_bootstrap_generic_confirmation_does_not_create_state(self):
         with tempfile.TemporaryDirectory() as tmp:

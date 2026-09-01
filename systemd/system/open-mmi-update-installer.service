@@ -6,7 +6,7 @@ After=local-fs.target
 [Service]
 Type=oneshot
 Environment=OPEN_MMI_PREPARED_DEPLOYMENT=1
-ExecStart=/opt/open-mmi/venv/bin/open-mmi-update-installer
+ExecStart=/opt/open-mmi/venv/bin/python -I -m ui.update_installer
 UMask=0027
 PrivateTmp=true
 ProtectHome=false

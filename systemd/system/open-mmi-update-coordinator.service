@@ -9,7 +9,7 @@ Type=simple
 # This also covers a first update executed by the previous manage.sh,
 # which can deploy new payloads and units but not new shell functions.
 ExecStartPre=/usr/bin/systemd-tmpfiles --create /opt/open-mmi/packaging/tmpfiles/open-mmi.conf
-ExecStart=/opt/open-mmi/venv/bin/open-mmi-update-coordinator serve
+ExecStart=/opt/open-mmi/venv/bin/python -I -m ui.update_coordinator serve
 Restart=on-failure
 RestartSec=2
 RuntimeDirectory=open-mmi
