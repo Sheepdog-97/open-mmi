@@ -17,6 +17,7 @@ from open_mmi_trust.inspector import (
     UNVERIFIED,
     canonical_report_bytes,
     inspect_system,
+    _inspect_updater_transition_gate_source,
 )
 from open_mmi_trust.inspector_cli import render_text
 
@@ -200,6 +201,11 @@ class TrustInspectorTests(unittest.TestCase):
         check = next(check for check in report["checks"] if check["id"] == "dashboard.render-egress")
         self.assertEqual(check["status"], FAIL)
         self.assertEqual(check["evidence"]["remote_dependencies"], ["https://example.invalid/tracker.js"])
+
+    def test_real_updater_source_reproduces_preinstallation_transition_gate(self):
+        check = _inspect_updater_transition_gate_source(ROOT)
+        self.assertEqual(check["status"], PASS)
+        self.assertEqual(check["evidence"]["candidate_manifest_source"], "git-object-data")
 
     def test_inspection_does_not_create_authorization_state(self):
         with tempfile.TemporaryDirectory() as tmp:

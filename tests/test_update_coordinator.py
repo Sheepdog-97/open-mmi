@@ -112,6 +112,10 @@ class UpdateCoordinatorTests(unittest.TestCase):
         )
         update_coordinator.write_state(installable, state_path)
         with patch.object(update_coordinator.update_policy, "read_policy", return_value=({"channel": "nightly"}, "configured")), patch.object(
+            update_coordinator, "trusted_prepared_stage", return_value=Path("/prepared")
+        ), patch.object(
+            update_coordinator.transition_gate, "require_prepared_candidate_allowed", return_value=object()
+        ), patch.object(
             update_coordinator.subprocess, "run", return_value=subprocess.CompletedProcess(["systemctl"], 0)
         ), patch.object(update_coordinator, "read_state", side_effect=[installable, dict(installable, state="complete", stage="complete")]):
             installed = update_coordinator.response_for_request(
@@ -126,6 +130,37 @@ class UpdateCoordinatorTests(unittest.TestCase):
             {"api_version": 1, "action": "install", "confirm": True, "path": "/tmp/evil"},
         ):
             self.assertFalse(update_coordinator.response_for_request(request, state_path)["ok"])
+
+    def test_install_preflight_blocks_before_installer_service_when_trust_gate_blocks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            state_path = root / "state.json"
+            installable = dict(
+                update_coordinator.initial_state(),
+                state="prepared", stage="prepared",
+                transaction_id="prepare-" + "a" * 32, candidate_commit="b" * 40,
+            )
+            update_coordinator.write_state(installable, state_path)
+            with patch.object(
+                update_coordinator.update_policy, "read_policy",
+                return_value=({"channel": "nightly"}, "configured"),
+            ), patch.object(
+                update_coordinator, "trusted_prepared_stage", return_value=root / "stage"
+            ), patch.object(
+                update_coordinator.transition_gate,
+                "require_prepared_candidate_allowed",
+                side_effect=update_coordinator.transition_gate.TransitionGateError(
+                    "local transition acknowledgement is required"
+                ),
+            ), patch.object(update_coordinator.subprocess, "run") as run:
+                response = update_coordinator.response_for_request(
+                    {"api_version": 1, "action": "install", "confirm": True},
+                    state_path, root / "lock", root / "staging",
+                )
+            self.assertFalse(response["ok"])
+            self.assertIn("acknowledgement", response["error"])
+            run.assert_not_called()
+            self.assertEqual(update_coordinator.read_state(state_path)["state"], "prepared")
 
     def test_state_is_atomic_strict_and_mode_0644(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -183,8 +218,12 @@ class UpdateCoordinatorTests(unittest.TestCase):
             path.write_text(json.dumps(state), encoding="utf-8")
             archive = root / "rollback" / transaction
             archive.mkdir(parents=True)
-            (archive / "pip-version-before").write_text("26.1.2\n", encoding="utf-8")
-            (archive / "pip-version-after").write_text("26.2.1\n", encoding="utf-8")
+            before = archive / "pip-version-before"
+            after = archive / "pip-version-after"
+            before.write_text("26.1.2\n", encoding="utf-8")
+            after.write_text("26.2.1\n", encoding="utf-8")
+            before.chmod(0o644)
+            after.chmod(0o644)
             migrated = update_coordinator.read_state(path)
         self.assertEqual(migrated["schema_version"], 3)
         self.assertEqual(migrated["pip_version_before"], "26.1.2")

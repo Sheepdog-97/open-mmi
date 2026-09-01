@@ -9,10 +9,12 @@ from __future__ import annotations
 import os
 import pwd
 import re
-import stat
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence
+
+from open_mmi_trust import transition_gate
+from open_mmi_trust.accepted_state import DEFAULT_ACCEPTED_STATE_PATH
 
 from ui import update_coordinator, update_policy
 from ui.web_dashboard import update_status
@@ -27,35 +29,10 @@ class InstallerError(RuntimeError):
 
 
 def _trusted_stage(state: Mapping[str, Any], staging_root: Path) -> Path:
-    transaction_id = str(state.get("transaction_id") or "")
-    candidate = str(state.get("candidate_commit") or "").lower()
-    if state.get("state") != "prepared" or state.get("stage") != "prepared":
-        raise InstallerError("No prepared candidate is available")
-    if not transaction_id.startswith("prepare-") or len(transaction_id) != 40:
-        raise InstallerError("Prepared transaction identity is invalid")
-    stage = staging_root / transaction_id
     try:
-        resolved_root = staging_root.resolve(strict=True)
-        resolved_stage = stage.resolve(strict=True)
-        root_metadata = staging_root.lstat()
-        metadata = stage.lstat()
-    except OSError as exc:
-        raise InstallerError("Prepared candidate staging is unavailable") from exc
-    if resolved_stage.parent != resolved_root or resolved_stage != stage.absolute():
-        raise InstallerError("Prepared candidate staging is invalid")
-    if not stat.S_ISDIR(root_metadata.st_mode) or root_metadata.st_mode & 0o022:
-        raise InstallerError("Prepared staging root is untrusted")
-    if staging_root == update_coordinator.DEFAULT_STAGING_ROOT and (
-        root_metadata.st_uid != 0 or resolved_root != staging_root.absolute()
-    ):
-        raise InstallerError("Prepared staging root is untrusted")
-    if not stat.S_ISDIR(metadata.st_mode) or metadata.st_mode & 0o022:
-        raise InstallerError("Prepared candidate staging is untrusted")
-    if staging_root == update_coordinator.DEFAULT_STAGING_ROOT and metadata.st_uid != 0:
-        raise InstallerError("Prepared candidate staging is untrusted")
-    if len(candidate) != 40 or any(character not in "0123456789abcdef" for character in candidate):
-        raise InstallerError("Prepared candidate commit is invalid")
-    return stage
+        return update_coordinator.trusted_prepared_stage(state, staging_root)
+    except update_coordinator.CoordinatorError as exc:
+        raise InstallerError(str(exc)) from exc
 
 
 def _revalidate_candidate(
@@ -151,11 +128,22 @@ def install_prepared(
     staging_root: Path = update_coordinator.DEFAULT_STAGING_ROOT,
     command: Optional[Sequence[str]] = None,
     rollback_root: Optional[Path] = None,
+    accepted_state_path: Optional[Path] = None,
+    transition_authorization_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     if os.geteuid() != 0 and state_path == update_coordinator.DEFAULT_STATE_FILE:
         raise InstallerError("Prepared installation requires root")
     rollback_root = rollback_root or update_coordinator._artifact_root(
         state_path, update_coordinator.DEFAULT_ROLLBACK_ROOT, "rollback"
+    )
+    accepted_state_path = accepted_state_path or update_coordinator._trust_artifact_path(
+        state_path, DEFAULT_ACCEPTED_STATE_PATH
+    )
+    transition_authorization_path = (
+        transition_authorization_path
+        or update_coordinator._trust_artifact_path(
+            state_path, transition_gate.DEFAULT_TRANSITION_AUTHORIZATION_PATH
+        )
     )
     with update_coordinator.TransactionLock(lock_path):
         state = update_coordinator.read_state(state_path)
@@ -165,6 +153,21 @@ def install_prepared(
             raise InstallerError("Managed update source or policy is unavailable")
         stage = _trusted_stage(state, staging_root)
         _revalidate_candidate(stage, state, source, str(policy["channel"]))
+        try:
+            transition = transition_gate.require_prepared_candidate_allowed(
+                stage,
+                transaction_id=state["transaction_id"],
+                candidate_commit=state["candidate_commit"],
+                accepted_state_path=accepted_state_path,
+                authorization_path=transition_authorization_path,
+            )
+            transition_gate.activate_acknowledged_expansion(
+                transition,
+                accepted_state_path=accepted_state_path,
+                authorization_path=transition_authorization_path,
+            )
+        except transition_gate.TransitionGateError as exc:
+            raise InstallerError(str(exc)) from exc
         transaction_id = str(state["transaction_id"])
         update_coordinator._safe_remove_transaction_tree(
             rollback_root / transaction_id, rollback_root, "rollback"
@@ -200,6 +203,22 @@ def install_prepared(
                 failed, staging_root, rollback_root
             )
             raise InstallerError(failure)
+        try:
+            transition_gate.finalize_successful_transition(
+                transition, accepted_state_path=accepted_state_path
+            )
+        except transition_gate.TransitionGateError as exc:
+            state.update({
+                "state": "failed", "stage": "trust-state-finalization",
+                "updated_at": update_coordinator._timestamp(),
+                "completed_at": update_coordinator._timestamp(),
+                "error": "Prepared deployment completed but accepted trust state could not be finalized",
+            })
+            failed = update_coordinator.write_state(state, state_path)
+            update_coordinator._best_effort_artifact_cleanup(
+                failed, staging_root, rollback_root
+            )
+            raise InstallerError(state["error"]) from exc
         pip_before, pip_after = update_coordinator._packaging_tool_versions(
             rollback_root, transaction_id
         )

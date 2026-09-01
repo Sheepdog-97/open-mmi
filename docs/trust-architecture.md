@@ -22,9 +22,10 @@ Future update-continuity work will therefore keep three concepts separate:
 3. **Transition history** — records explicit boundary transitions so lineage can later be
    checked independently.
 
-Trust Manifest v1 establishes the release declaration, and Accepted Owner Trust State v1
-now establishes the second local authority record. Append-only transition history and
-automatic update-transition enforcement remain future work.
+Trust Manifest v1 establishes the release declaration, Accepted Owner Trust State v1
+establishes the second local authority record, and Trust Transition Gate v1 now enforces the
+comparison before a prepared candidate receives privileged execution. Append-only transition
+history and independently verifiable lineage remain future work.
 
 ## Current v1 capabilities
 
@@ -80,12 +81,13 @@ Trust policy generation 2 is the first declared capability expansion after the m
 foundation. `telemetry.collection` changes from `prohibited` to `local-owner-opt-in`; the
 release does not authorize collection merely by declaring that policy.
 
-Generation 2 originally landed before Accepted Owner Trust State and the trust-aware update
-gate existed, so the current updater did not pre-authorize or pre-reject that transition.
-Accepted Owner Trust State v1 can now bootstrap the currently trusted installed boundary, but
-it deliberately cannot retroactively prove that generation-2 installation was pre-screened.
-The updater still does not gate candidate deployment. Actual telemetry sampling remains denied
-until the separate local Telemetry Guard authorization boundary succeeds.
+Generation 2 originally landed before Accepted Owner Trust State and Trust Transition Gate
+v1 existed, so that historical generation-1 to generation-2 installation was not pre-screened
+by the gate. Accepted Owner Trust State v1 can bootstrap the currently trusted installed
+boundary, but it deliberately cannot retroactively prove that the historical installation was
+gated. Future prepared candidates are now compared with accepted owner state before candidate
+root execution. Actual telemetry sampling remains independently denied until the separate
+local Telemetry Guard authorization boundary succeeds.
 
 Telemetry Guard v1 is deliberately narrow:
 
@@ -213,8 +215,9 @@ currently installed Trust Manifest after an interactive digest-bound confirmatio
 state exists, the command may refresh it only when the installed boundary is equivalent or
 narrower. The underlying state mutation primitive independently enforces the same monotonic
 rule, so reusing it cannot broaden existing accepted authority or accept a policy-generation
-regression. Expansion acknowledgement belongs on the old-trusted side of a future pre-install
-transition gate, not in already-installed candidate code.
+regression. Trust Transition Gate v1 provides the separate old-trusted-side pre-install
+acknowledgement path for an exact prepared expansion; `accept-current` remains unable to do so
+after candidate installation.
 
 The reusable comparison function applies these v1 rules capability by capability:
 
@@ -237,20 +240,63 @@ replace Open MMI or its state. Signed installed-file integrity, append-only tran
 lineage and an independent checker are later layers needed to make that tampering externally
 verifiable.
 
-## Future transition rule
+## Trust Transition Gate v1
 
-The intended update rule is monotonic:
+The update rule is now enforced for prepared Nightly candidates:
 
 > Software may surrender authority without special permission. It may not silently acquire
 > authority that the already-trusted installation did not possess.
 
-A future trusted updater should compare the currently accepted boundary against the
-candidate manifest before candidate code receives privileged execution. Equivalent or
-narrower transitions may proceed under policy. Boundary expansions must stop for a local,
-owner-visible acknowledgement performed by the already-trusted side of the transition.
+The gate runs in installed trusted code before candidate-controlled privileged deployment. A
+prepared candidate remains data while the decision is made. The candidate Trust Manifest is
+read from the exact candidate commit with trusted `git ls-tree` and `git cat-file` operations;
+the gate does not import candidate Python, execute candidate shell, load candidate package
+metadata, or invoke candidate hooks to determine the trust relation. The manifest must be a
+non-executable regular Git blob, is size-bounded, decoded as strict UTF-8 JSON, and is validated
+with the installed manifest schema.
+
+The coordinator performs a preflight check before it starts the root installer service, and the
+installer independently repeats the check immediately before deployment. The resulting rules
+are:
+
+- missing or invalid Accepted Owner Trust State blocks installation;
+- a policy-generation regression blocks installation;
+- an equal or narrower candidate may proceed without new owner acknowledgement;
+- an expansion remains prepared but blocked until the owner acknowledges that exact transition
+  through installed trusted code.
+
+The owner surface is deliberately fixed:
+
+```text
+sudo open-mmi-trust-transition status
+sudo open-mmi-trust-transition acknowledge
+```
+
+It accepts no candidate path, repository, ref, URL, manifest path, command, `--yes`, or other
+non-interactive bypass. Expansion acknowledgement requires a local interactive terminal and a
+confirmation phrase bound to the candidate manifest digest and candidate commit. The resulting
+root-private authorization record is additionally bound to the prepared transaction ID, exact
+candidate commit, current accepted-state digest, accepted manifest digest, candidate manifest
+digest, and candidate policy generation. A new preparation or a changed accepted state makes
+the authorization stale.
+
+For an acknowledged expansion, installed trusted code records the newly accepted capability
+ceiling before candidate root code receives that expanded authority, then consumes the exact
+transition authorization. For an equal or narrower transition, accepted owner state advances
+only after deployment succeeds; this avoids a failed narrowing followed by rollback leaving the
+restored older software outside the accepted ceiling.
+
+After the gate succeeds, the existing deployment engine still executes the prepared candidate's
+`scripts/manage.sh _deploy-prepared` as root. That execution is intentionally *after* the trust
+decision and must never be moved before it. Trust Transition Gate v1 constrains official update
+flow and owner acknowledgement; it is not an OS sandbox against arbitrary root software or a
+proof that a candidate's manifest is truthful. Stronger runtime/OS enforcement and independent
+verification remain later layers.
 
 A maintainer signature proves provenance. It does not grant permission to silently redraw an
-owner's established trust boundary.
+owner's established trust boundary. Append-only transition history is also not implemented yet,
+so the local state can demonstrate the current accepted ceiling and exact prepared authorization
+but not independently prove a complete historical lineage.
 
 ## SI and downstream distributions
 
@@ -303,11 +349,13 @@ intentionally not part of the inspection report schema.
 
 The inspector also states what it cannot currently prove. In generation 2, generic network
 egress enforcement, generic vehicle-data persistence enforcement and remote VIN-resolution
-enforcement remain declaration-level. Accepted owner release trust state is now inspectable
-once locally bootstrapped, but signed installed-file integrity, append-only transition lineage
-and the trusted updater's pre-installation capability-expansion gate are not implemented yet.
-Those remaining checks therefore report `UNVERIFIED`, and a normal current installation still
-has an overall `UNVERIFIED` result even when all available concrete checks pass.
+enforcement remain declaration-level. Accepted owner release trust state is inspectable once
+locally bootstrapped, and Trust Inspector v1 now reproduces the source-level ordering of Trust
+Transition Gate v1: coordinator preflight before installer launch, installer recheck before
+candidate deployment, and Git-object candidate-manifest inspection. Signed installed-file
+integrity and append-only transition lineage remain unimplemented, so those checks stay
+`UNVERIFIED`. A normal current installation therefore still has an overall `UNVERIFIED` result
+even when all available concrete checks pass.
 
 That limitation is intentional. The built-in inspector is evidence produced by the installed
 software itself; without an independent integrity/lineage root, a sufficiently privileged

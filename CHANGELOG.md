@@ -7,6 +7,7 @@
 - Telemetry Guard v1 with default-deny collection, exact scope digests, local owner authorization, VIN-bound salted fingerprints, atomic root-owned authorization state, interactive TTY-only owner mutation, revocation, CI self-authorization tripwires, and a pre-sampling guard API.
 - Accepted Owner Trust State v1 with a strict root-owned accepted-manifest record, deterministic transition comparison, interactive current-boundary bootstrap/narrowing only, generation-regression blocking, assurance-downgrade detection, and Trust Inspector integration.
 - Trust Inspector v1 with read-only human/JSON reporting, strict PASS/UNVERIFIED/FAIL evidence semantics, redacted telemetry authorization inspection, runtime default-deny probing, installed-source CAN/telemetry tripwire reproduction, dashboard local-render verification, and a checked machine-readable report schema.
+- Trust Transition Gate v1 with Git-object-only candidate manifest inspection, old-trusted-side accepted-boundary comparison, exact transaction-bound local acknowledgement for expansions, generation-regression blocking, coordinator preflight plus installer recheck, and accepted-state advancement ordered around candidate deployment.
 
 ### Changed
 - Trust policy generation 2 changes `telemetry.collection` from `prohibited` to `local-owner-opt-in` with `runtime-guarded` assurance. Telemetry Guard v1 permits only session-scoped, local-only collection, so persistence and network-egress policy do not expand with it; this generation adds no background collector or uploader.

@@ -103,7 +103,19 @@ class TrustInvariantTests(unittest.TestCase):
     def test_production_code_cannot_silently_mutate_accepted_owner_trust_state(self):
         state_module = ROOT / "open_mmi_trust" / "accepted_state.py"
         owner_cli = ROOT / "open_mmi_trust" / "accepted_state_cli.py"
-        mutation_names = {"_record_accepted_manifest", "_write_accepted_state"}
+        transition_module = ROOT / "open_mmi_trust" / "transition_gate.py"
+        mutation_names = {
+            "_record_accepted_manifest",
+            "_record_acknowledged_expansion",
+            "_write_accepted_state",
+        }
+        allowed = {
+            owner_cli: {"_record_accepted_manifest"},
+            transition_module: {
+                "_record_accepted_manifest",
+                "_record_acknowledged_expansion",
+            },
+        }
         offenders: list[str] = []
         ignored_roots = {"tests", "tools", ".git", ".venv", "venv", "__pycache__", "build", "dist"}
         for path in sorted(ROOT.rglob("*.py")):
@@ -117,7 +129,7 @@ class TrustInvariantTests(unittest.TestCase):
                     for alias in node.names:
                         if alias.name not in mutation_names:
                             continue
-                        if path == owner_cli and alias.name == "_record_accepted_manifest":
+                        if alias.name in allowed.get(path, set()):
                             continue
                         offenders.append(
                             f"{path.relative_to(ROOT)}:{node.lineno}:import:{alias.name}"
@@ -132,7 +144,7 @@ class TrustInvariantTests(unittest.TestCase):
                     name = ""
                 if name not in mutation_names:
                     continue
-                if path == owner_cli and name == "_record_accepted_manifest":
+                if name in allowed.get(path, set()):
                     continue
                 offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}:{name}")
         self.assertEqual(
@@ -140,6 +152,129 @@ class TrustInvariantTests(unittest.TestCase):
             [],
             "production accepted-state mutation calls found: " + ", ".join(offenders),
         )
+
+    def test_transition_authorization_mutation_is_confined_to_owner_cli_and_gate(self):
+        gate = ROOT / "open_mmi_trust" / "transition_gate.py"
+        owner_cli = ROOT / "open_mmi_trust" / "transition_gate_cli.py"
+        installer = ROOT / "ui" / "update_installer.py"
+        mutation_names = {
+            "_authorize_prepared_expansion",
+            "_write_transition_authorization",
+            "_clear_transition_authorization",
+            "activate_acknowledged_expansion",
+            "finalize_successful_transition",
+        }
+        allowed = {
+            owner_cli: {"_authorize_prepared_expansion"},
+            installer: {
+                "activate_acknowledged_expansion",
+                "finalize_successful_transition",
+            },
+        }
+        offenders: list[str] = []
+        ignored_roots = {"tests", "tools", ".git", ".venv", "venv", "__pycache__", "build", "dist"}
+        for path in sorted(ROOT.rglob("*.py")):
+            if ignored_roots.intersection(path.relative_to(ROOT).parts):
+                continue
+            if path == gate:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    for alias in node.names:
+                        if alias.name not in mutation_names:
+                            continue
+                        if alias.name in allowed.get(path, set()):
+                            continue
+                        offenders.append(
+                            f"{path.relative_to(ROOT)}:{node.lineno}:import:{alias.name}"
+                        )
+                if not isinstance(node, ast.Call):
+                    continue
+                if isinstance(node.func, ast.Name):
+                    name = node.func.id
+                elif isinstance(node.func, ast.Attribute):
+                    name = node.func.attr
+                else:
+                    name = ""
+                if name not in mutation_names:
+                    continue
+                if name in allowed.get(path, set()):
+                    continue
+                offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}:{name}")
+        self.assertEqual(
+            offenders,
+            [],
+            "production transition-authorization mutation calls found: " + ", ".join(offenders),
+        )
+
+    def test_candidate_deployment_is_ordered_after_old_trusted_transition_gate(self):
+        installer = ROOT / "ui" / "update_installer.py"
+        coordinator = ROOT / "ui" / "update_coordinator.py"
+        installer_tree = ast.parse(installer.read_text(encoding="utf-8"), filename=str(installer))
+        coordinator_tree = ast.parse(coordinator.read_text(encoding="utf-8"), filename=str(coordinator))
+
+        def lines(tree: ast.AST, name: str) -> list[int]:
+            result: list[int] = []
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                if isinstance(node.func, ast.Name):
+                    called = node.func.id
+                elif isinstance(node.func, ast.Attribute):
+                    called = node.func.attr
+                else:
+                    called = ""
+                if called == name:
+                    result.append(node.lineno)
+            return sorted(result)
+
+        installer_gate = lines(installer_tree, "require_prepared_candidate_allowed")
+        installer_activate = lines(installer_tree, "activate_acknowledged_expansion")
+        installer_deploy = lines(installer_tree, "_run_deployment")
+        self.assertTrue(installer_gate and installer_activate and installer_deploy)
+        self.assertLess(min(installer_gate), min(installer_activate))
+        self.assertLess(min(installer_activate), min(installer_deploy))
+
+        coordinator_gate = lines(coordinator_tree, "require_prepared_candidate_allowed")
+        installer_service_lines: list[int] = []
+        for node in ast.walk(coordinator_tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            if node.func.attr != "run" or not node.args or not isinstance(node.args[0], (ast.List, ast.Tuple)):
+                continue
+            values = [
+                element.value
+                for element in node.args[0].elts
+                if isinstance(element, ast.Constant) and isinstance(element.value, str)
+            ]
+            if "open-mmi-update-installer.service" in values:
+                installer_service_lines.append(node.lineno)
+        self.assertTrue(coordinator_gate and installer_service_lines)
+        self.assertLess(min(coordinator_gate), min(installer_service_lines))
+
+    def test_transition_gate_treats_candidate_as_git_object_data_only(self):
+        path = ROOT / "open_mmi_trust" / "transition_gate.py"
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+        forbidden_imports = {"importlib", "runpy"}
+        forbidden_calls = {"exec", "eval", "compile", "__import__"}
+        offenders: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.split(".", 1)[0] in forbidden_imports:
+                        offenders.append(f"{node.lineno}:import:{alias.name}")
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                if node.module.split(".", 1)[0] in forbidden_imports:
+                    offenders.append(f"{node.lineno}:import:{node.module}")
+            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                if node.func.id in forbidden_calls:
+                    offenders.append(f"{node.lineno}:call:{node.func.id}")
+        self.assertEqual(offenders, [])
+        self.assertIn('"ls-tree"', source)
+        self.assertIn('"cat-file"', source)
+        self.assertNotIn("scripts/manage.sh", source)
 
     def test_current_assurance_matches_enforcement_layers(self):
         manifest = load_manifest()

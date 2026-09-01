@@ -26,6 +26,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence
 
+from open_mmi_trust import transition_gate
+from open_mmi_trust.accepted_state import DEFAULT_ACCEPTED_STATE_PATH
+
 from ui import update_policy
 from ui.web_dashboard import update_status
 
@@ -268,6 +271,48 @@ def _public_response(state: Mapping[str, Any]) -> Dict[str, Any]:
         "installation_enabled": installation_enabled,
         "state": dict(state),
     }
+
+
+def _trust_artifact_path(state_path: Path, default: Path) -> Path:
+    if state_path == DEFAULT_STATE_FILE:
+        return default
+    return state_path.parent / "trust" / default.name
+
+
+def trusted_prepared_stage(state: Mapping[str, Any], staging_root: Path) -> Path:
+    """Return the exact root-controlled stage for one prepared transaction."""
+
+    transaction_id = str(state.get("transaction_id") or "")
+    candidate = str(state.get("candidate_commit") or "").lower()
+    if state.get("state") != "prepared" or state.get("stage") != "prepared":
+        raise CoordinatorError("No prepared candidate is available")
+    if not _TRANSACTION_RE.fullmatch(transaction_id):
+        raise CoordinatorError("Prepared transaction identity is invalid")
+    if len(candidate) != 40 or any(
+        character not in "0123456789abcdef" for character in candidate
+    ):
+        raise CoordinatorError("Prepared candidate commit is invalid")
+    stage = staging_root / transaction_id
+    try:
+        resolved_root = staging_root.resolve(strict=True)
+        resolved_stage = stage.resolve(strict=True)
+        root_metadata = staging_root.lstat()
+        metadata = stage.lstat()
+    except OSError as exc:
+        raise CoordinatorError("Prepared candidate staging is unavailable") from exc
+    if resolved_stage.parent != resolved_root or resolved_stage != stage.absolute():
+        raise CoordinatorError("Prepared candidate staging is invalid")
+    if not stat.S_ISDIR(root_metadata.st_mode) or root_metadata.st_mode & 0o022:
+        raise CoordinatorError("Prepared staging root is untrusted")
+    if staging_root == DEFAULT_STAGING_ROOT and (
+        root_metadata.st_uid != 0 or resolved_root != staging_root.absolute()
+    ):
+        raise CoordinatorError("Prepared staging root is untrusted")
+    if not stat.S_ISDIR(metadata.st_mode) or metadata.st_mode & 0o022:
+        raise CoordinatorError("Prepared candidate staging is untrusted")
+    if staging_root == DEFAULT_STAGING_ROOT and metadata.st_uid != 0:
+        raise CoordinatorError("Prepared candidate staging is untrusted")
+    return stage
 
 
 def _resolved_artifact_root(root: Path, label: str) -> Optional[Path]:
@@ -606,6 +651,21 @@ def response_for_request(
             policy, _ = update_policy.read_policy()
             if not policy or policy.get("channel") != "nightly":
                 raise CoordinatorError("Prepared installation is enabled only for nightly updates")
+            stage = trusted_prepared_stage(state, staging_root)
+            try:
+                transition_gate.require_prepared_candidate_allowed(
+                    stage,
+                    transaction_id=state["transaction_id"],
+                    candidate_commit=state["candidate_commit"],
+                    accepted_state_path=_trust_artifact_path(
+                        state_path, DEFAULT_ACCEPTED_STATE_PATH
+                    ),
+                    authorization_path=_trust_artifact_path(
+                        state_path, transition_gate.DEFAULT_TRANSITION_AUTHORIZATION_PATH
+                    ),
+                )
+            except transition_gate.TransitionGateError as exc:
+                raise CoordinatorError(str(exc)) from exc
             try:
                 result = subprocess.run(
                     ["systemctl", "start", "--wait", "open-mmi-update-installer.service"],

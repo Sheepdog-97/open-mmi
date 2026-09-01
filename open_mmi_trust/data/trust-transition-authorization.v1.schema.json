@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-mmi.org/schemas/trust-transition-authorization.v1.schema.json",
+  "title": "Open MMI Trust Transition Authorization v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "authorization_id",
+    "authorized_at",
+    "transaction_id",
+    "candidate_commit",
+    "accepted_state_digest",
+    "accepted_manifest_digest",
+    "candidate_manifest_digest",
+    "candidate_policy_generation"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "authorization_id": {"const": "org.open-mmi.trust-transition-authorization"},
+    "authorized_at": {"type": "string", "minLength": 1, "maxLength": 64},
+    "transaction_id": {"type": "string", "pattern": "^prepare-[0-9a-f]{32}$"},
+    "candidate_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "accepted_state_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "accepted_manifest_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_manifest_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_policy_generation": {"type": "integer", "minimum": 1}
+  }
+}

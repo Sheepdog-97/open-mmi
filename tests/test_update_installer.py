@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
 import subprocess
@@ -8,11 +9,23 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from open_mmi_trust.accepted_state import _record_accepted_manifest, read_accepted_state
+from open_mmi_trust import transition_gate
+from open_mmi_trust.manifest import load_manifest
+
 from ui import update_coordinator, update_installer
 
 
 class UpdateInstallerTests(unittest.TestCase):
-    def prepared(self, root: Path) -> tuple[dict, Path, Path, Path]:
+    def prepared(
+        self,
+        root: Path,
+        *,
+        accepted_manifest: dict | None = None,
+        candidate_manifest: dict | None = None,
+    ) -> tuple[dict, Path, Path, Path]:
+        accepted_manifest = copy.deepcopy(accepted_manifest or load_manifest())
+        candidate_manifest = copy.deepcopy(candidate_manifest or accepted_manifest)
         transaction = "prepare-" + "a" * 32
         staging = root / "staging"
         stage = staging / transaction
@@ -23,7 +36,12 @@ class UpdateInstallerTests(unittest.TestCase):
         subprocess.run(["git", "-C", str(stage), "config", "user.name", "Test"], check=True)
         subprocess.run(["git", "-C", str(stage), "config", "user.email", "test@example.invalid"], check=True)
         (stage / "README.md").write_text("one\n", encoding="utf-8")
-        subprocess.run(["git", "-C", str(stage), "add", "README.md"], check=True)
+        manifest_path = stage / "open_mmi_trust" / "data" / "trust-manifest.v1.json"
+        manifest_path.parent.mkdir(parents=True)
+        manifest_path.write_text(
+            json.dumps(accepted_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        subprocess.run(["git", "-C", str(stage), "add", "README.md", str(manifest_path.relative_to(stage))], check=True)
         git_identity = [
             "-c", "user.name=Open MMI Test",
             "-c", "user.email=test@open-mmi.invalid",
@@ -33,6 +51,10 @@ class UpdateInstallerTests(unittest.TestCase):
         subprocess.run(["git", *git_identity, "-C", str(stage), "commit", "-m", "one"], check=True, stdout=subprocess.DEVNULL)
         installed = subprocess.run(["git", "-C", str(stage), "rev-parse", "HEAD"], check=True, text=True, stdout=subprocess.PIPE).stdout.strip()
         (stage / "README.md").write_text("two\n", encoding="utf-8")
+        manifest_path.write_text(
+            json.dumps(candidate_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        subprocess.run(["git", "-C", str(stage), "add", str(manifest_path.relative_to(stage))], check=True)
         subprocess.run(["git", *git_identity, "-C", str(stage), "commit", "-am", "two"], check=True, stdout=subprocess.DEVNULL)
         candidate = subprocess.run(["git", "-C", str(stage), "rev-parse", "HEAD"], check=True, text=True, stdout=subprocess.PIPE).stdout.strip()
         state = update_coordinator.initial_state()
@@ -43,6 +65,9 @@ class UpdateInstallerTests(unittest.TestCase):
         })
         state_path = root / "state.json"
         update_coordinator.write_state(state, state_path)
+        _record_accepted_manifest(
+            accepted_manifest, root / "trust" / "accepted-owner-trust.v1.json"
+        )
         source = {
             "repository_path": str(root), "installed_commit": installed,
             "installed_version": "old-build", "branch": "main", "upstream": "origin/main",
@@ -77,8 +102,12 @@ class UpdateInstallerTests(unittest.TestCase):
             def deploy(command, environment):
                 archive = rollback / environment["OPEN_MMI_PREPARED_TRANSACTION"]
                 archive.mkdir(parents=True)
-                (archive / "pip-version-before").write_text("26.1.2\n", encoding="utf-8")
-                (archive / "pip-version-after").write_text("26.2.1\n", encoding="utf-8")
+                before = archive / "pip-version-before"
+                after = archive / "pip-version-after"
+                before.write_text("26.1.2\n", encoding="utf-8")
+                after.write_text("26.2.1\n", encoding="utf-8")
+                before.chmod(0o644)
+                after.chmod(0o644)
                 return subprocess.CompletedProcess(command, 0, stdout="")
 
             with patch.object(update_installer.update_status, "_read_source_descriptor", return_value=(source, "configured")), patch.object(
@@ -226,6 +255,76 @@ class UpdateInstallerTests(unittest.TestCase):
                 update_installer.InstallerError, "source changed"
             ):
                 update_installer.install_prepared(state_path, lock_path, staging, command=("never",))
+
+    def test_trust_expansion_without_acknowledgement_blocks_before_deployment(self):
+        accepted = copy.deepcopy(load_manifest())
+        accepted["policy_generation"] = 1
+        accepted["capabilities"]["telemetry.collection"] = {
+            "policy": "prohibited", "assurance": "runtime-guarded"
+        }
+        candidate_manifest = load_manifest()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, state_path, lock_path, staging = self.prepared(
+                root, accepted_manifest=accepted, candidate_manifest=candidate_manifest
+            )
+            with patch.object(update_installer.update_status, "_read_source_descriptor", return_value=(source, "configured")), patch.object(
+                update_installer.update_policy, "read_policy", return_value=({"channel": "nightly"}, "configured")
+            ), patch.object(update_installer.update_status, "_repository_snapshot", return_value={"state": "ready"}
+            ), patch.object(update_installer, "_run_deployment") as run, self.assertRaisesRegex(
+                update_installer.InstallerError, "acknowledgement is required"
+            ):
+                update_installer.install_prepared(
+                    state_path, lock_path, staging, command=("must-not-run",)
+                )
+            run.assert_not_called()
+            self.assertEqual(update_coordinator.read_state(state_path)["state"], "prepared")
+
+    def test_acknowledged_expansion_is_accepted_before_candidate_deployment(self):
+        accepted = copy.deepcopy(load_manifest())
+        accepted["policy_generation"] = 1
+        accepted["capabilities"]["telemetry.collection"] = {
+            "policy": "prohibited", "assurance": "runtime-guarded"
+        }
+        candidate_manifest = load_manifest()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, state_path, lock_path, staging = self.prepared(
+                root, accepted_manifest=accepted, candidate_manifest=candidate_manifest
+            )
+            state = update_coordinator.read_state(state_path)
+            stage = staging / state["transaction_id"]
+            accepted_path = root / "trust" / "accepted-owner-trust.v1.json"
+            authorization_path = root / "trust" / "transition-authorization.v1.json"
+            review = transition_gate.evaluate_prepared_candidate(
+                stage, transaction_id=state["transaction_id"], candidate_commit=state["candidate_commit"],
+                accepted_state_path=accepted_path, authorization_path=authorization_path,
+            )
+            transition_gate._authorize_prepared_expansion(
+                stage, transaction_id=state["transaction_id"], candidate_commit=state["candidate_commit"],
+                expected_candidate_manifest_digest=review.candidate_manifest_digest,
+                expected_accepted_state_digest=review.accepted_state_digest,
+                accepted_state_path=accepted_path, authorization_path=authorization_path,
+            )
+
+            def deploy(command, environment):
+                del environment
+                accepted_now = read_accepted_state(accepted_path)
+                self.assertIsNotNone(accepted_now)
+                self.assertEqual(accepted_now["manifest"], candidate_manifest)
+                self.assertFalse(authorization_path.exists())
+                return subprocess.CompletedProcess(command, 0, stdout="")
+
+            with patch.object(update_installer.update_status, "_read_source_descriptor", return_value=(source, "configured")), patch.object(
+                update_installer.update_policy, "read_policy", return_value=({"channel": "nightly"}, "configured")
+            ), patch.object(update_installer.update_status, "_repository_snapshot", return_value={"state": "ready"}
+            ), patch.object(update_installer.pwd, "getpwuid", return_value=type("Account", (), {"pw_name": "tester"})()), patch.object(
+                update_installer, "_run_deployment", side_effect=deploy
+            ):
+                completed = update_installer.install_prepared(
+                    state_path, lock_path, staging, command=("candidate-deploy",)
+                )
+            self.assertEqual(completed["state"], "complete")
 
     def test_service_entry_point_accepts_no_arguments(self):
         with self.assertRaises(SystemExit):

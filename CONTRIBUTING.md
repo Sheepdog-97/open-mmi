@@ -686,3 +686,9 @@ machine-readable plan, and include complete replay or hardware evidence. The for
 documented in `docs/vehicle-qualification-workflow.md`.
 
 Frontend third-party assets must be vendored rather than loaded during normal dashboard rendering. Bootstrap updates use `python tools/vendor_bootstrap.py`, which accepts only the pinned URL and published SHA-384 digest; commit the resulting local asset and license with the change.
+
+## Trust-transition changes
+
+Update and trust-boundary changes must preserve the old-trusted-side transition rule. A prepared candidate is data until installed trusted code has compared its Trust Manifest with Accepted Owner Trust State. Do not import or execute candidate Python, shell scripts, package metadata, hooks, or caller-selected commands before `require_prepared_candidate_allowed()` succeeds.
+
+The `open-mmi-trust-transition` owner surface must remain fixed to the coordinator's exact prepared transaction. Do not add candidate path/ref/repository/URL arguments, non-interactive confirmation flags, or reusable expansion tokens. Expansion authorization must remain bound to the exact transaction, candidate commit, current accepted-state digest and candidate manifest digest, and the installer must independently recheck the gate immediately before candidate deployment. Changes to these invariants require dedicated trust-transition tests and security review.

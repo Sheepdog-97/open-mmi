@@ -458,7 +458,11 @@ def _inspect_telemetry_self_authorization_source(root: Path) -> dict[str, Any]:
     )
 
 def _inspect_accepted_state_self_authorization_source(root: Path) -> dict[str, Any]:
-    mutation_names = {"_record_accepted_manifest", "_write_accepted_state"}
+    mutation_names = {
+        "_record_accepted_manifest",
+        "_record_acknowledged_expansion",
+        "_write_accepted_state",
+    }
     package_roots = (
         "actions",
         "bindings",
@@ -471,6 +475,14 @@ def _inspect_accepted_state_self_authorization_source(root: Path) -> dict[str, A
     )
     state_module = root / "open_mmi_trust" / "accepted_state.py"
     owner_cli = root / "open_mmi_trust" / "accepted_state_cli.py"
+    transition_module = root / "open_mmi_trust" / "transition_gate.py"
+    allowed = {
+        owner_cli: {"_record_accepted_manifest"},
+        transition_module: {
+            "_record_accepted_manifest",
+            "_record_acknowledged_expansion",
+        },
+    }
     offenders: list[str] = []
     scanned = 0
     try:
@@ -488,7 +500,7 @@ def _inspect_accepted_state_self_authorization_source(root: Path) -> dict[str, A
                         for alias in node.names:
                             if alias.name not in mutation_names:
                                 continue
-                            if path == owner_cli and alias.name == "_record_accepted_manifest":
+                            if alias.name in allowed.get(path, set()):
                                 continue
                             offenders.append(
                                 f"{path.relative_to(root)}:{node.lineno}:import:{alias.name}"
@@ -503,7 +515,7 @@ def _inspect_accepted_state_self_authorization_source(root: Path) -> dict[str, A
                         name = ""
                     if name not in mutation_names:
                         continue
-                    if path == owner_cli and name == "_record_accepted_manifest":
+                    if name in allowed.get(path, set()):
                         continue
                     offenders.append(f"{path.relative_to(root)}:{node.lineno}:{name}")
     except (OSError, UnicodeError, SyntaxError) as exc:
@@ -524,16 +536,138 @@ def _inspect_accepted_state_self_authorization_source(root: Path) -> dict[str, A
         return _check(
             "owner.accepted-state-self-authorization-source-tripwire",
             FAIL,
-            "Production code contains Accepted Owner Trust State mutation calls outside the monotonic owner surface.",
+            "Production code contains Accepted Owner Trust State mutation calls outside the owner/transition authority surfaces.",
             offenders=offenders,
             files_scanned=scanned,
         )
     return _check(
         "owner.accepted-state-self-authorization-source-tripwire",
         PASS,
-        "Installed production source reproduces the monotonic accepted-state mutation tripwire.",
+        "Installed production source reproduces the accepted-state mutation tripwire.",
         files_scanned=scanned,
-        note="The owner CLI may call only the monotonic record primitive; the raw writer remains module-internal.",
+        note=(
+            "The owner CLI may use only the monotonic record primitive; the transition gate "
+            "may additionally record an exact owner-acknowledged expansion. The raw writer remains module-internal."
+        ),
+    )
+
+
+def _inspect_updater_transition_gate_source(root: Path) -> dict[str, Any]:
+    installer = root / "ui" / "update_installer.py"
+    coordinator = root / "ui" / "update_coordinator.py"
+    gate = root / "open_mmi_trust" / "transition_gate.py"
+    paths = (installer, coordinator, gate)
+    missing = [str(path.relative_to(root)) for path in paths if not path.is_file()]
+    if missing:
+        return _check(
+            "updater.preinstallation-trust-gate",
+            UNVERIFIED,
+            "Installed updater trust-gate source is not fully available for inspection.",
+            missing=missing,
+        )
+
+    try:
+        installer_source = installer.read_text(encoding="utf-8")
+        coordinator_source = coordinator.read_text(encoding="utf-8")
+        gate_source = gate.read_text(encoding="utf-8")
+        installer_tree = ast.parse(installer_source, filename=str(installer))
+        coordinator_tree = ast.parse(coordinator_source, filename=str(coordinator))
+        gate_tree = ast.parse(gate_source, filename=str(gate))
+    except (OSError, UnicodeError, SyntaxError) as exc:
+        return _check(
+            "updater.preinstallation-trust-gate",
+            FAIL,
+            "Installed updater trust-gate source could not be inspected reproducibly.",
+            error=f"{type(exc).__name__}: {exc}",
+        )
+
+    def call_lines(tree: ast.AST, name: str) -> list[int]:
+        lines: list[int] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if isinstance(node.func, ast.Name):
+                called = node.func.id
+            elif isinstance(node.func, ast.Attribute):
+                called = node.func.attr
+            else:
+                called = ""
+            if called == name:
+                lines.append(node.lineno)
+        return sorted(lines)
+
+    installer_gate = call_lines(installer_tree, "require_prepared_candidate_allowed")
+    installer_activate = call_lines(installer_tree, "activate_acknowledged_expansion")
+    installer_deploy = call_lines(installer_tree, "_run_deployment")
+    coordinator_gate = call_lines(coordinator_tree, "require_prepared_candidate_allowed")
+    coordinator_systemctl: list[int] = []
+    for node in ast.walk(coordinator_tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr != "run" or not node.args or not isinstance(node.args[0], (ast.List, ast.Tuple)):
+            continue
+        strings = [
+            element.value
+            for element in node.args[0].elts
+            if isinstance(element, ast.Constant) and isinstance(element.value, str)
+        ]
+        if "open-mmi-update-installer.service" in strings:
+            coordinator_systemctl.append(node.lineno)
+
+    forbidden_gate_imports = {"importlib", "runpy"}
+    forbidden: list[str] = []
+    for node in ast.walk(gate_tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.split(".", 1)[0] in forbidden_gate_imports:
+                    forbidden.append(f"import:{alias.name}")
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            if node.module.split(".", 1)[0] in forbidden_gate_imports:
+                forbidden.append(f"import:{node.module}")
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id in {"exec", "eval", "compile", "__import__"}:
+                forbidden.append(f"call:{node.func.id}")
+
+    ordered = bool(
+        installer_gate
+        and installer_activate
+        and installer_deploy
+        and min(installer_gate) < min(installer_activate) < min(installer_deploy)
+        and coordinator_gate
+        and coordinator_systemctl
+        and min(coordinator_gate) < min(coordinator_systemctl)
+    )
+    data_only = (
+        'open_mmi_trust/data/trust-manifest.v1.json' in gate_source
+        and '"ls-tree"' in gate_source
+        and '"cat-file"' in gate_source
+        and "scripts/manage.sh" not in gate_source
+        and not forbidden
+    )
+    if not ordered or not data_only:
+        return _check(
+            "updater.preinstallation-trust-gate",
+            FAIL,
+            "Installed updater source does not preserve the reviewed pre-execution Trust Transition Gate ordering.",
+            installer_gate_lines=installer_gate,
+            installer_activation_lines=installer_activate,
+            installer_deployment_lines=installer_deploy,
+            coordinator_gate_lines=coordinator_gate,
+            coordinator_installer_lines=coordinator_systemctl,
+            candidate_manifest_data_only=data_only,
+            forbidden_gate_surfaces=forbidden,
+        )
+    return _check(
+        "updater.preinstallation-trust-gate",
+        PASS,
+        "Installed updater gates the prepared candidate before candidate-controlled deployment executes.",
+        installer_gate_line=min(installer_gate),
+        installer_deployment_line=min(installer_deploy),
+        coordinator_gate_line=min(coordinator_gate),
+        candidate_manifest_source="git-object-data",
+        note=(
+            "This is source-level evidence for the installed Open MMI updater. It is not an OS sandbox against arbitrary privileged replacement code."
+        ),
     )
 
 
@@ -746,11 +880,7 @@ def inspect_system(
                 UNVERIFIED,
                 "Append-only trust transition lineage is not implemented yet.",
             ),
-            _check(
-                "updater.preinstallation-trust-gate",
-                UNVERIFIED,
-                "The trusted updater does not yet compare candidate capability expansions before candidate deployment.",
-            ),
+            _inspect_updater_transition_gate_source(root),
         ]
     )
 

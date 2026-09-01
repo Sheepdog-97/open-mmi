@@ -455,3 +455,47 @@ def compare_trust_manifests(
         "candidate_manifest_digest": _manifest_sha256(candidate),
         "changes": changes,
     }
+
+
+def _record_acknowledged_expansion(
+    manifest: Mapping[str, Any],
+    *,
+    expected_accepted_state_digest: str,
+    path: Path = DEFAULT_ACCEPTED_STATE_PATH,
+) -> dict[str, Any]:
+    """Record one owner-acknowledged expansion from the exact current state.
+
+    This primitive is reserved for the old-trusted-side transition gate.  The
+    expected accepted-state digest makes the write compare-and-swap-like: an
+    acknowledgement cannot be replayed after accepted state has changed.
+    """
+
+    normalized = validate_manifest(manifest)
+    existing = read_accepted_state(path)
+    if existing is None:
+        raise AcceptedTrustStateError(
+            "cannot record an acknowledged expansion before accepted owner trust state is established"
+        )
+    current_state_digest = accepted_state_digest(existing)
+    if current_state_digest != expected_accepted_state_digest:
+        raise AcceptedTrustStateError(
+            "accepted owner trust state changed after transition acknowledgement"
+        )
+    comparison = compare_trust_manifests(existing["manifest"], normalized)
+    if comparison["relation"] == TRANSITION_GENERATION_REGRESSION:
+        raise AcceptedTrustStateError(
+            "refusing acknowledged trust state generation regression"
+        )
+    if comparison["relation"] != TRANSITION_EXPANSION:
+        raise AcceptedTrustStateError(
+            "acknowledged expansion primitive requires an actual trust-boundary expansion"
+        )
+
+    payload = {
+        "schema_version": ACCEPTED_STATE_SCHEMA_VERSION,
+        "state_id": ACCEPTED_STATE_ID,
+        "accepted_at": _timestamp(),
+        "manifest_digest": _manifest_sha256(normalized),
+        "manifest": normalized,
+    }
+    return _write_accepted_state(payload, path)
