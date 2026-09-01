@@ -62,14 +62,81 @@ os-enforced
 hardware-enforced
 ```
 
-A stronger policy statement does not magically create stronger enforcement. For example,
-Nightly currently declares telemetry collection prohibited, but the generic Telemetry Guard
-has not been implemented yet, so that capability remains `declared`. CAN transmission is
-also prohibited, and the current source plus CI tripwire contain no CAN send path, so its
-v1 assurance is `ci-guarded`. A later phase can move it toward OS/interface enforcement.
+A stronger policy statement does not magically create stronger enforcement. Telemetry
+Guard v1 now places Open MMI telemetry collection behind a runtime authorization check, so
+`telemetry.collection` is `runtime-guarded`. This does not mean the operating system could
+prevent deliberately modified privileged software from bypassing the library. CAN
+transmission remains prohibited, and the current source plus CI tripwire contain no CAN
+send path, so its v1 assurance is `ci-guarded`. A later phase can move these boundaries
+toward OS/interface enforcement.
 
 Removing an established enforcement layer is itself trust-relevant even if the headline
 policy text does not change.
+
+## Telemetry Guard v1
+
+Trust policy generation 2 is the first declared capability expansion after the manifest
+foundation. `telemetry.collection` changes from `prohibited` to `local-owner-opt-in`; the
+release does not authorize collection merely by declaring that policy.
+
+The accepted-owner trust state and trust-aware update gate are not implemented yet, so the
+current updater does not pre-authorize or pre-reject generation 2 as a transition. This is
+recorded as a limitation rather than hidden. The enforcement available in this generation is
+post-install: actual telemetry sampling remains denied until the local owner authorization
+boundary succeeds.
+
+Telemetry Guard v1 is deliberately narrow:
+
+- missing, unreadable, malformed, permission-weakened, wrong-VIN or wrong-scope
+  authorization state denies collection;
+- the supported owner mutation surface is an interactive local-terminal command; it has
+  no HTTP endpoint, non-interactive confirmation flag or VIN command-line argument. The
+  production state directory is root-owned mode `0700` and its state file is mode `0600`;
+- the raw VIN is never written to authorization state. A random salt and PBKDF2-SHA256
+  fingerprint bind authorization to the locally supplied 17-character VIN;
+- authorization stores the exact normalized scope plus its SHA-256 digest. Any purpose or
+  signal change produces a different digest and therefore requires new owner authorization;
+- Telemetry Guard v1 accepts only `retention: session` and `destination: local-only`. It
+  cannot authorize durable telemetry storage or remote submission;
+- `collect_with_guard()` requires one sampler per declared signal, rejects missing or extra
+  samplers, and evaluates authorization before invoking any sampler, so a denied request does
+  not first collect data and discard it later.
+
+The production state is `/var/lib/open-mmi/trust/telemetry-authorization.v1.json`. The local
+owner CLI is `open-mmi-telemetry` and production mutation requires root. There is
+intentionally no HTTP authorization endpoint and no remote VIN lookup. CI also rejects
+production calls to the authorization mutation primitives outside the owner CLI.
+
+A scope file is explicit data, for example:
+
+```json
+{
+  "schema_version": 1,
+  "purpose": "owner-diagnostics",
+  "signals": ["vehicle.rpm", "vehicle.speed"],
+  "retention": "session",
+  "destination": "local-only"
+}
+```
+
+The owner can review and authorize that exact file locally with:
+
+```text
+sudo open-mmi-telemetry authorize --scope ./telemetry-scope.json
+```
+
+Revocation is similarly local and interactive:
+
+```text
+sudo open-mmi-telemetry revoke
+```
+
+Generation 2 does not add a background telemetry collector or uploader. It establishes the
+authorization boundary that any future built-in collector must pass before sampling.
+
+The manifest's `runtime-guarded` assurance describes this Open MMI collection boundary, not
+an OS sandbox against arbitrary root code. Future built-in collectors must use the guard; a
+future OS-level egress/persistence architecture can make bypass materially harder.
 
 ## Operational processing is not telemetry
 

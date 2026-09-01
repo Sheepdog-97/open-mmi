@@ -67,15 +67,52 @@ class TrustInvariantTests(unittest.TestCase):
                     offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}:{node.func.attr}")
         self.assertEqual(offenders, [], "CAN transmit-like calls found: " + ", ".join(offenders))
 
-    def test_current_assurance_does_not_overclaim_runtime_enforcement(self):
+    def test_production_code_cannot_self_authorize_telemetry(self):
+        allowed_path = ROOT / "open_mmi_telemetry" / "cli.py"
+        offenders: list[str] = []
+        ignored_roots = {"tests", "tools", ".git", ".venv", "venv", "__pycache__", "build", "dist"}
+        for path in sorted(ROOT.rglob("*.py")):
+            if ignored_roots.intersection(path.relative_to(ROOT).parts):
+                continue
+            if path == allowed_path or path == ROOT / "open_mmi_telemetry" / "guard.py":
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            mutation_names = {"_create_authorization", "_write_authorization", "_revoke_authorization"}
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    for alias in node.names:
+                        if alias.name in mutation_names:
+                            offenders.append(
+                                f"{path.relative_to(ROOT)}:{node.lineno}:import:{alias.name}"
+                            )
+                if not isinstance(node, ast.Call):
+                    continue
+                name = None
+                if isinstance(node.func, ast.Name):
+                    name = node.func.id
+                elif isinstance(node.func, ast.Attribute):
+                    name = node.func.attr
+                if name in mutation_names:
+                    offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}:{name}")
+        self.assertEqual(
+            offenders,
+            [],
+            "production telemetry self-authorization calls found: " + ", ".join(offenders),
+        )
+
+    def test_current_assurance_matches_enforcement_layers(self):
         manifest = load_manifest()
         self.assertEqual(
             manifest["capabilities"]["network.external-egress"]["assurance"],
             "declared",
         )
         self.assertEqual(
+            manifest["capabilities"]["telemetry.collection"]["policy"],
+            "local-owner-opt-in",
+        )
+        self.assertEqual(
             manifest["capabilities"]["telemetry.collection"]["assurance"],
-            "declared",
+            "runtime-guarded",
         )
         self.assertEqual(
             manifest["capabilities"]["vehicle-data.persistence"]["assurance"],

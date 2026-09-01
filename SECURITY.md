@@ -80,6 +80,8 @@ Current Nightly assurance levels distinguish declaration from enforcement. A cap
 
 For trust purposes, ordinary local processing needed to provide a requested feature is distinct from telemetry. Telemetry means collection or retention for analytics, profiling, product metrics, fleet statistics, usage measurement, reporting, remote submission, or similar secondary measurement purposes. Changing data purpose or weakening an established enforcement layer is a trust-relevant change.
 
+Telemetry Guard v1 keeps telemetry default-deny until a local owner authorizes one exact scope for one VIN through the supported interactive terminal flow. Production authorization state uses a root-owned mode `0700` directory and mode `0600` file; it stores a salted PBKDF2 VIN fingerprint rather than the raw VIN. Scope changes invalidate authorization. V1 scopes are session-only and local-only, so the guard cannot authorize telemetry persistence or remote upload. Treat bypass of the guard, weakening of its state-file checks, collection before authorization, or reuse of an authorization for a changed scope as a security/trust-boundary defect.
+
 See `docs/trust-architecture.md` and `open_mmi_trust/data/trust-manifest.v1.json`.
 
 ## Local permissions model

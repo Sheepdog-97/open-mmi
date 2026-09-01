@@ -28,6 +28,7 @@ open-mmi-dashboard = "ui.web_dashboard.server:main"
 open-mmi-launcher = "ui.launcher:main"
 open-mmi-powerd = "powerd.cli:main"
 open-mmi-status = "ui.dashboard.status_cli:main"
+open-mmi-telemetry = "open_mmi_telemetry.cli:main"
 open-mmi-update-coordinator = "ui.update_coordinator:main"
 open-mmi-update-installer = "ui.update_installer:main"
 open-mmi-vehicle-config-coordinator = "ui.vehicle_config_coordinator:main"
@@ -39,6 +40,7 @@ include = [
     "bindings*",
     "canbusd*",
     "powerd*",
+    "open_mmi_telemetry*",
     "open_mmi_trust*",
     "ui*",
     "vehicles*"
