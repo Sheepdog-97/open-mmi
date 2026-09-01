@@ -13,7 +13,7 @@ from the policy itself.
 A release may declare what it wants to do. A release must not be able to authorize its own
 expansion of an owner's previously accepted trust boundary.
 
-Future update-continuity work will therefore keep three concepts separate:
+Update continuity keeps three concepts separate:
 
 1. **Release Trust Manifest** — supplied by the candidate release; describes proposed
    capabilities and their assurance level.
@@ -23,9 +23,10 @@ Future update-continuity work will therefore keep three concepts separate:
    checked independently.
 
 Trust Manifest v1 establishes the release declaration, Accepted Owner Trust State v1
-establishes the second local authority record, and Trust Transition Gate v1 now enforces the
-comparison before a prepared candidate receives privileged execution. Append-only transition
-history and independently verifiable lineage remain future work.
+establishes the second local authority record, Trust Transition Gate v1 enforces the comparison
+before a prepared candidate receives privileged execution, and Trust Transition Lineage v1
+records accepted-state changes from a locally confirmed genesis baseline forward. Independent
+installed-file/release integrity remains a later anchor.
 
 ## Current v1 capabilities
 
@@ -294,9 +295,72 @@ proof that a candidate's manifest is truthful. Stronger runtime/OS enforcement a
 verification remain later layers.
 
 A maintainer signature proves provenance. It does not grant permission to silently redraw an
-owner's established trust boundary. Append-only transition history is also not implemented yet,
-so the local state can demonstrate the current accepted ceiling and exact prepared authorization
-but not independently prove a complete historical lineage.
+owner's established trust boundary. Trust Transition Lineage v1 now records local accepted-state
+changes, but its genesis baseline explicitly does not retroactively prove the pre-Lineage history
+and arbitrary root can still replace both local lineage and local accepted state. Independent
+signed installed-file/release integrity remains necessary for external verification.
+
+## Trust Transition Lineage v1
+
+Trust Transition Lineage v1 records accepted-owner-trust state changes separately from the
+mutable Accepted Owner Trust State itself. Production lineage is a root-owned mode `0700`
+directory:
+
+```text
+/var/lib/open-mmi/trust/transition-lineage.v1.d
+```
+
+Each record is a mode `0600` regular file whose name contains its zero-padded sequence number
+and the SHA-256 digest of its canonical record bytes. Official code appends by creating a new
+record; it never rewrites, truncates, renumbers, or replaces an existing record. Every record
+after the baseline contains the previous record digest, accepted-state before/after digests,
+manifest before/after digests and generations, the full post-transition accepted-state snapshot,
+the recomputed transition relation/changes, the decision source, candidate transaction/commit
+when applicable, and whether local owner acknowledgement was required. Expansion records also
+bind the transition-authorization digest.
+
+The chain has two anchors. Record validation recomputes each record digest and the semantic
+manifest comparison against the previous record, while the current Accepted Owner Trust State
+must exactly match the final record's accepted-state snapshot and digest. Consequently editing
+or reordering a record fails the hash chain, and deleting the newest authority-changing record
+leaves a valid shorter chain whose head no longer matches current accepted authority and therefore
+fails inspection and blocks future prepared updates. This remains local software evidence: an
+arbitrary root attacker capable of replacing both stores still needs an independent external
+integrity anchor to be detected.
+
+Existing installations establish an explicit genesis baseline with:
+
+```text
+sudo open-mmi-trust-lineage status
+sudo open-mmi-trust-lineage bootstrap
+```
+
+Bootstrap requires a local interactive, accepted-state-digest-bound confirmation and records
+`history_before_baseline: unverified`. It does not claim that the historical generation-1 to
+generation-2 transition or any earlier install was lineage-recorded. New accepted-state bootstrap
+performed by `open-mmi-trust-state accept-current` creates the Lineage v1 baseline in the same
+local owner flow.
+
+If accepted state was successfully written but the following lineage append could not complete
+(for example because of a filesystem failure), the mismatch is deliberately fail-closed. The
+updater will not treat the newer accepted state as sufficient authority while lineage is behind.
+A local owner can inspect and append reconciliation evidence with:
+
+```text
+sudo open-mmi-trust-lineage reconcile-current
+```
+
+Reconciliation never rewrites history or changes accepted authority. It appends a record only
+after local confirmation; if the current state is an expansion beyond the lineage head, matching
+transition-authorization evidence is additionally required. There is intentionally no silent or
+candidate-controlled repair path.
+
+For an acknowledged prepared expansion, old trusted code changes Accepted Owner Trust State,
+appends the exact expansion lineage record, and only then allows candidate-controlled deployment
+to continue. The one-shot transition authorization is consumed only after both accepted state and
+lineage have advanced. For a non-expanding candidate whose accepted manifest changes, accepted
+state and lineage advance only after deployment succeeds. A candidate with an identical accepted
+manifest produces no redundant authority-transition record.
 
 ## SI and downstream distributions
 
@@ -352,9 +416,11 @@ egress enforcement, generic vehicle-data persistence enforcement and remote VIN-
 enforcement remain declaration-level. Accepted owner release trust state is inspectable once
 locally bootstrapped, and Trust Inspector v1 now reproduces the source-level ordering of Trust
 Transition Gate v1: coordinator preflight before installer launch, installer recheck before
-candidate deployment, and Git-object candidate-manifest inspection. Signed installed-file
-integrity and append-only transition lineage remain unimplemented, so those checks stay
-`UNVERIFIED`. A normal current installation therefore still has an overall `UNVERIFIED` result
+candidate deployment, and Git-object candidate-manifest inspection. Trust Transition Lineage v1
+is inspected as a hash-chained local record and becomes `PASS` once a locally confirmed baseline
+exists and its head anchors current accepted state. Signed installed-file integrity remains
+unimplemented, so that check stays `UNVERIFIED`. A normal current installation therefore still
+has an overall `UNVERIFIED` result
 even when all available concrete checks pass.
 
 That limitation is intentional. The built-in inspector is evidence produced by the installed

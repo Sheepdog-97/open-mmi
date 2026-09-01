@@ -130,6 +130,7 @@ def install_prepared(
     rollback_root: Optional[Path] = None,
     accepted_state_path: Optional[Path] = None,
     transition_authorization_path: Optional[Path] = None,
+    transition_lineage_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     if os.geteuid() != 0 and state_path == update_coordinator.DEFAULT_STATE_FILE:
         raise InstallerError("Prepared installation requires root")
@@ -143,6 +144,12 @@ def install_prepared(
         transition_authorization_path
         or update_coordinator._trust_artifact_path(
             state_path, transition_gate.DEFAULT_TRANSITION_AUTHORIZATION_PATH
+        )
+    )
+    transition_lineage_path = (
+        transition_lineage_path
+        or update_coordinator._trust_artifact_path(
+            state_path, transition_gate.DEFAULT_TRANSITION_LINEAGE_DIR
         )
     )
     with update_coordinator.TransactionLock(lock_path):
@@ -160,11 +167,13 @@ def install_prepared(
                 candidate_commit=state["candidate_commit"],
                 accepted_state_path=accepted_state_path,
                 authorization_path=transition_authorization_path,
+                lineage_path=transition_lineage_path,
             )
             transition_gate.activate_acknowledged_expansion(
                 transition,
                 accepted_state_path=accepted_state_path,
                 authorization_path=transition_authorization_path,
+                lineage_path=transition_lineage_path,
             )
         except transition_gate.TransitionGateError as exc:
             raise InstallerError(str(exc)) from exc
@@ -205,7 +214,8 @@ def install_prepared(
             raise InstallerError(failure)
         try:
             transition_gate.finalize_successful_transition(
-                transition, accepted_state_path=accepted_state_path
+                transition, accepted_state_path=accepted_state_path,
+                lineage_path=transition_lineage_path
             )
         except transition_gate.TransitionGateError as exc:
             state.update({

@@ -33,6 +33,13 @@ from .accepted_state import (
     read_accepted_state,
 )
 from .manifest import DEFAULT_MANIFEST_PATH, ManifestError, load_manifest, manifest_digest
+from .lineage import (
+    DEFAULT_TRANSITION_LINEAGE_DIR,
+    TransitionLineageError,
+    lineage_summary,
+    read_transition_lineage,
+    require_lineage_current,
+)
 
 
 INSPECTION_SCHEMA_VERSION = 1
@@ -220,6 +227,119 @@ def _inspect_accepted_owner_state(
         **evidence,
     )
 
+
+
+def _inspect_transition_lineage(
+    path: Path,
+    accepted_state_path: Path,
+) -> dict[str, Any]:
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return _check(
+            "release.transition-lineage",
+            UNVERIFIED,
+            "Trust Transition Lineage is not established yet.",
+            path=str(path),
+            established=False,
+            note="A locally confirmed baseline does not retroactively prove transitions before Lineage v1.",
+        )
+    except PermissionError:
+        return _check(
+            "release.transition-lineage",
+            UNVERIFIED,
+            "Trust Transition Lineage exists behind a permission boundary and could not be inspected.",
+            path=str(path),
+            established=None,
+            suggestion="Run the inspector with local read authority for the root-owned trust state.",
+        )
+    except OSError as exc:
+        return _check(
+            "release.transition-lineage",
+            UNVERIFIED,
+            "Trust Transition Lineage could not be inspected.",
+            path=str(path),
+            established=None,
+            error=str(exc),
+        )
+
+    if not os.access(path, os.R_OK | os.X_OK):
+        return _check(
+            "release.transition-lineage",
+            UNVERIFIED,
+            "Trust Transition Lineage is present but not readable by this inspector process.",
+            path=str(path),
+            mode=oct(metadata.st_mode & 0o777),
+            uid=metadata.st_uid,
+            suggestion="Run the inspector with local read authority for the root-owned trust state.",
+        )
+    try:
+        records = read_transition_lineage(path)
+    except TransitionLineageError as exc:
+        return _check(
+            "release.transition-lineage",
+            FAIL,
+            "Trust Transition Lineage is present but its append-only chain fails validation.",
+            path=str(path),
+            error=str(exc),
+        )
+    if not records:
+        return _check(
+            "release.transition-lineage",
+            UNVERIFIED,
+            "Trust Transition Lineage directory exists but no baseline is established.",
+            path=str(path),
+            established=False,
+        )
+
+    try:
+        accepted_metadata = accepted_state_path.lstat()
+    except (FileNotFoundError, PermissionError, OSError) as exc:
+        return _check(
+            "release.transition-lineage",
+            UNVERIFIED,
+            "Transition lineage is valid, but current Accepted Owner Trust State is unavailable for head anchoring.",
+            path=str(path),
+            error=f"{type(exc).__name__}: {exc}",
+            **lineage_summary(records),
+        )
+    if not os.access(accepted_state_path, os.R_OK):
+        return _check(
+            "release.transition-lineage",
+            UNVERIFIED,
+            "Transition lineage is valid, but current Accepted Owner Trust State is unreadable for head anchoring.",
+            path=str(path),
+            accepted_state_mode=oct(accepted_metadata.st_mode & 0o777),
+            **lineage_summary(records),
+        )
+    try:
+        accepted = read_accepted_state(accepted_state_path)
+        if accepted is None:
+            raise TransitionLineageError("accepted owner trust state is not established")
+        head = require_lineage_current(accepted, path)
+    except (AcceptedTrustStateError, TransitionLineageError) as exc:
+        return _check(
+            "release.transition-lineage",
+            FAIL,
+            "Trust Transition Lineage does not anchor the current Accepted Owner Trust State.",
+            path=str(path),
+            error=str(exc),
+            **lineage_summary(records),
+        )
+    return _check(
+        "release.transition-lineage",
+        PASS,
+        "Trust Transition Lineage is hash-chained and anchors the current Accepted Owner Trust State.",
+        path=str(path),
+        head_record_digest=lineage_summary(records)["head_record_digest"],
+        head_sequence=head["sequence"],
+        records=len(records),
+        baseline_recorded_at=records[0]["recorded_at"],
+        latest_relation=head["relation"],
+        latest_decision=head["decision"],
+        history_before_baseline="unverified",
+        note="Hash chaining and accepted-state anchoring detect local record edits/reordering and missing authority-changing tail records; arbitrary root replacement still requires an external integrity anchor to detect independently.",
+    )
 
 def _inspect_telemetry_authorization(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     try:
@@ -850,6 +970,7 @@ def inspect_system(
     manifest_path: Path = DEFAULT_MANIFEST_PATH,
     authorization_path: Path = DEFAULT_AUTHORIZATION_PATH,
     accepted_state_path: Path = DEFAULT_ACCEPTED_STATE_PATH,
+    lineage_path: Path = DEFAULT_TRANSITION_LINEAGE_DIR,
     install_root: Path | None = None,
 ) -> dict[str, Any]:
     """Inspect local trust evidence without mutating trust state or contacting a network."""
@@ -875,11 +996,7 @@ def inspect_system(
                 "No independently signed installed-file integrity index is defined yet.",
                 note="The manifest self-digest is not a substitute for release-file integrity.",
             ),
-            _check(
-                "release.transition-lineage",
-                UNVERIFIED,
-                "Append-only trust transition lineage is not implemented yet.",
-            ),
+            _inspect_transition_lineage(Path(lineage_path), Path(accepted_state_path)),
             _inspect_updater_transition_gate_source(root),
         ]
     )

@@ -100,7 +100,7 @@ class TrustReleaseContractTests(unittest.TestCase):
         ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("python tools/verify_trust_manifest.py", ci)
         self.assertIn(
-            "tests.test_trust_invariants tests.test_telemetry_guard tests.test_trust_inspector tests.test_accepted_trust_state tests.test_trust_transition_gate",
+            "tests.test_trust_invariants tests.test_telemetry_guard tests.test_trust_inspector tests.test_accepted_trust_state tests.test_trust_transition_gate tests.test_trust_lineage",
             ci,
         )
         self.assertIn("trust_inspector.inspect_system()", ci)
@@ -113,11 +113,14 @@ class TrustReleaseContractTests(unittest.TestCase):
         self.assertIn('"open_mmi_trust/accepted_state_cli.py"', wheel)
         self.assertIn('"open_mmi_trust/transition_gate.py"', wheel)
         self.assertIn('"open_mmi_trust/transition_gate_cli.py"', wheel)
+        self.assertIn('"open_mmi_trust/lineage.py"', wheel)
+        self.assertIn('"open_mmi_trust/lineage_cli.py"', wheel)
         self.assertIn('"open_mmi_trust/inspector.py"', wheel)
         self.assertIn('"open_mmi_trust/inspector_cli.py"', wheel)
         self.assertIn('"open_mmi_trust/data/trust-inspection.v1.schema.json"', wheel)
         self.assertIn('"open_mmi_trust/data/accepted-owner-trust.v1.schema.json"', wheel)
         self.assertIn('"open_mmi_trust/data/trust-transition-authorization.v1.schema.json"', wheel)
+        self.assertIn('"open_mmi_trust/data/trust-transition-lineage-record.v1.schema.json"', wheel)
         self.assertIn('"open_mmi_trust/data/trust-manifest.v1.json"', wheel)
         self.assertTrue((ROOT / "tools" / "vendor_bootstrap.py").is_file())
         self.assertTrue((ROOT / "ui" / "web_dashboard" / "static" / "vendor" / "BOOTSTRAP-LICENSE.txt").is_file())
@@ -129,6 +132,7 @@ class TrustReleaseContractTests(unittest.TestCase):
         self.assertIn('"open_mmi_telemetry*"', pyproject)
         self.assertIn('open-mmi-telemetry = "open_mmi_telemetry.cli:main"', pyproject)
         self.assertIn('open-mmi-trust-inspect = "open_mmi_trust.inspector_cli:main"', pyproject)
+        self.assertIn('open-mmi-trust-lineage = "open_mmi_trust.lineage_cli:main"', pyproject)
         self.assertIn('open-mmi-trust-state = "open_mmi_trust.accepted_state_cli:main"', pyproject)
         self.assertIn('open-mmi-trust-transition = "open_mmi_trust.transition_gate_cli:main"', pyproject)
         self.assertIn('"open_mmi_trust*"', pyproject)

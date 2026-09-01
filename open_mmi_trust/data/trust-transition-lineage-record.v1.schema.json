@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:open-mmi:trust-transition-lineage-record:v1",
+  "title": "Open MMI Trust Transition Lineage Record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "record_id", "sequence", "recorded_at",
+    "previous_record_digest", "source", "transaction_id", "candidate_commit",
+    "accepted_state_before_digest", "accepted_state_after_digest",
+    "accepted_manifest_before_digest", "accepted_manifest_after_digest",
+    "policy_generation_before", "policy_generation_after", "accepted_state_after", "manifest_after",
+    "relation", "changes", "decision", "owner_acknowledgement",
+    "authorization_digest"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "record_id": {"const": "org.open-mmi.trust-transition-lineage-record"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "recorded_at": {"type": "string", "minLength": 1, "maxLength": 64},
+    "previous_record_digest": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+    "source": {"enum": ["existing-accepted-state", "prepared-update", "accepted-state-cli", "lineage-reconcile"]},
+    "transaction_id": {"type": ["string", "null"]},
+    "candidate_commit": {"type": ["string", "null"]},
+    "accepted_state_before_digest": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+    "accepted_state_after_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "accepted_manifest_before_digest": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+    "accepted_manifest_after_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_generation_before": {"type": ["integer", "null"], "minimum": 1},
+    "policy_generation_after": {"type": "integer", "minimum": 1},
+    "accepted_state_after": {"type": "object"},
+    "manifest_after": {"type": "object"},
+    "relation": {"enum": ["baseline", "equal", "narrower", "expansion"]},
+    "changes": {"type": "array", "items": {"type": "object"}},
+    "decision": {"enum": ["baseline-existing-state", "allowed-without-owner-acknowledgement", "owner-acknowledged-expansion", "local-owner-accepted-state", "local-owner-lineage-reconcile"]},
+    "owner_acknowledgement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "method"],
+      "properties": {
+        "required": {"type": "boolean"},
+        "method": {"enum": ["none", "local-interactive-transition", "local-interactive-accepted-state", "local-interactive-lineage-baseline", "local-interactive-lineage-reconcile"]}
+      }
+    },
+    "authorization_digest": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

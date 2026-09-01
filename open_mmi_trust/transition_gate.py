@@ -32,6 +32,17 @@ from .accepted_state import (
     read_accepted_state,
 )
 from .manifest import ManifestError, manifest_digest, validate_manifest
+from .lineage import (
+    ACK_NONE,
+    ACK_TRANSITION,
+    DECISION_ALLOWED,
+    DECISION_EXPANSION,
+    DEFAULT_TRANSITION_LINEAGE_DIR,
+    SOURCE_PREPARED_UPDATE,
+    TransitionLineageError,
+    _record_state_transition,
+    require_lineage_current,
+)
 
 
 TRANSITION_AUTHORIZATION_SCHEMA_VERSION = 1
@@ -436,6 +447,7 @@ def evaluate_prepared_candidate(
     candidate_commit: object,
     accepted_state_path: Path = DEFAULT_ACCEPTED_STATE_PATH,
     authorization_path: Path = DEFAULT_TRANSITION_AUTHORIZATION_PATH,
+    lineage_path: Path = DEFAULT_TRANSITION_LINEAGE_DIR,
 ) -> PreparedTransition:
     transaction, candidate = _validated_identity(transaction_id, candidate_commit)
     candidate_manifest, blob = load_candidate_manifest_from_git(stage, candidate)
@@ -461,6 +473,11 @@ def evaluate_prepared_candidate(
             False,
             "accepted-owner-trust-not-established",
         )
+
+    try:
+        require_lineage_current(accepted, lineage_path)
+    except TransitionLineageError as exc:
+        raise TransitionGateError(f"transition lineage is not current: {exc}") from exc
 
     state_digest = accepted_state_digest(accepted)
     comparison = compare_trust_manifests(accepted["manifest"], candidate_manifest)
@@ -542,6 +559,7 @@ def require_prepared_candidate_allowed(
     candidate_commit: object,
     accepted_state_path: Path = DEFAULT_ACCEPTED_STATE_PATH,
     authorization_path: Path = DEFAULT_TRANSITION_AUTHORIZATION_PATH,
+    lineage_path: Path = DEFAULT_TRANSITION_LINEAGE_DIR,
 ) -> PreparedTransition:
     transition = evaluate_prepared_candidate(
         stage,
@@ -549,6 +567,7 @@ def require_prepared_candidate_allowed(
         candidate_commit=candidate_commit,
         accepted_state_path=accepted_state_path,
         authorization_path=authorization_path,
+        lineage_path=lineage_path,
     )
     if transition.allowed:
         return transition
@@ -576,6 +595,7 @@ def _authorize_prepared_expansion(
     expected_accepted_state_digest: str,
     accepted_state_path: Path = DEFAULT_ACCEPTED_STATE_PATH,
     authorization_path: Path = DEFAULT_TRANSITION_AUTHORIZATION_PATH,
+    lineage_path: Path = DEFAULT_TRANSITION_LINEAGE_DIR,
 ) -> dict[str, Any]:
     transition = evaluate_prepared_candidate(
         stage,
@@ -583,6 +603,7 @@ def _authorize_prepared_expansion(
         candidate_commit=candidate_commit,
         accepted_state_path=accepted_state_path,
         authorization_path=authorization_path,
+        lineage_path=lineage_path,
     )
     if transition.relation != TRANSITION_EXPANSION:
         raise TransitionGateError("prepared candidate does not require expansion acknowledgement")
@@ -609,8 +630,9 @@ def activate_acknowledged_expansion(
     *,
     accepted_state_path: Path = DEFAULT_ACCEPTED_STATE_PATH,
     authorization_path: Path = DEFAULT_TRANSITION_AUTHORIZATION_PATH,
+    lineage_path: Path = DEFAULT_TRANSITION_LINEAGE_DIR,
 ) -> dict[str, Any] | None:
-    """Commit acknowledged expansion authority before candidate execution."""
+    """Commit acknowledged expansion authority and append lineage before candidate execution."""
 
     if transition.relation != TRANSITION_EXPANSION:
         return None
@@ -628,28 +650,44 @@ def activate_acknowledged_expansion(
     ):
         raise TransitionGateError("transition acknowledgement changed before deployment")
     try:
+        before = read_accepted_state(accepted_state_path)
+        if before is None:
+            raise AcceptedTrustStateError("accepted owner trust state disappeared")
+        require_lineage_current(before, lineage_path)
         recorded = _record_acknowledged_expansion(
             transition.candidate_manifest,
             expected_accepted_state_digest=transition.accepted_state_digest,
             path=accepted_state_path,
         )
-    except AcceptedTrustStateError as exc:
+        _record_state_transition(
+            before,
+            recorded,
+            source=SOURCE_PREPARED_UPDATE,
+            decision=DECISION_EXPANSION,
+            acknowledgement_required=True,
+            acknowledgement_method=ACK_TRANSITION,
+            transaction_id=transition.transaction_id,
+            candidate_commit=transition.candidate_commit,
+            authorization_digest=transition_authorization_digest(authorization),
+            path=lineage_path,
+        )
+    except (AcceptedTrustStateError, TransitionLineageError) as exc:
         raise TransitionGateError(f"could not activate acknowledged trust expansion: {exc}") from exc
     try:
         _clear_transition_authorization(authorization_path)
     except TransitionGateError:
-        # Once accepted state has advanced the exact old authorization is stale
-        # by construction, so inability to remove it cannot re-authorize anything.
+        # Once accepted state and lineage have advanced, the old authorization is
+        # stale by construction. Failure to remove it cannot re-authorize anything.
         pass
     return recorded
-
 
 def finalize_successful_transition(
     transition: PreparedTransition,
     *,
     accepted_state_path: Path = DEFAULT_ACCEPTED_STATE_PATH,
+    lineage_path: Path = DEFAULT_TRANSITION_LINEAGE_DIR,
 ) -> dict[str, Any] | None:
-    """Advance accepted state after a successful non-expanding deployment."""
+    """Advance accepted state and append lineage after successful non-expanding deployment."""
 
     if transition.relation == TRANSITION_EXPANSION:
         return None
@@ -657,14 +695,27 @@ def finalize_successful_transition(
         current = read_accepted_state(accepted_state_path)
         if current is None:
             raise AcceptedTrustStateError("accepted owner trust state disappeared")
+        require_lineage_current(current, lineage_path)
         candidate_digest = "sha256:" + manifest_digest(transition.candidate_manifest)
         if current["manifest_digest"] == candidate_digest:
             return current
-        return _record_accepted_manifest(
+        recorded = _record_accepted_manifest(
             transition.candidate_manifest,
             accepted_state_path,
         )
-    except AcceptedTrustStateError as exc:
+        _record_state_transition(
+            current,
+            recorded,
+            source=SOURCE_PREPARED_UPDATE,
+            decision=DECISION_ALLOWED,
+            acknowledgement_required=False,
+            acknowledgement_method=ACK_NONE,
+            transaction_id=transition.transaction_id,
+            candidate_commit=transition.candidate_commit,
+            path=lineage_path,
+        )
+        return recorded
+    except (AcceptedTrustStateError, TransitionLineageError) as exc:
         raise TransitionGateError(
             f"could not finalize accepted owner trust state after deployment: {exc}"
         ) from exc

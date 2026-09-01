@@ -17,6 +17,7 @@ from open_mmi_trust.accepted_state import (
     read_accepted_state,
 )
 from open_mmi_trust.manifest import load_manifest, manifest_digest
+from open_mmi_trust.lineage import _record_lineage_baseline, read_transition_lineage
 from open_mmi_trust import transition_gate, transition_gate_cli
 
 
@@ -97,7 +98,8 @@ class TrustTransitionGateTests(unittest.TestCase):
         trust = root / "trust"
         accepted_path = trust / "accepted-owner-trust.v1.json"
         authorization_path = trust / "transition-authorization.v1.json"
-        _record_accepted_manifest(accepted_manifest, accepted_path)
+        accepted_state = _record_accepted_manifest(accepted_manifest, accepted_path)
+        _record_lineage_baseline(accepted_state, trust / "transition-lineage.v1.d")
         return stage, installed, candidate, accepted_path, authorization_path
 
     def evaluate(
@@ -113,6 +115,7 @@ class TrustTransitionGateTests(unittest.TestCase):
             candidate_commit=candidate,
             accepted_state_path=accepted_path,
             authorization_path=authorization_path,
+            lineage_path=accepted_path.parent / "transition-lineage.v1.d",
         )
 
     def test_equal_candidate_is_allowed_without_acknowledgement(self):
@@ -123,6 +126,17 @@ class TrustTransitionGateTests(unittest.TestCase):
         self.assertFalse(decision.acknowledgement_required)
         self.assertFalse(decision.acknowledged)
         self.assertEqual(decision.relation, "equal")
+
+    def test_missing_lineage_blocks_even_an_equal_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stage, _, candidate, accepted_path, authorization_path = self.staged(root)
+            lineage_path = accepted_path.parent / "transition-lineage.v1.d"
+            for record in lineage_path.iterdir():
+                record.unlink()
+            lineage_path.rmdir()
+            with self.assertRaisesRegex(transition_gate.TransitionGateError, "lineage is not current"):
+                self.evaluate(stage, candidate, accepted_path, authorization_path)
 
     def test_missing_accepted_state_blocks_before_candidate_execution(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -139,6 +153,7 @@ class TrustTransitionGateTests(unittest.TestCase):
                     candidate_commit=candidate,
                     accepted_state_path=accepted_path,
                     authorization_path=authorization_path,
+            lineage_path=accepted_path.parent / "transition-lineage.v1.d",
                 )
 
     def test_expansion_requires_exact_owner_acknowledgement(self):
@@ -161,6 +176,7 @@ class TrustTransitionGateTests(unittest.TestCase):
                 expected_accepted_state_digest=before.accepted_state_digest,
                 accepted_state_path=accepted_path,
                 authorization_path=authorization_path,
+            lineage_path=accepted_path.parent / "transition-lineage.v1.d",
             )
             after = self.evaluate(stage, candidate, accepted_path, authorization_path)
 
@@ -188,6 +204,7 @@ class TrustTransitionGateTests(unittest.TestCase):
                 expected_accepted_state_digest=before.accepted_state_digest,
                 accepted_state_path=accepted_path,
                 authorization_path=authorization_path,
+            lineage_path=accepted_path.parent / "transition-lineage.v1.d",
             )
             new_transaction = "prepare-" + "b" * 32
             stale = transition_gate.evaluate_prepared_candidate(
@@ -196,6 +213,7 @@ class TrustTransitionGateTests(unittest.TestCase):
                 candidate_commit=candidate,
                 accepted_state_path=accepted_path,
                 authorization_path=authorization_path,
+            lineage_path=accepted_path.parent / "transition-lineage.v1.d",
             )
         self.assertFalse(stale.allowed)
         self.assertFalse(stale.acknowledged)
@@ -218,6 +236,7 @@ class TrustTransitionGateTests(unittest.TestCase):
                 expected_accepted_state_digest=before.accepted_state_digest,
                 accepted_state_path=accepted_path,
                 authorization_path=authorization_path,
+            lineage_path=accepted_path.parent / "transition-lineage.v1.d",
             )
             allowed = transition_gate.require_prepared_candidate_allowed(
                 stage,
@@ -225,18 +244,26 @@ class TrustTransitionGateTests(unittest.TestCase):
                 candidate_commit=candidate,
                 accepted_state_path=accepted_path,
                 authorization_path=authorization_path,
+            lineage_path=accepted_path.parent / "transition-lineage.v1.d",
             )
             transition_gate.activate_acknowledged_expansion(
                 allowed,
                 accepted_state_path=accepted_path,
                 authorization_path=authorization_path,
+            lineage_path=accepted_path.parent / "transition-lineage.v1.d",
             )
             state = read_accepted_state(accepted_path)
+            authorization_exists = authorization_path.exists()
+            lineage = read_transition_lineage(accepted_path.parent / "transition-lineage.v1.d")
 
         self.assertIsNotNone(state)
         assert state is not None
         self.assertEqual(state["manifest"], candidate_manifest)
-        self.assertFalse(authorization_path.exists())
+        self.assertFalse(authorization_exists)
+        self.assertEqual(len(lineage), 2)
+        self.assertEqual(lineage[-1]["relation"], "expansion")
+        self.assertEqual(lineage[-1]["decision"], "owner-acknowledged-expansion")
+        self.assertIsNotNone(lineage[-1]["authorization_digest"])
 
     def test_narrower_candidate_advances_state_only_after_successful_finalize(self):
         accepted = manifest_copy()
@@ -257,10 +284,15 @@ class TrustTransitionGateTests(unittest.TestCase):
             state_before = read_accepted_state(accepted_path)
             self.assertEqual(state_before["manifest"], accepted)
             transition_gate.finalize_successful_transition(
-                decision, accepted_state_path=accepted_path
+                decision, accepted_state_path=accepted_path,
+                lineage_path=accepted_path.parent / "transition-lineage.v1.d"
             )
             state_after = read_accepted_state(accepted_path)
+            lineage = read_transition_lineage(accepted_path.parent / "transition-lineage.v1.d")
         self.assertEqual(state_after["manifest"], candidate_manifest)
+        self.assertEqual(len(lineage), 2)
+        self.assertEqual(lineage[-1]["relation"], "narrower")
+        self.assertEqual(lineage[-1]["decision"], "allowed-without-owner-acknowledgement")
 
     def test_generation_regression_is_not_acknowledgeable(self):
         accepted = manifest_copy()
@@ -283,6 +315,7 @@ class TrustTransitionGateTests(unittest.TestCase):
                     candidate_commit=candidate,
                     accepted_state_path=accepted_path,
                     authorization_path=authorization_path,
+            lineage_path=accepted_path.parent / "transition-lineage.v1.d",
                 )
 
     def test_candidate_manifest_is_read_from_commit_not_worktree(self):
@@ -345,6 +378,7 @@ class TrustTransitionGateTests(unittest.TestCase):
                 expected_accepted_state_digest=before.accepted_state_digest,
                 accepted_state_path=accepted_path,
                 authorization_path=authorization_path,
+            lineage_path=accepted_path.parent / "transition-lineage.v1.d",
             )
             loaded = transition_gate.read_transition_authorization(authorization_path)
             digest = transition_gate.transition_authorization_digest(authorization)

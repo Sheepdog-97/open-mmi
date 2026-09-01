@@ -106,7 +106,7 @@ jobs:
         run: |
           python tools/verify_trust_manifest.py
           python tools/vendor_bootstrap.py --check
-          python -m unittest tests.test_trust_invariants tests.test_telemetry_guard tests.test_trust_inspector tests.test_accepted_trust_state tests.test_trust_transition_gate
+          python -m unittest tests.test_trust_invariants tests.test_telemetry_guard tests.test_trust_inspector tests.test_accepted_trust_state tests.test_trust_transition_gate tests.test_trust_lineage
 
       - name: Verify CSS module cascade
         run: python tools/verify_css_split.py
@@ -297,6 +297,7 @@ jobs:
               "open-mmi-status": "ui.dashboard.status_cli:main",
               "open-mmi-telemetry": "open_mmi_telemetry.cli:main",
               "open-mmi-trust-inspect": "open_mmi_trust.inspector_cli:main",
+              "open-mmi-trust-lineage": "open_mmi_trust.lineage_cli:main",
               "open-mmi-trust-state": "open_mmi_trust.accepted_state_cli:main",
               "open-mmi-trust-transition": "open_mmi_trust.transition_gate_cli:main",
               "open-mmi-update-coordinator": "ui.update_coordinator:main",

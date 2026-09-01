@@ -663,6 +663,9 @@ def response_for_request(
                     authorization_path=_trust_artifact_path(
                         state_path, transition_gate.DEFAULT_TRANSITION_AUTHORIZATION_PATH
                     ),
+                    lineage_path=_trust_artifact_path(
+                        state_path, transition_gate.DEFAULT_TRANSITION_LINEAGE_DIR
+                    ),
                 )
             except transition_gate.TransitionGateError as exc:
                 raise CoordinatorError(str(exc)) from exc

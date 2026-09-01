@@ -208,6 +208,91 @@ class TrustInvariantTests(unittest.TestCase):
             "production transition-authorization mutation calls found: " + ", ".join(offenders),
         )
 
+    def test_transition_lineage_mutation_is_confined_to_trusted_owner_and_gate_paths(self):
+        lineage_module = ROOT / "open_mmi_trust" / "lineage.py"
+        lineage_cli = ROOT / "open_mmi_trust" / "lineage_cli.py"
+        accepted_cli = ROOT / "open_mmi_trust" / "accepted_state_cli.py"
+        transition_gate = ROOT / "open_mmi_trust" / "transition_gate.py"
+        mutation_names = {
+            "_append_lineage_record",
+            "_record_lineage_baseline",
+            "_record_state_transition",
+        }
+        allowed = {
+            lineage_cli: {"_record_lineage_baseline", "_record_state_transition"},
+            accepted_cli: {"_record_lineage_baseline", "_record_state_transition"},
+            transition_gate: {"_record_state_transition"},
+        }
+        offenders: list[str] = []
+        ignored_roots = {"tests", "tools", ".git", ".venv", "venv", "__pycache__", "build", "dist"}
+        for path in sorted(ROOT.rglob("*.py")):
+            if ignored_roots.intersection(path.relative_to(ROOT).parts):
+                continue
+            if path == lineage_module:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    for alias in node.names:
+                        if alias.name not in mutation_names:
+                            continue
+                        if alias.name in allowed.get(path, set()):
+                            continue
+                        offenders.append(
+                            f"{path.relative_to(ROOT)}:{node.lineno}:import:{alias.name}"
+                        )
+                if not isinstance(node, ast.Call):
+                    continue
+                if isinstance(node.func, ast.Name):
+                    name = node.func.id
+                elif isinstance(node.func, ast.Attribute):
+                    name = node.func.attr
+                else:
+                    name = ""
+                if name not in mutation_names or name in allowed.get(path, set()):
+                    continue
+                offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}:{name}")
+        self.assertEqual(
+            offenders,
+            [],
+            "production transition-lineage mutation calls found: " + ", ".join(offenders),
+        )
+
+    def test_accepted_state_changes_are_followed_by_lineage_before_update_flow_continues(self):
+        gate = ROOT / "open_mmi_trust" / "transition_gate.py"
+        tree = ast.parse(gate.read_text(encoding="utf-8"), filename=str(gate))
+        functions = {
+            node.name: node
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+
+        def call_lines(function_name: str, called_name: str) -> list[int]:
+            result: list[int] = []
+            for node in ast.walk(functions[function_name]):
+                if not isinstance(node, ast.Call):
+                    continue
+                if isinstance(node.func, ast.Name):
+                    name = node.func.id
+                elif isinstance(node.func, ast.Attribute):
+                    name = node.func.attr
+                else:
+                    name = ""
+                if name == called_name:
+                    result.append(node.lineno)
+            return result
+
+        expansion_state = call_lines("activate_acknowledged_expansion", "_record_acknowledged_expansion")
+        expansion_lineage = call_lines("activate_acknowledged_expansion", "_record_state_transition")
+        expansion_clear = call_lines("activate_acknowledged_expansion", "_clear_transition_authorization")
+        final_state = call_lines("finalize_successful_transition", "_record_accepted_manifest")
+        final_lineage = call_lines("finalize_successful_transition", "_record_state_transition")
+        self.assertTrue(expansion_state and expansion_lineage and expansion_clear)
+        self.assertLess(max(expansion_state), min(expansion_lineage))
+        self.assertLess(max(expansion_lineage), min(expansion_clear))
+        self.assertTrue(final_state and final_lineage)
+        self.assertLess(max(final_state), min(final_lineage))
+
     def test_candidate_deployment_is_ordered_after_old_trusted_transition_gate(self):
         installer = ROOT / "ui" / "update_installer.py"
         coordinator = ROOT / "ui" / "update_coordinator.py"

@@ -11,6 +11,7 @@ from unittest import mock
 
 from open_mmi_telemetry.guard import _create_authorization
 from open_mmi_trust.accepted_state import _record_accepted_manifest
+from open_mmi_trust.lineage import _record_lineage_baseline
 from open_mmi_trust.inspector import (
     FAIL,
     PASS,
@@ -72,6 +73,7 @@ class TrustInspectorTests(unittest.TestCase):
                 manifest_path=MANIFEST,
                 authorization_path=authorization,
                 accepted_state_path=accepted_state,
+                lineage_path=accepted_state.parent / "transition-lineage.v1.d",
                 install_root=root,
             )
 
@@ -158,6 +160,46 @@ class TrustInspectorTests(unittest.TestCase):
         self.assertEqual(check["evidence"]["current_relation"], "expansion")
         self.assertFalse(check["evidence"]["comparison"]["allowed_without_owner_ack"])
 
+    def test_hash_chained_lineage_passes_when_it_anchors_accepted_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            authorization, accepted_state, expected = self.fixture(root)
+            state = _record_accepted_manifest(
+                json.loads(MANIFEST.read_text(encoding="utf-8")), accepted_state
+            )
+            lineage_path = accepted_state.parent / "transition-lineage.v1.d"
+            _record_lineage_baseline(state, lineage_path)
+            report = self.inspect_fixture(root, authorization, accepted_state, expected)
+
+        check = next(
+            check for check in report["checks"] if check["id"] == "release.transition-lineage"
+        )
+        self.assertEqual(check["status"], PASS)
+        self.assertEqual(check["evidence"]["records"], 1)
+        self.assertEqual(check["evidence"]["history_before_baseline"], "unverified")
+
+    def test_lineage_tail_removal_is_fail_when_accepted_state_is_ahead(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            authorization, accepted_state, expected = self.fixture(root)
+            state = _record_accepted_manifest(
+                json.loads(MANIFEST.read_text(encoding="utf-8")), accepted_state
+            )
+            lineage_path = accepted_state.parent / "transition-lineage.v1.d"
+            _record_lineage_baseline(state, lineage_path)
+            # Change the accepted-state bytes without updating lineage: Inspector must
+            # not accept a shorter valid chain whose head no longer anchors authority.
+            newer = json.loads(MANIFEST.read_text(encoding="utf-8"))
+            newer["policy_generation"] += 1
+            _record_accepted_manifest(newer, accepted_state)
+            report = self.inspect_fixture(root, authorization, accepted_state, expected)
+
+        check = next(
+            check for check in report["checks"] if check["id"] == "release.transition-lineage"
+        )
+        self.assertEqual(check["status"], FAIL)
+        self.assertIn("does not anchor", check["summary"])
+
     def test_invalid_authorization_state_is_fail(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -226,6 +268,9 @@ class TrustInspectorTests(unittest.TestCase):
             "_revoke_authorization",
             "_record_accepted_manifest",
             "_write_accepted_state",
+            "_append_lineage_record",
+            "_record_lineage_baseline",
+            "_record_state_transition",
             "write_text",
             "write_bytes",
             "unlink",

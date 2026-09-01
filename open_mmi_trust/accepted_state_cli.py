@@ -20,6 +20,16 @@ from .accepted_state import (
     read_accepted_state,
 )
 from .manifest import DEFAULT_MANIFEST_PATH, ManifestError, load_manifest, manifest_digest
+from .lineage import (
+    ACK_ACCEPTED_STATE,
+    DECISION_LOCAL_OWNER,
+    DEFAULT_TRANSITION_LINEAGE_DIR,
+    SOURCE_ACCEPTED_STATE_CLI,
+    TransitionLineageError,
+    _record_lineage_baseline,
+    _record_state_transition,
+    require_lineage_current,
+)
 
 
 def _require_root() -> None:
@@ -136,9 +146,14 @@ def _cmd_accept_current(args: argparse.Namespace) -> int:
             )
         if comparison["relation"] == TRANSITION_EXPANSION:
             raise AcceptedTrustStateError(
-                "current installed boundary exceeds accepted owner trust; v1 cannot broaden state after installation. "
-                "A future old-trusted-side pre-install transition gate must acknowledge expansions."
+                "current installed boundary exceeds accepted owner trust; v1 cannot broaden state after installation. Expansion must be acknowledged by the old-trusted-side transition gate before installation."
             )
+        try:
+            require_lineage_current(existing, DEFAULT_TRANSITION_LINEAGE_DIR)
+        except TransitionLineageError as exc:
+            raise AcceptedTrustStateError(
+                f"transition lineage must anchor accepted state before changing it: {exc}"
+            ) from exc
 
         print("Current installed boundary does not exceed accepted owner trust:")
         print(json.dumps(comparison, indent=2, sort_keys=True))
@@ -153,6 +168,23 @@ def _cmd_accept_current(args: argparse.Namespace) -> int:
         )
 
     state = _record_accepted_manifest(current, DEFAULT_ACCEPTED_STATE_PATH)
+    try:
+        if existing is None:
+            _record_lineage_baseline(state, DEFAULT_TRANSITION_LINEAGE_DIR)
+        else:
+            _record_state_transition(
+                existing,
+                state,
+                source=SOURCE_ACCEPTED_STATE_CLI,
+                decision=DECISION_LOCAL_OWNER,
+                acknowledgement_required=True,
+                acknowledgement_method=ACK_ACCEPTED_STATE,
+                path=DEFAULT_TRANSITION_LINEAGE_DIR,
+            )
+    except TransitionLineageError as exc:
+        raise AcceptedTrustStateError(
+            f"accepted state changed but transition lineage could not be finalized: {exc}"
+        ) from exc
     print(
         json.dumps(
             {

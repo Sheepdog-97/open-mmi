@@ -12,6 +12,7 @@ from unittest.mock import patch
 from open_mmi_trust.accepted_state import _record_accepted_manifest, read_accepted_state
 from open_mmi_trust import transition_gate
 from open_mmi_trust.manifest import load_manifest
+from open_mmi_trust.lineage import _record_lineage_baseline
 
 from ui import update_coordinator, update_installer
 
@@ -65,8 +66,11 @@ class UpdateInstallerTests(unittest.TestCase):
         })
         state_path = root / "state.json"
         update_coordinator.write_state(state, state_path)
-        _record_accepted_manifest(
+        accepted_state = _record_accepted_manifest(
             accepted_manifest, root / "trust" / "accepted-owner-trust.v1.json"
+        )
+        _record_lineage_baseline(
+            accepted_state, root / "trust" / "transition-lineage.v1.d"
         )
         source = {
             "repository_path": str(root), "installed_commit": installed,
@@ -299,12 +303,14 @@ class UpdateInstallerTests(unittest.TestCase):
             review = transition_gate.evaluate_prepared_candidate(
                 stage, transaction_id=state["transaction_id"], candidate_commit=state["candidate_commit"],
                 accepted_state_path=accepted_path, authorization_path=authorization_path,
+                lineage_path=root / "trust" / "transition-lineage.v1.d",
             )
             transition_gate._authorize_prepared_expansion(
                 stage, transaction_id=state["transaction_id"], candidate_commit=state["candidate_commit"],
                 expected_candidate_manifest_digest=review.candidate_manifest_digest,
                 expected_accepted_state_digest=review.accepted_state_digest,
                 accepted_state_path=accepted_path, authorization_path=authorization_path,
+                lineage_path=root / "trust" / "transition-lineage.v1.d",
             )
 
             def deploy(command, environment):
