@@ -682,3 +682,5 @@ Do not change a maintained profile from experimental/candidate/qualified by edit
 Use `open-mmi-config vehicle-setup qualification transition` with `--dry-run`, review the
 machine-readable plan, and include complete replay or hardware evidence. The formal workflow is
 documented in `docs/vehicle-qualification-workflow.md`.
+
+Frontend third-party assets must be vendored rather than loaded during normal dashboard rendering. Bootstrap updates use `python tools/vendor_bootstrap.py`, which accepts only the pinned URL and published SHA-384 digest; commit the resulting local asset and license with the change.

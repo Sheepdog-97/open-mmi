@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import ast
+import base64
+import hashlib
 import re
 import unittest
 from pathlib import Path
@@ -9,36 +11,45 @@ from open_mmi_trust import load_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "ui" / "web_dashboard" / "static"
+BOOTSTRAP = STATIC / "vendor" / "bootstrap-5.3.8.min.css"
+BOOTSTRAP_SHA384_BASE64 = "sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
 
 
 class TrustInvariantTests(unittest.TestCase):
-    def test_dashboard_remote_dependencies_are_exactly_declared_current_assets(self):
+    def test_dashboard_render_has_no_remote_script_or_stylesheet_dependencies(self):
         source = (STATIC / "index.html").read_text(encoding="utf-8")
         remote_dependency = re.compile(
             r"<(?:script|link)\b[^>]*(?:src|href)=[\"'](?P<url>(?:https?:)?//[^\"']+)",
             re.IGNORECASE,
         )
         urls = {match.group("url") for match in remote_dependency.finditer(source)}
-        self.assertEqual(
-            urls,
-            {
-                "https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css",
-                "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css",
-            },
-        )
-        manifest = load_manifest()
-        purposes = set(
-            manifest["capabilities"]["network.external-egress"]["purposes"]
-        )
-        self.assertIn("frontend.bootstrap-cdn", purposes)
-        self.assertIn("frontend.bootstrap-icons-cdn", purposes)
+        self.assertEqual(urls, set())
+        self.assertIn('href="/vendor/bootstrap-5.3.8.min.css"', source)
+        self.assertNotIn("bootstrap-icons", source)
 
-    def test_dashboard_remote_assets_remain_version_pinned(self):
-        source = (STATIC / "index.html").read_text(encoding="utf-8")
-        self.assertNotIn("bootstrap@latest", source)
-        self.assertNotIn("bootstrap-icons@latest", source)
-        self.assertIn("bootstrap@5.3.8", source)
-        self.assertIn("bootstrap-icons@1.11.3", source)
+        manifest = load_manifest()
+        purposes = set(manifest["capabilities"]["network.external-egress"]["purposes"])
+        self.assertNotIn("frontend.bootstrap-cdn", purposes)
+        self.assertNotIn("frontend.bootstrap-icons-cdn", purposes)
+
+    def test_vendored_bootstrap_is_exact_reviewed_5_3_8_asset(self):
+        data = BOOTSTRAP.read_bytes()
+        digest = base64.b64encode(hashlib.sha384(data).digest()).decode("ascii")
+        self.assertEqual(digest, BOOTSTRAP_SHA384_BASE64)
+        self.assertTrue(
+            b"Bootstrap  v5.3.8" in data[:512] or b"Bootstrap v5.3.8" in data[:512],
+            "vendored stylesheet must identify Bootstrap v5.3.8",
+        )
+
+    def test_bootstrap_icon_font_dependency_is_not_reintroduced(self):
+        offenders: list[str] = []
+        for path in sorted(STATIC.rglob("*")):
+            if path.suffix not in {".html", ".js", ".css"}:
+                continue
+            text = path.read_text(encoding="utf-8", errors="strict")
+            if "bootstrap-icons@" in text or "bootstrap-icons.css" in text:
+                offenders.append(str(path.relative_to(ROOT)))
+        self.assertEqual(offenders, [])
 
     def test_can_runtime_contains_no_send_calls_while_manifest_prohibits_transmit(self):
         manifest = load_manifest()

@@ -8,8 +8,6 @@
       "assurance": "declared",
       "purposes": [
         "dashboard.configured-ui",
-        "frontend.bootstrap-cdn",
-        "frontend.bootstrap-icons-cdn",
         "media.internet-radio",
         "media.jellyfin",
         "updates.release-fetch"

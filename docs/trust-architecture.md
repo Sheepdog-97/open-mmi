@@ -95,17 +95,18 @@ only for named purposes that exist in the current tree:
 - Jellyfin;
 - release/update retrieval.
 
-Normal dashboard rendering must not introduce an *undeclared* third-party dependency. The
-current proven Nightly still loads version-pinned Bootstrap and Bootstrap Icons stylesheets
-from jsDelivr. Trust Manifest v1 deliberately records those existing dependencies as
-`frontend.bootstrap-cdn` and `frontend.bootstrap-icons-cdn` rather than pretending they do
-not exist. CI also fixes the accepted URLs to the currently reviewed versions.
+Normal dashboard rendering must not introduce a third-party network dependency. Bootstrap
+5.3.8 is therefore vendored as a local static asset and verified against Bootstrap's
+published SHA-384 Subresource Integrity digest. The previously loaded Bootstrap Icons
+stylesheet was unnecessary because Open MMI's media controls already use inline SVG icons,
+so that dependency was removed rather than copied locally.
 
-Vendoring the exact reviewed frontend assets locally is a pre-anchor cleanup item. Removing
-those purposes later is a narrowing of the network boundary, not an expansion. This is
-initially a declaration and CI contract; later architecture should narrow actual process
-network authority so undeclared egress becomes technically harder rather than only
-review-visible.
+This removes the former `frontend.bootstrap-cdn` and `frontend.bootstrap-icons-cdn` purposes
+from `network.external-egress`. It is the first recorded example of the trust boundary
+becoming narrower after Trust Manifest v1: the dashboard keeps the same declared feature
+set while surrendering two unrelated third-party egress paths. Network assurance remains
+`declared` for now; later architecture should narrow actual process network authority so
+undeclared egress becomes technically harder rather than only review-visible.
 
 ## Vehicle CAN
 

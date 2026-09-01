@@ -3,10 +3,10 @@
 
 ### Added
 - Strict machine-readable Trust Manifest v1 with stable capability identifiers, explicit policy/assurance separation, deterministic SHA-256 fingerprinting, fail-closed validation, packaging checks, documentation, and CI verification.
-- Initial CI trust tripwires that pin the currently declared remote dashboard assets and reject CAN-runtime `send`/`send_periodic` calls while CAN transmission remains prohibited.
+- Initial CI trust tripwires that reject remote dashboard render dependencies and CAN-runtime `send`/`send_periodic` calls while CAN transmission remains prohibited.
 
 ### Changed
-- Existing jsDelivr Bootstrap and Bootstrap Icons dependencies are now explicitly represented in the network-egress trust declaration; local vendoring remains a pre-anchor boundary-narrowing task.
+- Vendored the exact reviewed Bootstrap 5.3.8 stylesheet locally with published SHA-384 verification and removed the unused Bootstrap Icons stylesheet, eliminating both normal-render jsDelivr dependencies from the network-egress trust declaration.
 - Project philosophy and security documentation now state that trust-boundary changes must be declared and distinguish operational local processing from telemetry-purpose collection.
 
 ## Unreleased — V1 vehicle setup coordinator

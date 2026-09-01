@@ -87,11 +87,17 @@ class TrustReleaseContractTests(unittest.TestCase):
         wheel = (ROOT / "tools" / "verify_wheel.py").read_text(encoding="utf-8")
         self.assertIn('"open_mmi_trust/manifest.py"', wheel)
         self.assertIn('"open_mmi_trust/data/trust-manifest.v1.json"', wheel)
+        self.assertTrue((ROOT / "tools" / "vendor_bootstrap.py").is_file())
+        self.assertTrue((ROOT / "ui" / "web_dashboard" / "static" / "vendor" / "BOOTSTRAP-LICENSE.txt").is_file())
+        self.assertIn('"ui/web_dashboard/static/vendor/bootstrap-5.3.8.min.css"', wheel)
+        self.assertIn('"ui/web_dashboard/static/vendor/BOOTSTRAP-LICENSE.txt"', wheel)
 
     def test_trust_package_data_is_in_build_configuration(self):
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn('"open_mmi_trust*"', pyproject)
         self.assertIn('open_mmi_trust = ["data/*.json"]', pyproject)
+        self.assertIn('"static/vendor/*.css"', pyproject)
+        self.assertIn('"static/vendor/*.txt"', pyproject)
 
 
 if __name__ == "__main__":

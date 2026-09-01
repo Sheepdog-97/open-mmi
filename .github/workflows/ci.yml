@@ -105,6 +105,7 @@ jobs:
       - name: Verify Open MMI trust boundary
         run: |
           python tools/verify_trust_manifest.py
+          python tools/vendor_bootstrap.py --check
           python -m unittest tests.test_trust_invariants
 
       - name: Verify CSS module cascade

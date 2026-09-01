@@ -59,7 +59,9 @@ vehicles = [
     "static/*.js",
     "static/icons/telltales/*.md",
     "static/icons/telltales/*.png",
-    "static/icons/telltales/*.svg"
+    "static/icons/telltales/*.svg",
+    "static/vendor/*.css",
+    "static/vendor/*.txt"
 ]
 
 [build-system]

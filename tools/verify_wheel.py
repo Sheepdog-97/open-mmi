@@ -77,6 +77,8 @@ REQUIRED_PATHS = {
     "ui/web_dashboard/static/styles-media-sources.css",
     "ui/web_dashboard/static/styles-diagnostics.css",
     "ui/web_dashboard/static/styles-media-final.css",
+    "ui/web_dashboard/static/vendor/bootstrap-5.3.8.min.css",
+    "ui/web_dashboard/static/vendor/BOOTSTRAP-LICENSE.txt",
     "vehicles/catalogue.v1.json",
     "vehicles/_template/config.template.json",
     "vehicles/_template/fixtures/README.md",
