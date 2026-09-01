@@ -55,7 +55,11 @@ class BuildIdentityTests(unittest.TestCase):
         self.assertGreater(len(mutable_assets), 10)
         self.assertEqual({token for _, token in mutable_assets}, {"build-123"})
         self.assertNotIn("__OPEN_MMI_FRONTEND_ID__", rendered)
-        self.assertIn('href="https://cdn.jsdelivr.net/', rendered)
+        self.assertIn(
+            'href="/vendor/bootstrap-5.3.8.min.css?v=build-123"',
+            rendered,
+        )
+        self.assertNotIn("cdn.jsdelivr.net", rendered)
 
 
 class DashboardVersionHttpTests(unittest.TestCase):

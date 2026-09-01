@@ -62,7 +62,7 @@ def verify() -> None:
     if '<link rel="stylesheet" href="/styles.css">' in html:
         raise SystemExit("index.html must load CSS modules directly, not styles.css")
 
-    bootstrap = html.index("bootstrap@5.3.8/dist/css/bootstrap.min.css")
+    bootstrap = html.index("/vendor/bootstrap-5.3.8.min.css")
     if positions[-1] > bootstrap:
         raise SystemExit("Dashboard CSS must remain before Bootstrap to preserve the current cascade")
 
