@@ -33,6 +33,15 @@ from .accepted_state import (
     read_accepted_state,
 )
 from .manifest import DEFAULT_MANIFEST_PATH, ManifestError, load_manifest, manifest_digest
+from .release_integrity import (
+    DEFAULT_INTEGRITY_STATE_PATH,
+    ReleaseIntegrityError,
+    default_install_root as integrity_default_install_root,
+    default_package_root as integrity_default_package_root,
+    integrity_state_digest,
+    read_integrity_state,
+    verify_installed_runtime,
+)
 from .lineage import (
     DEFAULT_TRANSITION_LINEAGE_DIR,
     TransitionLineageError,
@@ -227,6 +236,156 @@ def _inspect_accepted_owner_state(
         **evidence,
     )
 
+
+
+def _inspect_release_integrity(
+    path: Path,
+    install_root: Path,
+    package_root: Path,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return (
+            _check(
+                "release.file-integrity",
+                UNVERIFIED,
+                "Installed Release/File Integrity is not established yet.",
+                path=str(path),
+                established=False,
+                note=(
+                    "Integrity v1 binds installed runtime bytes to an exact accepted Git candidate; "
+                    "it does not establish an independent release-signing identity."
+                ),
+            ),
+            _check(
+                "release.provenance",
+                UNVERIFIED,
+                "No independently pinned release-signing identity is verified yet.",
+                signer_root="not-established",
+            ),
+        )
+    except PermissionError:
+        return (
+            _check(
+                "release.file-integrity",
+                UNVERIFIED,
+                "Installed Release/File Integrity exists behind a permission boundary and could not be inspected.",
+                path=str(path),
+                suggestion="Run the inspector with local read authority for the root-owned trust state.",
+            ),
+            _check(
+                "release.provenance", UNVERIFIED,
+                "No independently pinned release-signing identity is verified yet.",
+                signer_root="not-established",
+            ),
+        )
+    except OSError as exc:
+        return (
+            _check(
+                "release.file-integrity", UNVERIFIED,
+                "Installed Release/File Integrity could not be inspected.",
+                path=str(path), error=str(exc),
+            ),
+            _check(
+                "release.provenance", UNVERIFIED,
+                "No independently pinned release-signing identity is verified yet.",
+                signer_root="not-established",
+            ),
+        )
+
+    if not os.access(path, os.R_OK):
+        return (
+            _check(
+                "release.file-integrity", UNVERIFIED,
+                "Installed Release/File Integrity is present but not readable by this inspector process.",
+                path=str(path), mode=oct(metadata.st_mode & 0o777), uid=metadata.st_uid,
+                suggestion="Run the inspector with local read authority for the root-owned trust state.",
+            ),
+            _check(
+                "release.provenance", UNVERIFIED,
+                "No independently pinned release-signing identity is verified yet.",
+                signer_root="not-established",
+            ),
+        )
+
+    try:
+        state = read_integrity_state(path)
+    except ReleaseIntegrityError as exc:
+        return (
+            _check(
+                "release.file-integrity", FAIL,
+                "Installed Release/File Integrity state is present but fails strict validation.",
+                path=str(path), error=str(exc),
+            ),
+            _check(
+                "release.provenance", UNVERIFIED,
+                "No independently pinned release-signing identity is verified yet.",
+                signer_root="not-established",
+            ),
+        )
+    if state is None:
+        return (
+            _check(
+                "release.file-integrity", UNVERIFIED,
+                "Installed Release/File Integrity is not established yet.",
+                path=str(path), established=False,
+            ),
+            _check(
+                "release.provenance", UNVERIFIED,
+                "No independently pinned release-signing identity is verified yet.",
+                signer_root="not-established",
+            ),
+        )
+
+    verification = verify_installed_runtime(state, install_root, package_root)
+    evidence = {
+        "path": str(path),
+        "install_root": str(install_root),
+        "package_root": str(package_root),
+        "candidate_commit": state["candidate_commit"],
+        "trust_manifest_digest": state["trust_manifest_digest"],
+        "inventory_digest": state["inventory_digest"],
+        "integrity_state_digest": integrity_state_digest(state),
+        "recorded_at": state["recorded_at"],
+        "record_source": state["record_source"],
+        "files_expected": verification["files_expected"],
+    }
+    if not verification["matches"]:
+        return (
+            _check(
+                "release.file-integrity", FAIL,
+                "Installed Open MMI runtime bytes do not match the recorded accepted-candidate inventory.",
+                **evidence,
+                missing=verification["missing"],
+                modified=verification["modified"],
+                extra=verification["extra"],
+                unsafe=verification["unsafe"],
+            ),
+            _check(
+                "release.provenance", UNVERIFIED,
+                "The recorded Git candidate identity is not backed by an independently pinned release-signing identity yet.",
+                candidate_commit=state["candidate_commit"], signer_root="not-established",
+            ),
+        )
+    return (
+        _check(
+            "release.file-integrity", PASS,
+            "Installed Open MMI runtime bytes match the exact recorded Git-candidate inventory.",
+            **evidence,
+            note=(
+                "This proves local byte identity to the accepted candidate Git tree. "
+                "It does not by itself authenticate who produced that Git commit."
+            ),
+        ),
+        _check(
+            "release.provenance", UNVERIFIED,
+            "Installed bytes are commit-bound, but no independently pinned release-signing identity is verified yet.",
+            candidate_commit=state["candidate_commit"],
+            signer_root="not-established",
+            note="Git ancestry and a commit identifier are not a signer trust root.",
+        ),
+    )
 
 
 def _inspect_transition_lineage(
@@ -676,7 +835,8 @@ def _inspect_updater_transition_gate_source(root: Path) -> dict[str, Any]:
     installer = root / "ui" / "update_installer.py"
     coordinator = root / "ui" / "update_coordinator.py"
     gate = root / "open_mmi_trust" / "transition_gate.py"
-    paths = (installer, coordinator, gate)
+    integrity = root / "open_mmi_trust" / "release_integrity.py"
+    paths = (installer, coordinator, gate, integrity)
     missing = [str(path.relative_to(root)) for path in paths if not path.is_file()]
     if missing:
         return _check(
@@ -690,6 +850,7 @@ def _inspect_updater_transition_gate_source(root: Path) -> dict[str, Any]:
         installer_source = installer.read_text(encoding="utf-8")
         coordinator_source = coordinator.read_text(encoding="utf-8")
         gate_source = gate.read_text(encoding="utf-8")
+        integrity_source = integrity.read_text(encoding="utf-8")
         installer_tree = ast.parse(installer_source, filename=str(installer))
         coordinator_tree = ast.parse(coordinator_source, filename=str(coordinator))
         gate_tree = ast.parse(gate_source, filename=str(gate))
@@ -717,8 +878,13 @@ def _inspect_updater_transition_gate_source(root: Path) -> dict[str, Any]:
         return sorted(lines)
 
     installer_gate = call_lines(installer_tree, "require_prepared_candidate_allowed")
+    installer_integrity = call_lines(installer_tree, "require_current_integrity")
     installer_activate = call_lines(installer_tree, "activate_acknowledged_expansion")
+    installer_wheel = call_lines(installer_tree, "_prepare_candidate_wheel")
     installer_deploy = call_lines(installer_tree, "_run_deployment")
+    installer_runtime_verify = call_lines(installer_tree, "verify_runtime_inventory")
+    installer_finalize = call_lines(installer_tree, "finalize_successful_transition")
+    installer_integrity_record = call_lines(installer_tree, "_record_integrity_state")
     coordinator_gate = call_lines(coordinator_tree, "require_prepared_candidate_allowed")
     coordinator_systemctl: list[int] = []
     for node in ast.walk(coordinator_tree):
@@ -750,9 +916,21 @@ def _inspect_updater_transition_gate_source(root: Path) -> dict[str, Any]:
 
     ordered = bool(
         installer_gate
+        and installer_integrity
         and installer_activate
+        and installer_wheel
         and installer_deploy
-        and min(installer_gate) < min(installer_activate) < min(installer_deploy)
+        and installer_runtime_verify
+        and installer_finalize
+        and installer_integrity_record
+        and min(installer_gate)
+        < min(installer_integrity)
+        < min(installer_activate)
+        < min(installer_wheel)
+        < min(installer_deploy)
+        < min(installer_runtime_verify)
+        < min(installer_finalize)
+        < min(installer_integrity_record)
         and coordinator_gate
         and coordinator_systemctl
         and min(coordinator_gate) < min(coordinator_systemctl)
@@ -770,8 +948,13 @@ def _inspect_updater_transition_gate_source(root: Path) -> dict[str, Any]:
             FAIL,
             "Installed updater source does not preserve the reviewed pre-execution Trust Transition Gate ordering.",
             installer_gate_lines=installer_gate,
+            installer_integrity_lines=installer_integrity,
             installer_activation_lines=installer_activate,
+            installer_wheel_lines=installer_wheel,
             installer_deployment_lines=installer_deploy,
+            installer_runtime_verification_lines=installer_runtime_verify,
+            installer_finalize_lines=installer_finalize,
+            installer_integrity_record_lines=installer_integrity_record,
             coordinator_gate_lines=coordinator_gate,
             coordinator_installer_lines=coordinator_systemctl,
             candidate_manifest_data_only=data_only,
@@ -780,13 +963,16 @@ def _inspect_updater_transition_gate_source(root: Path) -> dict[str, Any]:
     return _check(
         "updater.preinstallation-trust-gate",
         PASS,
-        "Installed updater gates the prepared candidate before candidate-controlled deployment executes.",
+        "Installed updater verifies current bytes and Git-object candidate identity before candidate-controlled build/deployment begins, then verifies the built artifact and installed runtime.",
         installer_gate_line=min(installer_gate),
+        installer_integrity_line=min(installer_integrity),
+        installer_wheel_line=min(installer_wheel),
         installer_deployment_line=min(installer_deploy),
+        installer_runtime_verification_line=min(installer_runtime_verify),
         coordinator_gate_line=min(coordinator_gate),
         candidate_manifest_source="git-object-data",
         note=(
-            "This is source-level evidence for the installed Open MMI updater. It is not an OS sandbox against arbitrary privileged replacement code."
+            "The trusted installer checks current runtime integrity and derives candidate identity from Git objects before any candidate-controlled build/deployment step. After trust acceptance, pip may execute the candidate PEP 517 build backend; the resulting wheel is then verified against the Git-object inventory before manage.sh deployment, and installed runtime bytes are rechecked afterward. This is still source-level evidence, not an OS sandbox against arbitrary privileged replacement code."
         ),
     )
 
@@ -971,11 +1157,21 @@ def inspect_system(
     authorization_path: Path = DEFAULT_AUTHORIZATION_PATH,
     accepted_state_path: Path = DEFAULT_ACCEPTED_STATE_PATH,
     lineage_path: Path = DEFAULT_TRANSITION_LINEAGE_DIR,
+    integrity_path: Path = DEFAULT_INTEGRITY_STATE_PATH,
     install_root: Path | None = None,
+    package_root: Path | None = None,
 ) -> dict[str, Any]:
     """Inspect local trust evidence without mutating trust state or contacting a network."""
 
     root = Path(install_root) if install_root is not None else _default_install_root()
+    integrity_source_root = (
+        Path(install_root) if install_root is not None else integrity_default_install_root()
+    )
+    integrity_package_root = (
+        Path(package_root)
+        if package_root is not None
+        else (root if install_root is not None else integrity_default_package_root())
+    )
     manifest, manifest_summary, manifest_check = _inspect_manifest(Path(manifest_path))
     telemetry_summary, telemetry_check = _inspect_telemetry_authorization(Path(authorization_path))
     accepted_check = _inspect_accepted_owner_state(Path(accepted_state_path), manifest)
@@ -988,14 +1184,13 @@ def inspect_system(
     checks.extend(_inspect_dashboard_render(root / "ui" / "web_dashboard" / "static"))
     checks.extend(_declared_assurance_checks(manifest))
 
+    integrity_check, provenance_check = _inspect_release_integrity(
+        Path(integrity_path), integrity_source_root, integrity_package_root
+    )
     checks.extend(
         [
-            _check(
-                "release.file-integrity",
-                UNVERIFIED,
-                "No independently signed installed-file integrity index is defined yet.",
-                note="The manifest self-digest is not a substitute for release-file integrity.",
-            ),
+            integrity_check,
+            provenance_check,
             _inspect_transition_lineage(Path(lineage_path), Path(accepted_state_path)),
             _inspect_updater_transition_gate_source(root),
         ]

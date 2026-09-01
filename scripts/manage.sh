@@ -1457,10 +1457,9 @@ cmd_deploy_prepared() {
     local version="${OPEN_MMI_PREPARED_VERSION:-}"
     local rollback_root="/var/lib/open-mmi/rollback/$transaction"
     local deployment_stage="backup"
-    local candidate_wheel_dir="$rollback_root/candidate-wheel"
-    local candidate_wheel
-    local -a candidate_wheels=()
+    local candidate_wheel="${OPEN_MMI_PREPARED_WHEEL:-}"
     local resolved_stage
+    local resolved_wheel
 
     [[ $EUID -eq 0 ]] || { log_error "Prepared deployment requires root"; return 1; }
     [[ "$transaction" =~ ^prepare-[0-9a-f]{32}$ ]] || { log_error "Invalid prepared transaction"; return 1; }
@@ -1479,6 +1478,17 @@ cmd_deploy_prepared() {
     [[ $(git -c safe.directory="$resolved_stage" -C "$resolved_stage" rev-parse HEAD) == "$commit" ]] || {
         log_error "Prepared commit identity changed"; return 1;
     }
+    resolved_wheel=$(realpath -e -- "$candidate_wheel") || { log_error "Prepared wheel is unavailable"; return 1; }
+    [[ "$resolved_wheel" == "$rollback_root/candidate-wheel/"open_mmi-*.whl ]] || {
+        log_error "Prepared wheel is outside trusted transaction artifacts"; return 1;
+    }
+    [[ -f "$resolved_wheel" && ! -L "$resolved_wheel" && $(stat -c '%u' "$resolved_wheel") -eq 0 ]] || {
+        log_error "Prepared wheel is untrusted"; return 1;
+    }
+    (( (8#$(stat -c '%a' "$resolved_wheel") & 8#022) == 0 )) || {
+        log_error "Prepared wheel permissions are untrusted"; return 1;
+    }
+    candidate_wheel="$resolved_wheel"
 
     # Failures before the rollback function is installed still need a
     # user-visible, allowlisted stage instead of a generic deployment error.
@@ -1633,15 +1643,10 @@ cmd_deploy_prepared() {
     deployment_stage="packaging-tools"
     upgrade_python_packaging_tools "$INSTALL_DIR/venv/bin/python" "$rollback_root"
 
-    deployment_stage="package-build"
-    install -d -m 0700 -o root -g root "$candidate_wheel_dir"
-    env -u PYTHONPATH "$INSTALL_DIR/venv/bin/python" -m pip wheel --no-deps \
-        --wheel-dir "$candidate_wheel_dir" "$resolved_stage"
-    mapfile -t candidate_wheels < <(find "$candidate_wheel_dir" -maxdepth 1 -type f -name 'open_mmi-*.whl' -print)
-    [[ ${#candidate_wheels[@]} -eq 1 ]]
-    candidate_wheel="${candidate_wheels[0]}"
-    env -u PYTHONPATH "$INSTALL_DIR/venv/bin/python" -I \
-        "$resolved_stage/tools/verify_wheel.py" "$candidate_wheel"
+    deployment_stage="package-artifact"
+    # The already-installed trusted installer built and byte-verified this exact
+    # wheel against the candidate Git-object inventory before invoking us.
+    [[ -s "$candidate_wheel" ]]
 
     deployment_stage="repository-head"
     [[ $(sudo -u "$REAL_USER" git -C "$OPEN_MMI_MANAGED_REPOSITORY" rev-parse HEAD) == "$previous_commit" ]]

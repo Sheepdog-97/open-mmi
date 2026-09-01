@@ -9,11 +9,13 @@ from __future__ import annotations
 import os
 import pwd
 import re
+import stat
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence
 
-from open_mmi_trust import transition_gate
+from open_mmi_trust import release_integrity, transition_gate
 from open_mmi_trust.accepted_state import DEFAULT_ACCEPTED_STATE_PATH
 
 from ui import update_coordinator, update_policy
@@ -21,6 +23,7 @@ from ui.web_dashboard import update_status
 
 
 INSTALL_TIMEOUT_SECONDS = 300.0
+WHEEL_BUILD_TIMEOUT_SECONDS = 180.0
 INSTALL_SERVICE = "open-mmi-update-installer.service"
 
 
@@ -70,6 +73,7 @@ def _deployment_environment(
     stage: Path,
     state: Mapping[str, Any],
     source: Mapping[str, str],
+    candidate_wheel: Optional[Path] = None,
 ) -> Dict[str, str]:
     try:
         owner = Path(source["repository_path"]).stat()
@@ -92,7 +96,45 @@ def _deployment_environment(
         "LOGNAME": "root",
         "PIP_CACHE_DIR": "/var/lib/open-mmi/pip-cache",
     })
+    if candidate_wheel is not None:
+        environment["OPEN_MMI_PREPARED_WHEEL"] = str(candidate_wheel)
     return environment
+
+
+def _prepare_candidate_wheel(
+    stage: Path,
+    rollback_root: Path,
+    transaction_id: str,
+    inventory: Sequence[Mapping[str, Any]],
+) -> Path:
+    wheel_dir = rollback_root / transaction_id / "candidate-wheel"
+    try:
+        wheel_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(wheel_dir, 0o700)
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "wheel", "--no-deps", "--wheel-dir", str(wheel_dir), str(stage)],
+            env={**os.environ, "PIP_DISABLE_PIP_VERSION_CHECK": "1", "PYTHONPATH": ""},
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, check=False, timeout=WHEEL_BUILD_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise InstallerError("Prepared candidate wheel could not be built by the trusted installer") from exc
+    if result.returncode != 0:
+        raise InstallerError("Prepared candidate wheel could not be built by the trusted installer")
+    wheels = sorted(wheel_dir.glob("open_mmi-*.whl"))
+    if len(wheels) != 1:
+        raise InstallerError("Prepared candidate wheel artifact is ambiguous")
+    wheel = wheels[0]
+    try:
+        metadata = wheel.lstat()
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1 or metadata.st_mode & 0o022:
+            raise InstallerError("Prepared candidate wheel artifact is untrusted")
+        release_integrity.verify_wheel_against_inventory(wheel, inventory)
+    except (OSError, release_integrity.ReleaseIntegrityError) as exc:
+        if isinstance(exc, InstallerError):
+            raise
+        raise InstallerError("Prepared candidate wheel does not match trusted Git-object inventory") from exc
+    return wheel
 
 
 def _run_deployment(command: Sequence[str], environment: Mapping[str, str]) -> subprocess.CompletedProcess[str]:
@@ -105,7 +147,7 @@ def _run_deployment(command: Sequence[str], environment: Mapping[str, str]) -> s
 
 _DEPLOYMENT_STAGES = {
     "backup", "packaging-tools", "repository-head", "repository-clean", "repository-fetch",
-    "repository-merge", "package-build", "files", "package", "system-services",
+    "repository-merge", "package-build", "package-artifact", "files", "package", "system-services",
     "user-services", "vehicle-config-coordinator", "power-manager",
     "service-health", "api-health", "version-health",
 }
@@ -131,6 +173,9 @@ def install_prepared(
     accepted_state_path: Optional[Path] = None,
     transition_authorization_path: Optional[Path] = None,
     transition_lineage_path: Optional[Path] = None,
+    integrity_state_path: Optional[Path] = None,
+    integrity_install_root: Optional[Path] = None,
+    integrity_package_root: Optional[Path] = None,
 ) -> Dict[str, Any]:
     if os.geteuid() != 0 and state_path == update_coordinator.DEFAULT_STATE_FILE:
         raise InstallerError("Prepared installation requires root")
@@ -152,6 +197,22 @@ def install_prepared(
             state_path, transition_gate.DEFAULT_TRANSITION_LINEAGE_DIR
         )
     )
+    integrity_state_path = (
+        integrity_state_path
+        or update_coordinator._trust_artifact_path(
+            state_path, release_integrity.DEFAULT_INTEGRITY_STATE_PATH
+        )
+    )
+    integrity_install_root = integrity_install_root or (
+        release_integrity.default_install_root()
+        if state_path == update_coordinator.DEFAULT_STATE_FILE
+        else state_path.parent / "runtime"
+    )
+    integrity_package_root = integrity_package_root or (
+        release_integrity.default_package_root()
+        if state_path == update_coordinator.DEFAULT_STATE_FILE
+        else integrity_install_root
+    )
     with update_coordinator.TransactionLock(lock_path):
         state = update_coordinator.read_state(state_path)
         source, source_state = update_status._read_source_descriptor()
@@ -169,13 +230,25 @@ def install_prepared(
                 authorization_path=transition_authorization_path,
                 lineage_path=transition_lineage_path,
             )
+            # The existing runtime must match its previously recorded byte identity
+            # before old trusted code can expand authority or execute candidate build/deploy code.
+            release_integrity.require_current_integrity(
+                integrity_state_path, integrity_install_root, integrity_package_root
+            )
+            expected_release = release_integrity.expected_release_from_git(
+                stage, str(state["candidate_commit"])
+            )
+            if expected_release["trust_manifest_digest"] != transition.candidate_manifest_digest:
+                raise release_integrity.ReleaseIntegrityError(
+                    "candidate runtime inventory Trust Manifest does not match transition-gate manifest"
+                )
             transition_gate.activate_acknowledged_expansion(
                 transition,
                 accepted_state_path=accepted_state_path,
                 authorization_path=transition_authorization_path,
                 lineage_path=transition_lineage_path,
             )
-        except transition_gate.TransitionGateError as exc:
+        except (transition_gate.TransitionGateError, release_integrity.ReleaseIntegrityError) as exc:
             raise InstallerError(str(exc)) from exc
         transaction_id = str(state["transaction_id"])
         update_coordinator._safe_remove_transaction_tree(
@@ -193,9 +266,28 @@ def install_prepared(
             "pip_version_before": "", "pip_version_after": "", "error": "",
         })
         update_coordinator.write_state(state, state_path)
+        candidate_wheel: Optional[Path] = None
+        if command is None:
+            try:
+                candidate_wheel = _prepare_candidate_wheel(
+                    stage, rollback_root, transaction_id, expected_release["inventory"]
+                )
+            except InstallerError as exc:
+                state.update({
+                    "state": "failed", "stage": "package-build",
+                    "updated_at": update_coordinator._timestamp(),
+                    "completed_at": update_coordinator._timestamp(),
+                    "error": str(exc),
+                })
+                failed = update_coordinator.write_state(state, state_path)
+                update_coordinator._best_effort_artifact_cleanup(failed, staging_root, rollback_root)
+                raise
         deployment_command = list(command or (stage / "scripts/manage.sh", "_deploy-prepared"))
         try:
-            result = _run_deployment(deployment_command, _deployment_environment(stage, state, source))
+            result = _run_deployment(
+                deployment_command,
+                _deployment_environment(stage, state, source, candidate_wheel),
+            )
         except (OSError, subprocess.TimeoutExpired) as exc:
             result = None
             failure = "Prepared deployment could not complete"
@@ -212,6 +304,23 @@ def install_prepared(
                 failed, staging_root, rollback_root
             )
             raise InstallerError(failure)
+        verification = release_integrity.verify_runtime_inventory(
+            inventory=expected_release["inventory"],
+            trust_manifest_digest=expected_release["trust_manifest_digest"],
+            candidate_commit=expected_release["candidate_commit"],
+            install_root=integrity_install_root,
+            package_root=integrity_package_root,
+        )
+        if not verification["matches"]:
+            state.update({
+                "state": "failed", "stage": "integrity-verification",
+                "updated_at": update_coordinator._timestamp(),
+                "completed_at": update_coordinator._timestamp(),
+                "error": "Prepared deployment completed but installed runtime failed byte-integrity verification",
+            })
+            failed = update_coordinator.write_state(state, state_path)
+            update_coordinator._best_effort_artifact_cleanup(failed, staging_root, rollback_root)
+            raise InstallerError(state["error"])
         try:
             transition_gate.finalize_successful_transition(
                 transition, accepted_state_path=accepted_state_path,
@@ -228,6 +337,29 @@ def install_prepared(
             update_coordinator._best_effort_artifact_cleanup(
                 failed, staging_root, rollback_root
             )
+            raise InstallerError(state["error"]) from exc
+        try:
+            accepted_now, lineage_head = release_integrity.current_trust_anchors(
+                accepted_state_path, transition_lineage_path
+            )
+            release_integrity._record_integrity_state(
+                candidate_commit=expected_release["candidate_commit"],
+                trust_manifest=expected_release["trust_manifest"],
+                inventory=expected_release["inventory"],
+                accepted_state=accepted_now,
+                lineage_head_record_digest=lineage_head,
+                record_source="prepared-update",
+                path=integrity_state_path,
+            )
+        except release_integrity.ReleaseIntegrityError as exc:
+            state.update({
+                "state": "failed", "stage": "integrity-finalization",
+                "updated_at": update_coordinator._timestamp(),
+                "completed_at": update_coordinator._timestamp(),
+                "error": "Prepared deployment completed but installed integrity state could not be finalized",
+            })
+            failed = update_coordinator.write_state(state, state_path)
+            update_coordinator._best_effort_artifact_cleanup(failed, staging_root, rollback_root)
             raise InstallerError(state["error"]) from exc
         pip_before, pip_after = update_coordinator._packaging_tool_versions(
             rollback_root, transaction_id

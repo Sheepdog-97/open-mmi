@@ -681,13 +681,15 @@ sudo() {{ printf '%s\\0' "$@"; }}
         )
         self.assertLess(
             block.index('deployment_stage="packaging-tools"'),
-            block.index('deployment_stage="package-build"'),
+            block.index('deployment_stage="package-artifact"'),
         )
         self.assertIn('env -u PYTHONPATH "$rollback_root/installation/venv/bin/python" -I -c \'import ui.config_cli\'', block)
         self.assertIn('env -u PYTHONPATH "$INSTALL_DIR/venv/bin/python" -I -c \'import ui.config_cli\'', block)
         self.assertIn('Prepared rollback verified', block)
-        self.assertIn('pip wheel --no-deps', block)
-        self.assertIn('tools/verify_wheel.py', block)
+        self.assertNotIn('pip wheel --no-deps', block)
+        self.assertNotIn('tools/verify_wheel.py', block)
+        self.assertIn('OPEN_MMI_PREPARED_WHEEL', block)
+        self.assertIn('deployment_stage="package-artifact"', block)
         self.assertIn('install_open_mmi_package "$candidate_wheel"', block)
         self.assertIn("import canbusd.core, ui.config_cli, ui.web_dashboard.server", self.text)
         self.assertIn('mv -- "$restored_install" "$INSTALL_DIR"', block)

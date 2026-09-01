@@ -11,7 +11,9 @@ from unittest import mock
 
 from open_mmi_telemetry.guard import _create_authorization
 from open_mmi_trust.accepted_state import _record_accepted_manifest
-from open_mmi_trust.lineage import _record_lineage_baseline
+from open_mmi_trust.lineage import (
+    _record_lineage_baseline, lineage_summary, read_transition_lineage,
+)
 from open_mmi_trust.inspector import (
     FAIL,
     PASS,
@@ -21,6 +23,7 @@ from open_mmi_trust.inspector import (
     _inspect_updater_transition_gate_source,
 )
 from open_mmi_trust.inspector_cli import render_text
+from open_mmi_trust.release_integrity import _record_integrity_state
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -74,6 +77,7 @@ class TrustInspectorTests(unittest.TestCase):
                 authorization_path=authorization,
                 accepted_state_path=accepted_state,
                 lineage_path=accepted_state.parent / "transition-lineage.v1.d",
+                integrity_path=accepted_state.parent / "installed-release-integrity.v1.json",
                 install_root=root,
             )
 
@@ -104,7 +108,70 @@ class TrustInspectorTests(unittest.TestCase):
         self.assertEqual(statuses["dashboard.render-egress"], PASS)
         self.assertEqual(statuses["dashboard.bootstrap-integrity"], PASS)
         self.assertEqual(statuses["release.file-integrity"], UNVERIFIED)
+        self.assertEqual(statuses["release.provenance"], UNVERIFIED)
         self.assertNotIn(FAIL, statuses.values())
+
+    def establish_integrity_fixture(
+        self, root: Path, accepted_state: Path
+    ) -> Path:
+        manifest_target = root / "open_mmi_trust" / "data" / "trust-manifest.v1.json"
+        manifest_target.parent.mkdir(parents=True, exist_ok=True)
+        manifest_target.write_bytes(MANIFEST.read_bytes())
+        files = [
+            root / "canbusd" / "core.py",
+            root / "ui" / "web_dashboard" / "static" / "index.html",
+            root / "ui" / "web_dashboard" / "static" / "vendor" / "bootstrap-5.3.8.min.css",
+            manifest_target,
+        ]
+        inventory = []
+        for path in sorted(files):
+            data = path.read_bytes()
+            inventory.append({
+                "path": path.relative_to(root).as_posix(),
+                "sha256": "sha256:" + hashlib.sha256(data).hexdigest(),
+                "size": len(data),
+            })
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        accepted = _record_accepted_manifest(manifest, accepted_state)
+        lineage_path = accepted_state.parent / "transition-lineage.v1.d"
+        _record_lineage_baseline(accepted, lineage_path)
+        head = lineage_summary(read_transition_lineage(lineage_path))["head_record_digest"]
+        integrity_path = accepted_state.parent / "installed-release-integrity.v1.json"
+        _record_integrity_state(
+            candidate_commit="a" * 40,
+            trust_manifest=manifest,
+            inventory=inventory,
+            accepted_state=accepted,
+            lineage_head_record_digest=head,
+            record_source="baseline-existing-state",
+            path=integrity_path,
+        )
+        return integrity_path
+
+    def test_established_file_integrity_passes_for_exact_runtime_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            authorization, accepted_state, expected = self.fixture(root)
+            self.establish_integrity_fixture(root, accepted_state)
+            report = self.inspect_fixture(root, authorization, accepted_state, expected)
+        file_check = next(check for check in report["checks"] if check["id"] == "release.file-integrity")
+        provenance = next(check for check in report["checks"] if check["id"] == "release.provenance")
+        self.assertEqual(file_check["status"], PASS)
+        self.assertEqual(file_check["evidence"]["candidate_commit"], "a" * 40)
+        self.assertEqual(provenance["status"], UNVERIFIED)
+
+    def test_file_integrity_tamper_is_fail(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            authorization, accepted_state, expected = self.fixture(root)
+            self.establish_integrity_fixture(root, accepted_state)
+            (root / "canbusd" / "core.py").write_text(
+                "def receive(bus):\n    return bus.recv()\n# changed\n", encoding="utf-8"
+            )
+            report = self.inspect_fixture(root, authorization, accepted_state, expected)
+        file_check = next(check for check in report["checks"] if check["id"] == "release.file-integrity")
+        self.assertEqual(file_check["status"], FAIL)
+        self.assertIn("canbusd/core.py", file_check["evidence"]["modified"])
 
     def test_authorized_state_is_redacted_but_scope_visible(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -271,6 +338,8 @@ class TrustInspectorTests(unittest.TestCase):
             "_append_lineage_record",
             "_record_lineage_baseline",
             "_record_state_transition",
+            "_record_integrity_state",
+            "_write_integrity_state",
             "write_text",
             "write_bytes",
             "unlink",

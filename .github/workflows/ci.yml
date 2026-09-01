@@ -106,7 +106,7 @@ jobs:
         run: |
           python tools/verify_trust_manifest.py
           python tools/vendor_bootstrap.py --check
-          python -m unittest tests.test_trust_invariants tests.test_telemetry_guard tests.test_trust_inspector tests.test_accepted_trust_state tests.test_trust_transition_gate tests.test_trust_lineage
+          python -m unittest tests.test_trust_invariants tests.test_telemetry_guard tests.test_trust_inspector tests.test_accepted_trust_state tests.test_trust_transition_gate tests.test_trust_lineage tests.test_release_integrity
 
       - name: Verify CSS module cascade
         run: python tools/verify_css_split.py
@@ -170,6 +170,7 @@ jobs:
           import open_mmi_trust
           from open_mmi_trust import accepted_state as owner_trust_state
           from open_mmi_trust import inspector as trust_inspector
+          from open_mmi_trust import release_integrity as trust_release_integrity
           from open_mmi_trust import transition_gate as trust_transition_gate
           import ui.web_dashboard
           from canbusd import event_registry as vehicle_events
@@ -189,6 +190,7 @@ jobs:
               "telemetry_guard": Path(open_mmi_telemetry.__file__),
               "accepted_owner_trust": Path(owner_trust_state.__file__),
               "trust_inspector": Path(trust_inspector.__file__),
+              "trust_release_integrity": Path(trust_release_integrity.__file__),
               "trust_transition_gate": Path(trust_transition_gate.__file__),
               "vehicle_events": vehicle_events.DEFAULT_REGISTRY_PATH,
               "vehicle_statuses": vehicle_statuses.DEFAULT_REGISTRY_PATH,
@@ -297,6 +299,7 @@ jobs:
               "open-mmi-status": "ui.dashboard.status_cli:main",
               "open-mmi-telemetry": "open_mmi_telemetry.cli:main",
               "open-mmi-trust-inspect": "open_mmi_trust.inspector_cli:main",
+              "open-mmi-trust-integrity": "open_mmi_trust.release_integrity_cli:main",
               "open-mmi-trust-lineage": "open_mmi_trust.lineage_cli:main",
               "open-mmi-trust-state": "open_mmi_trust.accepted_state_cli:main",
               "open-mmi-trust-transition": "open_mmi_trust.transition_gate_cli:main",

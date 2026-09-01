@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:open-mmi:installed-release-integrity:v1",
+  "title": "Open MMI Installed Release Integrity v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "state_id",
+    "recorded_at",
+    "record_source",
+    "candidate_commit",
+    "trust_manifest",
+    "trust_manifest_digest",
+    "inventory",
+    "inventory_digest",
+    "accepted_state_digest_at_recording",
+    "lineage_head_record_digest_at_recording"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "state_id": {"const": "org.open-mmi.installed-release-integrity"},
+    "recorded_at": {"type": "string", "minLength": 1, "maxLength": 64},
+    "record_source": {"enum": ["baseline-existing-state", "prepared-update"]},
+    "candidate_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "trust_manifest": {"type": "object"},
+    "trust_manifest_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "inventory": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "size"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1, "maxLength": 1024},
+          "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "size": {"type": "integer", "minimum": 0, "maximum": 16777216}
+        }
+      }
+    },
+    "inventory_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "accepted_state_digest_at_recording": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "lineage_head_record_digest_at_recording": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

@@ -361,6 +361,86 @@ class TrustInvariantTests(unittest.TestCase):
         self.assertIn('"cat-file"', source)
         self.assertNotIn("scripts/manage.sh", source)
 
+    def test_installed_integrity_mutation_is_confined_to_owner_cli_and_trusted_installer(self):
+        integrity_module = ROOT / "open_mmi_trust" / "release_integrity.py"
+        integrity_cli = ROOT / "open_mmi_trust" / "release_integrity_cli.py"
+        installer = ROOT / "ui" / "update_installer.py"
+        mutation_names = {"_record_integrity_state", "_write_integrity_state"}
+        allowed = {
+            integrity_cli: {"_record_integrity_state"},
+            installer: {"_record_integrity_state"},
+        }
+        offenders: list[str] = []
+        ignored_roots = {"tests", "tools", ".git", ".venv", "venv", "__pycache__", "build", "dist"}
+        for path in sorted(ROOT.rglob("*.py")):
+            if ignored_roots.intersection(path.relative_to(ROOT).parts) or path == integrity_module:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    for alias in node.names:
+                        if alias.name in mutation_names and alias.name not in allowed.get(path, set()):
+                            offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}:import:{alias.name}")
+                if not isinstance(node, ast.Call):
+                    continue
+                if isinstance(node.func, ast.Name):
+                    name = node.func.id
+                elif isinstance(node.func, ast.Attribute):
+                    name = node.func.attr
+                else:
+                    name = ""
+                if name in mutation_names and name not in allowed.get(path, set()):
+                    offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}:{name}")
+        self.assertEqual(
+            offenders, [],
+            "production installed-integrity mutation calls found: " + ", ".join(offenders),
+        )
+
+    def test_candidate_byte_integrity_is_ordered_around_candidate_execution(self):
+        source = (ROOT / "ui" / "update_installer.py").read_text(encoding="utf-8")
+        start = source.index("def install_prepared(")
+        end = source.index("\ndef main(", start)
+        block = source[start:end]
+        markers = [
+            "transition_gate.require_prepared_candidate_allowed(",
+            "release_integrity.require_current_integrity(",
+            "release_integrity.expected_release_from_git(",
+            "transition_gate.activate_acknowledged_expansion(",
+            "_prepare_candidate_wheel(",
+            "_run_deployment(",
+            "release_integrity.verify_runtime_inventory(",
+            "transition_gate.finalize_successful_transition(",
+            "release_integrity._record_integrity_state(",
+        ]
+        positions = [block.index(value) for value in markers]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_candidate_deployment_consumes_old_trusted_preverified_wheel(self):
+        source = (ROOT / "scripts" / "manage.sh").read_text(encoding="utf-8")
+        start = source.index("cmd_deploy_prepared() {")
+        end = source.index("# UNINSTALL", start)
+        block = source[start:end]
+        self.assertIn("OPEN_MMI_PREPARED_WHEEL", block)
+        self.assertIn('deployment_stage="package-artifact"', block)
+        self.assertNotIn("pip wheel --no-deps", block)
+        self.assertNotIn("tools/verify_wheel.py", block)
+        self.assertIn('install_open_mmi_package "$candidate_wheel"', block)
+
+    def test_release_integrity_candidate_inventory_uses_git_object_data(self):
+        path = ROOT / "open_mmi_trust" / "release_integrity.py"
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+        forbidden_calls = {"exec", "eval", "compile", "__import__"}
+        offenders: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                if node.func.id in forbidden_calls:
+                    offenders.append(f"{node.lineno}:{node.func.id}")
+        self.assertEqual(offenders, [])
+        self.assertIn('"ls-tree"', source)
+        self.assertIn('"cat-file"', source)
+        self.assertIn('"show"', source)
+
     def test_current_assurance_matches_enforcement_layers(self):
         manifest = load_manifest()
         self.assertEqual(

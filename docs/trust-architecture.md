@@ -24,9 +24,10 @@ Update continuity keeps three concepts separate:
 
 Trust Manifest v1 establishes the release declaration, Accepted Owner Trust State v1
 establishes the second local authority record, Trust Transition Gate v1 enforces the comparison
-before a prepared candidate receives privileged execution, and Trust Transition Lineage v1
-records accepted-state changes from a locally confirmed genesis baseline forward. Independent
-installed-file/release integrity remains a later anchor.
+before a prepared candidate receives privileged execution, Trust Transition Lineage v1 records
+accepted-state changes from a locally confirmed genesis baseline forward, and Installed
+Release/File Integrity v1 binds active installed runtime bytes to the exact accepted Git candidate.
+An independently pinned release-signer/external verification root remains a later anchor.
 
 ## Current v1 capabilities
 
@@ -295,10 +296,11 @@ proof that a candidate's manifest is truthful. Stronger runtime/OS enforcement a
 verification remain later layers.
 
 A maintainer signature proves provenance. It does not grant permission to silently redraw an
-owner's established trust boundary. Trust Transition Lineage v1 now records local accepted-state
-changes, but its genesis baseline explicitly does not retroactively prove the pre-Lineage history
-and arbitrary root can still replace both local lineage and local accepted state. Independent
-signed installed-file/release integrity remains necessary for external verification.
+owner's established trust boundary. Trust Transition Lineage v1 records local accepted-state
+changes, and Installed Release/File Integrity v1 binds current runtime bytes to the exact accepted
+Git candidate, but their genesis baselines do not retroactively prove earlier history. Arbitrary
+root can still replace installed code plus both local trust stores. An independently pinned release
+signer and external verifier therefore remain necessary for external verification.
 
 ## Trust Transition Lineage v1
 
@@ -362,6 +364,111 @@ lineage have advanced. For a non-expanding candidate whose accepted manifest cha
 state and lineage advance only after deployment succeeds. A candidate with an identical accepted
 manifest produces no redundant authority-transition record.
 
+## Installed Release/File Integrity v1
+
+Installed Release/File Integrity v1 closes a different gap from the Trust Manifest and Transition
+Gate: after an update decision, it answers whether the runtime bytes actually active on the system
+still match the exact candidate Git tree that old trusted code accepted. It does **not** turn Git
+ancestry into signer authentication and it does not give a candidate permission to expand trust.
+
+Production integrity state is a root-owned mode `0600` regular file beneath the existing private
+mode `0700` trust directory:
+
+```text
+/var/lib/open-mmi/trust/installed-release-integrity.v1.json
+```
+
+The state records the exact 40-hex candidate commit, embedded Trust Manifest and digest, a sorted
+canonical runtime-file inventory and inventory digest, and the Accepted Owner Trust State plus
+Lineage-head digests current when that integrity state was recorded. Inventory entries bind each
+logical runtime path to its byte length and SHA-256 digest. Validation rejects duplicate JSON
+fields, non-finite values, unknown fields, symlinked/weakened production state, duplicate paths,
+non-canonical ordering and digest mismatches.
+
+The expected inventory is derived with old trusted code from the exact Git commit objects using
+`git ls-tree`/`git cat-file`; candidate Python is never imported or executed to describe itself.
+Only explicitly supported runtime file kinds and Git modes are accepted. A candidate that adds an
+unrecognized runtime artifact such as a native `.so`, symlink or submodule fails closed until the
+trusted inventory policy is deliberately updated and reviewed. Build cache files such as
+`__pycache__`/`.pyc` are ignored because they are derived runtime artifacts, and the dashboard's
+source-only `ui/web_dashboard/README.md` is explicitly outside the executable/runtime inventory.
+
+### The active runtime is intentionally verified in two physical places
+
+Open MMI does not have one physical runtime root. User services run with
+`WorkingDirectory=/opt/open-mmi`, so imports for `actions`, `bindings`, `canbusd`, `powerd`, `ui`
+and `vehicles` are satisfied by the deployed source tree. Root/system update services and console
+entry points execute the installed wheel from the venv, so `open_mmi_trust`,
+`open_mmi_telemetry`, and wheel-installed copies of the runtime packages live in
+`site-packages`. File Integrity v1 verifies both locations against the same logical Git-object
+inventory. A one-root check would be incomplete and is treated as a trust defect.
+
+### Establishing the first local baseline
+
+An existing installation can establish File Integrity v1 locally with:
+
+```text
+sudo open-mmi-trust-integrity status
+sudo open-mmi-trust-integrity bootstrap
+```
+
+Bootstrap requires root plus an interactive TTY, requires current Accepted Owner Trust State and
+Lineage to be valid, rejects a generation regression or an installed manifest broader than the
+accepted ceiling, and requires an exact confirmation phrase bound to the first 12 hex characters
+of the candidate inventory digest. A managed checkout must identify one exact committed tree; a
+dirty editable checkout is refused rather than silently attributing uncommitted bytes to a Git
+commit. The bootstrap summary explicitly states `history_before_baseline: unverified`; the stored
+state identifies its source as `baseline-existing-state`. Together those semantics establish
+evidence from that exact point forward and do not retroactively attest earlier installations.
+
+### Prepared-update ordering
+
+For a managed prepared update, already-installed trusted code now enforces this ordering:
+
+1. re-evaluate the Trust Transition Gate against current Accepted Owner Trust State and Lineage;
+2. require the **currently installed** split runtime to match its existing integrity state;
+3. derive the candidate Trust Manifest and runtime inventory from the exact candidate Git objects;
+4. for an acknowledged expansion, advance the already-defined accepted-state/lineage authority
+   transition only after those current checks succeed;
+5. only after the old-trusted trust decision (and any acknowledged expansion activation), invoke
+   the candidate wheel build with the already-installed Python/pip into the root-owned transaction
+   rollback tree. A PEP 517 build backend is candidate-controlled code, so this build is deliberately
+   the first candidate-controlled execution point and must never move before steps 1–4;
+6. verify the resulting wheel's complete logical runtime payload against the Git-object inventory;
+7. pass `scripts/manage.sh _deploy-prepared` only that exact transaction-bound, root-owned wheel;
+8. after deployment and service health checks, verify both active runtime locations against the
+   exact candidate inventory;
+9. finalize an equal/narrower accepted-state transition where needed, then atomically record the
+   new integrity state.
+
+The candidate therefore cannot silently choose a different Python package artifact after being
+accepted. The wheel build itself may execute candidate-controlled PEP 517 backend code, but only
+after old trusted code has completed the boundary decision and, for an acknowledged expansion,
+advanced accepted authority plus lineage. The build output is not trusted merely because it built:
+it must match the Git-object inventory before `manage.sh` receives it. Missing or mismatched current
+integrity blocks later prepared updates; a post-deployment mismatch is a failed update and no new
+integrity baseline is recorded. The current deployment engine still runs the accepted candidate's
+`scripts/manage.sh _deploy-prepared` after the old-side gate and wheel verification, so this is not
+yet a fully old-code-owned filesystem deployment engine. Also, a failure detected by the outer installer after candidate deployment returns may
+leave candidate bytes present while the updater remains failed and integrity state is not
+advanced; future work can move final file replacement/rollback entirely into the trusted
+installer. Those limitations must not be described as atomic attestation.
+
+### Integrity is not provenance
+
+Trust Inspector exposes two separate conclusions:
+
+- `release.file-integrity` can be `PASS` when strict local state is valid and all active bytes
+  match the recorded accepted Git candidate;
+- `release.provenance` remains `UNVERIFIED` because Open MMI does not yet pin an independent
+  release-signing identity that installed trusted code or an external verifier can validate.
+
+This separation is intentional. A Git commit ID and matching bytes identify content; forward
+ancestry identifies history in the repository object graph. Neither statement by itself answers
+which signer the owner independently trusts. Likewise, arbitrary root can replace both installed
+code and this local integrity state. A later signer-root / independent Trust Checker layer should
+consume these exact digests as evidence without upgrading local integrity into a provenance claim.
+
 ## SI and downstream distributions
 
 Open MMI does not attempt to prevent a system integrator or owner with control of a machine
@@ -418,13 +525,15 @@ locally bootstrapped, and Trust Inspector v1 now reproduces the source-level ord
 Transition Gate v1: coordinator preflight before installer launch, installer recheck before
 candidate deployment, and Git-object candidate-manifest inspection. Trust Transition Lineage v1
 is inspected as a hash-chained local record and becomes `PASS` once a locally confirmed baseline
-exists and its head anchors current accepted state. Signed installed-file integrity remains
-unimplemented, so that check stays `UNVERIFIED`. A normal current installation therefore still
-has an overall `UNVERIFIED` result
-even when all available concrete checks pass.
+exists and its head anchors current accepted state. Installed Release/File Integrity v1 can make
+`release.file-integrity` `PASS` once its locally confirmed baseline exists and both active runtime
+roots match it. `release.provenance` deliberately remains `UNVERIFIED` because no independently
+pinned Open MMI release-signing identity exists yet. A normal current installation therefore still
+has an overall `UNVERIFIED` result even when all available concrete checks pass.
 
 That limitation is intentional. The built-in inspector is evidence produced by the installed
-software itself; without an independent integrity/lineage root, a sufficiently privileged
-modified installation can modify the inspector too. A later independent Trust Checker should
-consume the same kinds of evidence from outside the inspected installation and turn more of
-these `UNVERIFIED` results into independently grounded conclusions.
+software itself; local File Integrity v1 makes silent byte drift detectable relative to its local
+anchor, but sufficiently privileged modified software can replace both the inspector and that
+local anchor. A later independent Trust Checker with a pinned signer/external integrity root should
+consume the same kinds of evidence from outside the inspected installation and turn more of these
+`UNVERIFIED` results into independently grounded conclusions.

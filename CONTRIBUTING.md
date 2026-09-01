@@ -131,6 +131,20 @@ separately so candidate software cannot silently redefine the owner's accepted c
 Normal production code must not call accepted-state mutation primitives, and the
 `accept-current` CLI must never be extended into a post-install expansion bypass.
 
+Installed Release/File Integrity is also part of this trust contract. Runtime inventory
+definitions must cover both active physical locations: `/opt/open-mmi` source imports and the
+venv `site-packages` used by console/system-service entry points. Do not replace that split check
+with a convenient one-root approximation. New executable/importable runtime file types must be
+added deliberately to Git-object inventory, wheel verification, installed-runtime verification,
+packaging and tests in the same change. The prepared candidate wheel must be built and verified
+by already-installed trusted code after the Transition Gate; candidate code must not select,
+replace or rebuild a different runtime artifact. Production integrity-state mutation remains
+limited to the local owner bootstrap CLI and installed updater flow.
+
+Keep byte integrity and signer provenance separate. A matching Git-object inventory proves local
+content identity to the recorded candidate; it does not justify a `PASS` provenance claim without
+an independently pinned signer root.
+
 Examples of trust-relevant changes include:
 
 - CAN transmission or a weaker receive-only control;
@@ -144,7 +158,7 @@ Run:
 
 ```bash
 python tools/verify_trust_manifest.py
-python -m unittest tests.test_trust_invariants tests.test_trust_manifest tests.test_telemetry_guard tests.test_trust_inspector tests.test_accepted_trust_state
+python -m unittest tests.test_trust_invariants tests.test_trust_manifest tests.test_telemetry_guard tests.test_trust_inspector tests.test_accepted_trust_state tests.test_trust_transition_gate tests.test_trust_lineage tests.test_release_integrity
 ```
 
 The first Trust Manifest generation is intentionally conservative: some capabilities
@@ -694,3 +708,5 @@ Update and trust-boundary changes must preserve the old-trusted-side transition 
 The `open-mmi-trust-transition` owner surface must remain fixed to the coordinator's exact prepared transaction. Do not add candidate path/ref/repository/URL arguments, non-interactive confirmation flags, or reusable expansion tokens. Expansion authorization must remain bound to the exact transaction, candidate commit, current accepted-state digest and candidate manifest digest, and the installer must independently recheck the gate immediately before candidate deployment. Changes to these invariants require dedicated trust-transition tests and security review.
 
 Accepted-state changes must also preserve Trust Transition Lineage v1. Do not rewrite, truncate, renumber, or replace existing lineage records. New records must extend the current canonical record digest, reproduce the accepted-state before/after digests, retain the full post-transition accepted-state snapshot, and recompute the manifest relation/changes from the prior record. The updater must refuse prepared candidates when the lineage head does not anchor current Accepted Owner Trust State. Initial lineage establishment and any crash reconciliation remain local interactive owner operations; do not add silent lineage repair or a candidate-controlled reconciliation path.
+
+Installed Release/File Integrity v1 must preserve the same ordering. Old trusted code must verify the current installed runtime and derive the candidate inventory from exact Git objects before any candidate-controlled build or deployment step. `pip wheel` may execute a candidate PEP 517 build backend, so that build is itself candidate-controlled execution and must remain after the Trust Transition Gate (and after acknowledged expansion activation). The resulting wheel must match the Git-object inventory before `scripts/manage.sh` receives it, and the installed runtime must match again before the new integrity state is recorded. Do not weaken this into worktree-derived inventory, candidate-selected wheels, one-root-only verification, or a provenance claim.

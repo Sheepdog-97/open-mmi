@@ -10,9 +10,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from open_mmi_trust.accepted_state import _record_accepted_manifest, read_accepted_state
-from open_mmi_trust import transition_gate
+from open_mmi_trust import release_integrity, transition_gate
 from open_mmi_trust.manifest import load_manifest
-from open_mmi_trust.lineage import _record_lineage_baseline
+from open_mmi_trust.lineage import (
+    _record_lineage_baseline, lineage_summary, read_transition_lineage,
+)
 
 from ui import update_coordinator, update_installer
 
@@ -69,8 +71,27 @@ class UpdateInstallerTests(unittest.TestCase):
         accepted_state = _record_accepted_manifest(
             accepted_manifest, root / "trust" / "accepted-owner-trust.v1.json"
         )
-        _record_lineage_baseline(
-            accepted_state, root / "trust" / "transition-lineage.v1.d"
+        lineage_path = root / "trust" / "transition-lineage.v1.d"
+        _record_lineage_baseline(accepted_state, lineage_path)
+        expected_installed = release_integrity.expected_release_from_git(stage, installed)
+        runtime = root / "runtime"
+        for entry in expected_installed["inventory"]:
+            destination = runtime / entry["path"]
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            data = subprocess.run(
+                ["git", "-C", str(stage), "show", f"{installed}:{entry['path']}"],
+                check=True, stdout=subprocess.PIPE,
+            ).stdout
+            destination.write_bytes(data)
+        lineage_head = lineage_summary(read_transition_lineage(lineage_path))["head_record_digest"]
+        release_integrity._record_integrity_state(
+            candidate_commit=installed,
+            trust_manifest=expected_installed["trust_manifest"],
+            inventory=expected_installed["inventory"],
+            accepted_state=accepted_state,
+            lineage_head_record_digest=lineage_head,
+            record_source="baseline-existing-state",
+            path=root / "trust" / "installed-release-integrity.v1.json",
         )
         source = {
             "repository_path": str(root), "installed_commit": installed,
@@ -79,15 +100,37 @@ class UpdateInstallerTests(unittest.TestCase):
         }
         return source, state_path, root / "lock", staging
 
+    def materialize_candidate_runtime(
+        self, root: Path, stage: Path, candidate_commit: str
+    ) -> None:
+        expected_candidate = release_integrity.expected_release_from_git(stage, candidate_commit)
+        runtime = root / "runtime"
+        for entry in expected_candidate["inventory"]:
+            destination = runtime / entry["path"]
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            data = subprocess.run(
+                ["git", "-C", str(stage), "show", f"{candidate_commit}:{entry['path']}"],
+                check=True, stdout=subprocess.PIPE,
+            ).stdout
+            destination.write_bytes(data)
+
     def test_installs_only_revalidated_nightly_candidate_with_fixed_command(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source, state_path, lock_path, staging = self.prepared(root)
+            state = update_coordinator.read_state(state_path)
+            stage = staging / state["transaction_id"]
+
+            def deploy(command, environment):
+                del environment
+                self.materialize_candidate_runtime(root, stage, state["candidate_commit"])
+                return subprocess.CompletedProcess(command, 0)
+
             with patch.object(update_installer.update_status, "_read_source_descriptor", return_value=(source, "configured")), patch.object(
                 update_installer.update_policy, "read_policy", return_value=({"channel": "nightly"}, "configured")
             ), patch.object(update_installer.update_status, "_repository_snapshot", return_value={"state": "ready"}
             ), patch.object(update_installer.pwd, "getpwuid", return_value=type("Account", (), {"pw_name": "tester"})()), patch.object(
-                update_installer, "_run_deployment", return_value=subprocess.CompletedProcess(["deploy"], 0)
+                update_installer, "_run_deployment", side_effect=deploy
             ) as run:
                 completed = update_installer.install_prepared(
                     state_path, lock_path, staging, command=("fixed-deploy",)
@@ -102,6 +145,8 @@ class UpdateInstallerTests(unittest.TestCase):
             root = Path(temporary)
             source, state_path, lock_path, staging = self.prepared(root)
             rollback = root / "rollback"
+            state = update_coordinator.read_state(state_path)
+            stage = staging / state["transaction_id"]
 
             def deploy(command, environment):
                 archive = rollback / environment["OPEN_MMI_PREPARED_TRANSACTION"]
@@ -112,6 +157,7 @@ class UpdateInstallerTests(unittest.TestCase):
                 after.write_text("26.2.1\n", encoding="utf-8")
                 before.chmod(0o644)
                 after.chmod(0o644)
+                self.materialize_candidate_runtime(root, stage, state["candidate_commit"])
                 return subprocess.CompletedProcess(command, 0, stdout="")
 
             with patch.object(update_installer.update_status, "_read_source_descriptor", return_value=(source, "configured")), patch.object(
@@ -185,6 +231,10 @@ class UpdateInstallerTests(unittest.TestCase):
             "Prepared deployment failed during package-build; rollback unverified",
         )
         self.assertEqual(
+            update_installer._deployment_failure("Prepared deployment failed at stage: package-artifact"),
+            "Prepared deployment failed during package-artifact; rollback unverified",
+        )
+        self.assertEqual(
             update_installer._deployment_failure(
                 "Prepared deployment failed at stage: vehicle-config-coordinator"
             ),
@@ -203,6 +253,8 @@ class UpdateInstallerTests(unittest.TestCase):
                 root = Path(temporary)
                 source, state_path, lock_path, staging = self.prepared(root)
                 rollback = root / "rollback"
+                state = update_coordinator.read_state(state_path)
+                stage = staging / state["transaction_id"]
                 for index, character in enumerate("bcd", start=1):
                     archive = rollback / ("prepare-" + character * 32)
                     archive.mkdir(parents=True)
@@ -211,6 +263,8 @@ class UpdateInstallerTests(unittest.TestCase):
                 def deploy(command, environment):
                     current = rollback / environment["OPEN_MMI_PREPARED_TRANSACTION"]
                     current.mkdir()
+                    if returncode == 0:
+                        self.materialize_candidate_runtime(root, stage, state["candidate_commit"])
                     return subprocess.CompletedProcess(
                         command,
                         returncode,
@@ -319,6 +373,7 @@ class UpdateInstallerTests(unittest.TestCase):
                 self.assertIsNotNone(accepted_now)
                 self.assertEqual(accepted_now["manifest"], candidate_manifest)
                 self.assertFalse(authorization_path.exists())
+                self.materialize_candidate_runtime(root, stage, state["candidate_commit"])
                 return subprocess.CompletedProcess(command, 0, stdout="")
 
             with patch.object(update_installer.update_status, "_read_source_descriptor", return_value=(source, "configured")), patch.object(
@@ -331,6 +386,69 @@ class UpdateInstallerTests(unittest.TestCase):
                     state_path, lock_path, staging, command=("candidate-deploy",)
                 )
             self.assertEqual(completed["state"], "complete")
+
+    def test_missing_integrity_state_blocks_before_candidate_deployment(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, state_path, lock_path, staging = self.prepared(root)
+            (root / "trust" / "installed-release-integrity.v1.json").unlink()
+            with patch.object(update_installer.update_status, "_read_source_descriptor", return_value=(source, "configured")), patch.object(
+                update_installer.update_policy, "read_policy", return_value=({"channel": "nightly"}, "configured")
+            ), patch.object(update_installer.update_status, "_repository_snapshot", return_value={"state": "ready"}
+            ), patch.object(update_installer, "_run_deployment") as run, self.assertRaisesRegex(
+                update_installer.InstallerError, "Integrity is not established"
+            ):
+                update_installer.install_prepared(
+                    state_path, lock_path, staging, command=("must-not-run",)
+                )
+            run.assert_not_called()
+            self.assertEqual(update_coordinator.read_state(state_path)["state"], "prepared")
+
+    def test_tampered_installed_runtime_blocks_before_candidate_deployment(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, state_path, lock_path, staging = self.prepared(root)
+            injected = root / "runtime" / "open_mmi_trust" / "injected.py"
+            injected.write_text("pass\n", encoding="utf-8")
+            with patch.object(update_installer.update_status, "_read_source_descriptor", return_value=(source, "configured")), patch.object(
+                update_installer.update_policy, "read_policy", return_value=({"channel": "nightly"}, "configured")
+            ), patch.object(update_installer.update_status, "_repository_snapshot", return_value={"state": "ready"}
+            ), patch.object(update_installer, "_run_deployment") as run, self.assertRaisesRegex(
+                update_installer.InstallerError, "runtime bytes do not match"
+            ):
+                update_installer.install_prepared(
+                    state_path, lock_path, staging, command=("must-not-run",)
+                )
+            run.assert_not_called()
+            self.assertEqual(update_coordinator.read_state(state_path)["state"], "prepared")
+
+    def test_successful_deployment_advances_installed_integrity_to_candidate_commit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, state_path, lock_path, staging = self.prepared(root)
+            state = update_coordinator.read_state(state_path)
+            stage = staging / state["transaction_id"]
+
+            def deploy(command, environment):
+                del environment
+                self.materialize_candidate_runtime(root, stage, state["candidate_commit"])
+                return subprocess.CompletedProcess(command, 0, stdout="")
+
+            with patch.object(update_installer.update_status, "_read_source_descriptor", return_value=(source, "configured")), patch.object(
+                update_installer.update_policy, "read_policy", return_value=({"channel": "nightly"}, "configured")
+            ), patch.object(update_installer.update_status, "_repository_snapshot", return_value={"state": "ready"}
+            ), patch.object(update_installer.pwd, "getpwuid", return_value=type("Account", (), {"pw_name": "tester"})()), patch.object(
+                update_installer, "_run_deployment", side_effect=deploy
+            ):
+                completed = update_installer.install_prepared(
+                    state_path, lock_path, staging, command=("fixed-deploy",)
+                )
+            integrity = release_integrity.read_integrity_state(
+                root / "trust" / "installed-release-integrity.v1.json"
+            )
+        self.assertIsNotNone(integrity)
+        self.assertEqual(integrity["candidate_commit"], completed["candidate_commit"])
+        self.assertEqual(integrity["record_source"], "prepared-update")
 
     def test_service_entry_point_accepts_no_arguments(self):
         with self.assertRaises(SystemExit):
