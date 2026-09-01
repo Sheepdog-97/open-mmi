@@ -314,10 +314,23 @@ class TrustInvariantTests(unittest.TestCase):
                     result.append(node.lineno)
             return sorted(result)
 
+        installer_integrity = lines(installer_tree, "require_current_integrity")
+        installer_current_provenance = lines(installer_tree, "require_current_release_provenance")
+        installer_candidate_provenance = lines(installer_tree, "require_candidate_release_provenance")
         installer_gate = lines(installer_tree, "require_prepared_candidate_allowed")
         installer_activate = lines(installer_tree, "activate_acknowledged_expansion")
         installer_deploy = lines(installer_tree, "_run_deployment")
-        self.assertTrue(installer_gate and installer_activate and installer_deploy)
+        self.assertTrue(
+            installer_integrity
+            and installer_current_provenance
+            and installer_candidate_provenance
+            and installer_gate
+            and installer_activate
+            and installer_deploy
+        )
+        self.assertLess(min(installer_integrity), min(installer_current_provenance))
+        self.assertLess(min(installer_current_provenance), min(installer_candidate_provenance))
+        self.assertLess(min(installer_candidate_provenance), min(installer_gate))
         self.assertLess(min(installer_gate), min(installer_activate))
         self.assertLess(min(installer_activate), min(installer_deploy))
 
@@ -402,8 +415,10 @@ class TrustInvariantTests(unittest.TestCase):
         end = source.index("\ndef main(", start)
         block = source[start:end]
         markers = [
-            "transition_gate.require_prepared_candidate_allowed(",
             "release_integrity.require_current_integrity(",
+            "release_provenance.require_current_release_provenance(",
+            "release_provenance.require_candidate_release_provenance(",
+            "transition_gate.require_prepared_candidate_allowed(",
             "release_integrity.expected_release_from_git(",
             "transition_gate.activate_acknowledged_expansion(",
             "_prepare_candidate_wheel(",
@@ -440,6 +455,60 @@ class TrustInvariantTests(unittest.TestCase):
         self.assertIn('"ls-tree"', source)
         self.assertIn('"cat-file"', source)
         self.assertIn('"show"', source)
+
+    def test_release_signer_root_mutation_is_confined_to_local_bootstrap_cli(self):
+        provenance_module = ROOT / "open_mmi_trust" / "release_provenance.py"
+        provenance_cli = ROOT / "open_mmi_trust" / "release_provenance_cli.py"
+        mutation_names = {"_write_provenance_root"}
+        offenders: list[str] = []
+        ignored_roots = {"tests", "tools", ".git", ".venv", "venv", "__pycache__", "build", "dist"}
+        for path in sorted(ROOT.rglob("*.py")):
+            if ignored_roots.intersection(path.relative_to(ROOT).parts) or path == provenance_module:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    for alias in node.names:
+                        if alias.name in mutation_names and path != provenance_cli:
+                            offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}:import:{alias.name}")
+                if not isinstance(node, ast.Call):
+                    continue
+                if isinstance(node.func, ast.Name):
+                    name = node.func.id
+                elif isinstance(node.func, ast.Attribute):
+                    name = node.func.attr
+                else:
+                    name = ""
+                if name in mutation_names and path != provenance_cli:
+                    offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}:{name}")
+        self.assertEqual(
+            offenders, [],
+            "production release-signer root mutation calls found: " + ", ".join(offenders),
+        )
+
+    def test_release_provenance_verifier_is_offline_isolated_and_fixed_program_bound(self):
+        path = ROOT / "open_mmi_trust" / "release_provenance.py"
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+        forbidden_imports = {"requests", "urllib", "http", "socket"}
+        offenders: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.split(".", 1)[0] in forbidden_imports:
+                        offenders.append(f"{node.lineno}:import:{alias.name}")
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                if node.module.split(".", 1)[0] in forbidden_imports:
+                    offenders.append(f"{node.lineno}:import:{node.module}")
+        self.assertEqual(offenders, [])
+        self.assertIn('GPG_PROGRAM = Path("/usr/bin/gpg")', source)
+        self.assertIn('GIT_PROGRAM = Path("/usr/bin/git")', source)
+        self.assertIn('"GNUPGHOME"', source)
+        self.assertIn('"GIT_CONFIG_NOSYSTEM"', source)
+        self.assertIn('"GIT_CONFIG_GLOBAL"', source)
+        self.assertIn('"verify-commit", "--raw"', source)
+        self.assertNotIn("--auto-key-retrieve", source)
+        self.assertNotIn("--keyserver", source)
 
     def test_current_assurance_matches_enforcement_layers(self):
         manifest = load_manifest()

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-mmi.org/schemas/release-signer-root.v1.schema.json",
+  "title": "Open MMI Release Signer Root v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "root_id",
+    "established_at",
+    "root_source",
+    "algorithm",
+    "primary_fingerprint",
+    "signing_fingerprints",
+    "public_key_base64",
+    "public_key_sha256",
+    "baseline_commit",
+    "baseline_integrity_state_digest",
+    "history_before_baseline"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "root_id": {"const": "org.open-mmi.release-signer-root"},
+    "established_at": {"type": "string", "minLength": 1, "maxLength": 64},
+    "root_source": {"const": "owner-pinned-local-key"},
+    "algorithm": {"const": "openpgp"},
+    "primary_fingerprint": {
+      "type": "string",
+      "pattern": "^(?:[0-9A-F]{40}|[0-9A-F]{64})$"
+    },
+    "signing_fingerprints": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^(?:[0-9A-F]{40}|[0-9A-F]{64})$"
+      }
+    },
+    "public_key_base64": {"type": "string", "minLength": 1, "maxLength": 1048576},
+    "public_key_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "baseline_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "baseline_integrity_state_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "history_before_baseline": {"const": "unverified"}
+  }
+}

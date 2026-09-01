@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence
 
-from open_mmi_trust import release_integrity, transition_gate
+from open_mmi_trust import release_integrity, release_provenance, transition_gate
 from open_mmi_trust.accepted_state import DEFAULT_ACCEPTED_STATE_PATH
 
 from ui import update_coordinator, update_policy
@@ -174,6 +174,7 @@ def install_prepared(
     transition_authorization_path: Optional[Path] = None,
     transition_lineage_path: Optional[Path] = None,
     integrity_state_path: Optional[Path] = None,
+    provenance_state_path: Optional[Path] = None,
     integrity_install_root: Optional[Path] = None,
     integrity_package_root: Optional[Path] = None,
 ) -> Dict[str, Any]:
@@ -203,6 +204,12 @@ def install_prepared(
             state_path, release_integrity.DEFAULT_INTEGRITY_STATE_PATH
         )
     )
+    provenance_state_path = (
+        provenance_state_path
+        or update_coordinator._trust_artifact_path(
+            state_path, release_provenance.DEFAULT_PROVENANCE_ROOT_PATH
+        )
+    )
     integrity_install_root = integrity_install_root or (
         release_integrity.default_install_root()
         if state_path == update_coordinator.DEFAULT_STATE_FILE
@@ -222,6 +229,23 @@ def install_prepared(
         stage = _trusted_stage(state, staging_root)
         _revalidate_candidate(stage, state, source, str(policy["channel"]))
         try:
+            # Current byte identity and release provenance are prerequisites for even
+            # evaluating a future candidate's trust-boundary transition.  Both current
+            # and candidate signatures are verified offline against the owner-pinned
+            # signer root before any candidate-controlled build/deployment can begin.
+            current_integrity = release_integrity.require_current_integrity(
+                integrity_state_path, integrity_install_root, integrity_package_root
+            )
+            if current_integrity["candidate_commit"] != str(source["installed_commit"]).lower():
+                raise release_integrity.ReleaseIntegrityError(
+                    "installed integrity commit does not match managed update source identity"
+                )
+            release_provenance.require_current_release_provenance(
+                provenance_state_path, stage, current_integrity["candidate_commit"]
+            )
+            release_provenance.require_candidate_release_provenance(
+                provenance_state_path, stage, str(state["candidate_commit"])
+            )
             transition = transition_gate.require_prepared_candidate_allowed(
                 stage,
                 transaction_id=state["transaction_id"],
@@ -229,11 +253,6 @@ def install_prepared(
                 accepted_state_path=accepted_state_path,
                 authorization_path=transition_authorization_path,
                 lineage_path=transition_lineage_path,
-            )
-            # The existing runtime must match its previously recorded byte identity
-            # before old trusted code can expand authority or execute candidate build/deploy code.
-            release_integrity.require_current_integrity(
-                integrity_state_path, integrity_install_root, integrity_package_root
             )
             expected_release = release_integrity.expected_release_from_git(
                 stage, str(state["candidate_commit"])
@@ -248,7 +267,11 @@ def install_prepared(
                 authorization_path=transition_authorization_path,
                 lineage_path=transition_lineage_path,
             )
-        except (transition_gate.TransitionGateError, release_integrity.ReleaseIntegrityError) as exc:
+        except (
+            transition_gate.TransitionGateError,
+            release_integrity.ReleaseIntegrityError,
+            release_provenance.ReleaseProvenanceError,
+        ) as exc:
             raise InstallerError(str(exc)) from exc
         transaction_id = str(state["transaction_id"])
         update_coordinator._safe_remove_transaction_tree(

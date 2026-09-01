@@ -142,8 +142,10 @@ replace or rebuild a different runtime artifact. Production integrity-state muta
 limited to the local owner bootstrap CLI and installed updater flow.
 
 Keep byte integrity and signer provenance separate. A matching Git-object inventory proves local
-content identity to the recorded candidate; it does not justify a `PASS` provenance claim without
-an independently pinned signer root.
+content identity to the recorded candidate; provenance requires a separately owner-established
+pinned signer root and a valid signature on that exact commit. A valid signer never authorizes a
+Trust Manifest expansion by itself. Production signer-root mutation is create-once and confined to
+the local interactive bootstrap CLI; v1 has no rotation/replacement or network discovery path.
 
 Examples of trust-relevant changes include:
 
@@ -709,4 +711,4 @@ The `open-mmi-trust-transition` owner surface must remain fixed to the coordinat
 
 Accepted-state changes must also preserve Trust Transition Lineage v1. Do not rewrite, truncate, renumber, or replace existing lineage records. New records must extend the current canonical record digest, reproduce the accepted-state before/after digests, retain the full post-transition accepted-state snapshot, and recompute the manifest relation/changes from the prior record. The updater must refuse prepared candidates when the lineage head does not anchor current Accepted Owner Trust State. Initial lineage establishment and any crash reconciliation remain local interactive owner operations; do not add silent lineage repair or a candidate-controlled reconciliation path.
 
-Installed Release/File Integrity v1 must preserve the same ordering. Old trusted code must verify the current installed runtime and derive the candidate inventory from exact Git objects before any candidate-controlled build or deployment step. `pip wheel` may execute a candidate PEP 517 build backend, so that build is itself candidate-controlled execution and must remain after the Trust Transition Gate (and after acknowledged expansion activation). The resulting wheel must match the Git-object inventory before `scripts/manage.sh` receives it, and the installed runtime must match again before the new integrity state is recorded. Do not weaken this into worktree-derived inventory, candidate-selected wheels, one-root-only verification, or a provenance claim.
+Installed Release/File Integrity v1 and Release Provenance v1 must preserve the same ordering. Old trusted code must verify current installed integrity, bind that integrity commit to managed source identity, verify current and candidate commit signatures against the fixed pinned signer root, pass the Trust Transition Gate, and derive candidate inventory from exact Git objects before any candidate-controlled build or deployment step. `pip wheel` may execute a candidate PEP 517 build backend, so that build is itself candidate-controlled execution and must remain after provenance/trust decisions (and after acknowledged expansion activation). The resulting wheel must match the Git-object inventory before `scripts/manage.sh` receives it, and the installed runtime must match again before the new integrity state is recorded. Do not weaken this into worktree-derived inventory, candidate-selected wheels, one-root-only verification, GitHub-badge/user-keyring trust, network key discovery, automatic signer rotation, or a signature-as-capability-authorization claim.

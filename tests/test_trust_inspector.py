@@ -20,10 +20,14 @@ from open_mmi_trust.inspector import (
     UNVERIFIED,
     canonical_report_bytes,
     inspect_system,
+    _inspect_release_provenance,
     _inspect_updater_transition_gate_source,
 )
 from open_mmi_trust.inspector_cli import render_text
-from open_mmi_trust.release_integrity import _record_integrity_state
+from open_mmi_trust.release_integrity import (
+    _record_integrity_state, integrity_state_digest, read_integrity_state,
+)
+from open_mmi_trust.release_provenance import ReleaseProvenanceError
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -159,6 +163,89 @@ class TrustInspectorTests(unittest.TestCase):
         self.assertEqual(file_check["status"], PASS)
         self.assertEqual(file_check["evidence"]["candidate_commit"], "a" * 40)
         self.assertEqual(provenance["status"], UNVERIFIED)
+
+    def test_pinned_release_provenance_passes_only_for_integrity_bound_commit_signature(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _authorization, accepted_state, _expected = self.fixture(root)
+            integrity_path = self.establish_integrity_fixture(root, accepted_state)
+            integrity = read_integrity_state(integrity_path)
+            assert integrity is not None
+            provenance_path = accepted_state.parent / "release-signer-root.v1.json"
+            provenance_path.write_text("{}\n", encoding="utf-8")
+            provenance_path.chmod(0o600)
+            key_bytes = b"synthetic-public-key"
+            provenance_root = {
+                "schema_version": 1,
+                "root_id": "org.open-mmi.release-signer-root",
+                "established_at": "2026-09-01T12:00:00+00:00",
+                "root_source": "owner-pinned-local-key",
+                "algorithm": "openpgp",
+                "primary_fingerprint": "A" * 40,
+                "signing_fingerprints": ["B" * 40],
+                "public_key_base64": base64.b64encode(key_bytes).decode("ascii"),
+                "public_key_sha256": "sha256:" + hashlib.sha256(key_bytes).hexdigest(),
+                "baseline_commit": integrity["candidate_commit"],
+                "baseline_integrity_state_digest": integrity_state_digest(integrity),
+                "history_before_baseline": "unverified",
+            }
+            verification = {
+                "verified": True,
+                "candidate_commit": integrity["candidate_commit"],
+                "primary_fingerprint": "A" * 40,
+                "signing_fingerprint": "B" * 40,
+                "signature_date": "2026-09-01",
+                "signature_timestamp": 1788270000,
+                "provenance_root_digest": "sha256:" + "c" * 64,
+            }
+            with mock.patch(
+                "open_mmi_trust.inspector.read_provenance_root", return_value=provenance_root
+            ), mock.patch(
+                "open_mmi_trust.inspector.verification_repository_for_integrity", return_value=root
+            ), mock.patch(
+                "open_mmi_trust.inspector.verify_commit_provenance", return_value=verification
+            ):
+                check = _inspect_release_provenance(provenance_path, integrity, root)
+        self.assertEqual(check["status"], PASS)
+        self.assertEqual(check["evidence"]["primary_fingerprint"], "A" * 40)
+        self.assertEqual(check["evidence"]["signing_fingerprint"], "B" * 40)
+
+    def test_pinned_release_provenance_signature_failure_is_fail(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _authorization, accepted_state, _expected = self.fixture(root)
+            integrity_path = self.establish_integrity_fixture(root, accepted_state)
+            integrity = read_integrity_state(integrity_path)
+            assert integrity is not None
+            provenance_path = accepted_state.parent / "release-signer-root.v1.json"
+            provenance_path.write_text("{}\n", encoding="utf-8")
+            provenance_path.chmod(0o600)
+            key_bytes = b"synthetic-public-key"
+            provenance_root = {
+                "schema_version": 1,
+                "root_id": "org.open-mmi.release-signer-root",
+                "established_at": "2026-09-01T12:00:00+00:00",
+                "root_source": "owner-pinned-local-key",
+                "algorithm": "openpgp",
+                "primary_fingerprint": "A" * 40,
+                "signing_fingerprints": ["B" * 40],
+                "public_key_base64": base64.b64encode(key_bytes).decode("ascii"),
+                "public_key_sha256": "sha256:" + hashlib.sha256(key_bytes).hexdigest(),
+                "baseline_commit": integrity["candidate_commit"],
+                "baseline_integrity_state_digest": integrity_state_digest(integrity),
+                "history_before_baseline": "unverified",
+            }
+            with mock.patch(
+                "open_mmi_trust.inspector.read_provenance_root", return_value=provenance_root
+            ), mock.patch(
+                "open_mmi_trust.inspector.verification_repository_for_integrity", return_value=root
+            ), mock.patch(
+                "open_mmi_trust.inspector.verify_commit_provenance",
+                side_effect=ReleaseProvenanceError("wrong signer"),
+            ):
+                check = _inspect_release_provenance(provenance_path, integrity, root)
+        self.assertEqual(check["status"], FAIL)
+        self.assertIn("wrong signer", check["evidence"]["error"])
 
     def test_file_integrity_tamper_is_fail(self):
         with tempfile.TemporaryDirectory() as tmp:

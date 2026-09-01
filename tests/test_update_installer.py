@@ -20,6 +20,22 @@ from ui import update_coordinator, update_installer
 
 
 class UpdateInstallerTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._current_provenance_patch = patch.object(
+            update_installer.release_provenance,
+            "require_current_release_provenance",
+            return_value={"verification": {"verified": True}},
+        )
+        self._candidate_provenance_patch = patch.object(
+            update_installer.release_provenance,
+            "require_candidate_release_provenance",
+            return_value={"verification": {"verified": True}},
+        )
+        self.current_provenance = self._current_provenance_patch.start()
+        self.candidate_provenance = self._candidate_provenance_patch.start()
+        self.addCleanup(self._current_provenance_patch.stop)
+        self.addCleanup(self._candidate_provenance_patch.stop)
+
     def prepared(
         self,
         root: Path,
@@ -191,6 +207,38 @@ class UpdateInstallerTests(unittest.TestCase):
             ), patch.object(update_installer.update_status, "_repository_snapshot", return_value={"state": "ready"}
             ), self.assertRaisesRegex(update_installer.InstallerError, "identity changed"):
                 update_installer.install_prepared(state_path, lock_path, staging, command=("never",))
+
+    def test_candidate_provenance_failure_blocks_before_transition_or_deployment(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, state_path, lock_path, staging = self.prepared(root)
+            self.candidate_provenance.side_effect = update_installer.release_provenance.ReleaseProvenanceError(
+                "candidate signature is not from pinned signer"
+            )
+            with patch.object(update_installer.update_status, "_read_source_descriptor", return_value=(source, "configured")), patch.object(
+                update_installer.update_policy, "read_policy", return_value=({"channel": "nightly"}, "configured")
+            ), patch.object(update_installer.update_status, "_repository_snapshot", return_value={"state": "ready"}
+            ), patch.object(update_installer, "_run_deployment") as run, self.assertRaisesRegex(
+                update_installer.InstallerError, "candidate signature is not from pinned signer"
+            ):
+                update_installer.install_prepared(state_path, lock_path, staging, command=("never",))
+            run.assert_not_called()
+
+    def test_integrity_commit_must_match_managed_source_identity_before_provenance(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, state_path, lock_path, staging = self.prepared(root)
+            source["installed_commit"] = "f" * 40
+            with patch.object(update_installer.update_status, "_read_source_descriptor", return_value=(source, "configured")), patch.object(
+                update_installer.update_policy, "read_policy", return_value=({"channel": "nightly"}, "configured")
+            ), patch.object(update_installer.update_status, "_repository_snapshot", return_value={"state": "ready"}
+            ), patch.object(update_installer, "_revalidate_candidate"), patch.object(
+                update_installer, "_run_deployment"
+            ) as run, self.assertRaisesRegex(
+                update_installer.InstallerError, "integrity commit does not match managed update source identity"
+            ):
+                update_installer.install_prepared(state_path, lock_path, staging, command=("never",))
+            run.assert_not_called()
 
     def test_deployment_failure_is_persisted_without_output_leakage(self):
         with tempfile.TemporaryDirectory() as temporary:

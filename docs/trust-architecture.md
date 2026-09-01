@@ -25,9 +25,11 @@ Update continuity keeps three concepts separate:
 Trust Manifest v1 establishes the release declaration, Accepted Owner Trust State v1
 establishes the second local authority record, Trust Transition Gate v1 enforces the comparison
 before a prepared candidate receives privileged execution, Trust Transition Lineage v1 records
-accepted-state changes from a locally confirmed genesis baseline forward, and Installed
-Release/File Integrity v1 binds active installed runtime bytes to the exact accepted Git candidate.
-An independently pinned release-signer/external verification root remains a later anchor.
+accepted-state changes from a locally confirmed genesis baseline forward, Installed Release/File
+Integrity v1 binds active installed runtime bytes to the exact accepted Git candidate, and Release
+Provenance / Pinned Signer Root v1 lets old trusted code authenticate current and future candidate
+commit signatures against an owner-established OpenPGP primary key. An independent external checker
+remains a later anchor.
 
 ## Current v1 capabilities
 
@@ -295,12 +297,14 @@ flow and owner acknowledgement; it is not an OS sandbox against arbitrary root s
 proof that a candidate's manifest is truthful. Stronger runtime/OS enforcement and independent
 verification remain later layers.
 
-A maintainer signature proves provenance. It does not grant permission to silently redraw an
-owner's established trust boundary. Trust Transition Lineage v1 records local accepted-state
-changes, and Installed Release/File Integrity v1 binds current runtime bytes to the exact accepted
-Git candidate, but their genesis baselines do not retroactively prove earlier history. Arbitrary
-root can still replace installed code plus both local trust stores. An independently pinned release
-signer and external verifier therefore remain necessary for external verification.
+A maintainer signature proves provenance only when old trusted code can authenticate it to a
+signer identity the owner independently established. It still does not grant permission to silently
+redraw an owner's accepted trust boundary. Trust Transition Lineage v1 records local accepted-state
+changes, Installed Release/File Integrity v1 binds current runtime bytes to the exact accepted Git
+candidate, and Release Provenance v1 verifies that exact commit against a pinned signer root. Their
+genesis baselines do not retroactively prove earlier history, and arbitrary root can still replace
+installed code plus local trust state. An independent external verifier therefore remains necessary
+for externally grounded attestation.
 
 ## Trust Transition Lineage v1
 
@@ -423,23 +427,27 @@ evidence from that exact point forward and do not retroactively attest earlier i
 
 ### Prepared-update ordering
 
-For a managed prepared update, already-installed trusted code now enforces this ordering:
+Once Release Provenance v1 is established, a managed prepared update is ordered so identity,
+provenance, authority, and bytes remain separate checks:
 
-1. re-evaluate the Trust Transition Gate against current Accepted Owner Trust State and Lineage;
-2. require the **currently installed** split runtime to match its existing integrity state;
-3. derive the candidate Trust Manifest and runtime inventory from the exact candidate Git objects;
-4. for an acknowledged expansion, advance the already-defined accepted-state/lineage authority
-   transition only after those current checks succeed;
-5. only after the old-trusted trust decision (and any acknowledged expansion activation), invoke
-   the candidate wheel build with the already-installed Python/pip into the root-owned transaction
-   rollback tree. A PEP 517 build backend is candidate-controlled code, so this build is deliberately
-   the first candidate-controlled execution point and must never move before steps 1–4;
-6. verify the resulting wheel's complete logical runtime payload against the Git-object inventory;
-7. pass `scripts/manage.sh _deploy-prepared` only that exact transaction-bound, root-owned wheel;
-8. after deployment and service health checks, verify both active runtime locations against the
-   exact candidate inventory;
-9. finalize an equal/narrower accepted-state transition where needed, then atomically record the
-   new integrity state.
+1. require the **currently installed** split runtime to match its existing integrity state and bind
+   that integrity commit to the managed source's recorded `installed_commit`;
+2. verify the current integrity-bound commit signature offline against the pinned signer root;
+3. verify the exact prepared candidate commit signature offline against the same pinned signer root;
+4. re-evaluate the Trust Transition Gate against current Accepted Owner Trust State and Lineage;
+5. derive the candidate Trust Manifest and runtime inventory from the exact candidate Git objects;
+6. for an acknowledged expansion, advance the already-defined accepted-state/lineage authority
+   transition only after the provenance, integrity, and trust-boundary checks succeed;
+7. only after those old-trusted decisions, invoke the candidate wheel build with the already-installed
+   Python/pip into the root-owned transaction rollback tree. A PEP 517 build backend is
+   candidate-controlled code, so this build is deliberately the first candidate-controlled execution
+   point and must never move before steps 1–6;
+8. verify the resulting wheel's complete logical runtime payload against the Git-object inventory;
+9. pass `scripts/manage.sh _deploy-prepared` only that exact transaction-bound, root-owned wheel;
+10. after deployment and service health checks, verify both active runtime locations against the
+    exact candidate inventory;
+11. finalize an equal/narrower accepted-state transition where needed, then atomically record the
+    new integrity state.
 
 The candidate therefore cannot silently choose a different Python package artifact after being
 accepted. The wheel build itself may execute candidate-controlled PEP 517 backend code, but only
@@ -460,14 +468,86 @@ Trust Inspector exposes two separate conclusions:
 
 - `release.file-integrity` can be `PASS` when strict local state is valid and all active bytes
   match the recorded accepted Git candidate;
-- `release.provenance` remains `UNVERIFIED` because Open MMI does not yet pin an independent
-  release-signing identity that installed trusted code or an external verifier can validate.
+- `release.provenance` can be `PASS` only when a separately established pinned signer root is valid
+  and the integrity-bound commit has one valid OpenPGP signature chaining to that exact root.
 
 This separation is intentional. A Git commit ID and matching bytes identify content; forward
 ancestry identifies history in the repository object graph. Neither statement by itself answers
-which signer the owner independently trusts. Likewise, arbitrary root can replace both installed
-code and this local integrity state. A later signer-root / independent Trust Checker layer should
-consume these exact digests as evidence without upgrading local integrity into a provenance claim.
+which signer the owner independently trusts. Provenance supplies that signer identity; it still does
+not authorize a capability expansion.
+
+## Release Provenance / Pinned Signer Root v1
+
+Release Provenance v1 adds a local signer-authentication root without changing Trust Manifest
+policy generation. Production state is a create-once root-owned mode `0600` file beneath the
+existing private trust directory:
+
+```text
+/var/lib/open-mmi/trust/release-signer-root.v1.json
+```
+
+The state records one owner-pinned OpenPGP primary fingerprint, the signing-capable fingerprints
+present in the reviewed public-key material, the canonical public-key bytes and SHA-256 digest,
+the exact integrity-bound baseline commit, the baseline integrity-state digest, and
+`history_before_baseline: unverified`. Unknown fields, duplicate JSON fields, non-finite values,
+weakened permissions, key/digest disagreement, or malformed fingerprints fail closed. Official v1
+code has no root replacement or signer-rotation primitive.
+
+### Offline signature verification
+
+Old trusted code verifies commits with fixed `/usr/bin/git` and `/usr/bin/gpg` executables. Those
+files and their containing system directory must themselves be root-controlled regular/executable
+paths with no group/other write permission. Verification creates a fresh mode `0700` temporary GPG
+home containing only the pinned public key, disables system/global Git configuration, sets no
+keyserver or automatic key retrieval, and runs `git verify-commit --raw`. Exactly one valid
+signature must be reported; its signing fingerprint must be one of the pinned key's signing-capable
+fingerprints and its primary fingerprint must equal the pinned primary. GitHub's `Verified` badge,
+the caller's personal keyring, Web-of-Trust ownertrust, repository ancestry, and network key
+discovery are not accepted as signer roots.
+
+Because v1 pins an exact reviewed public-key snapshot, it deliberately does not auto-adopt newly
+created signing subkeys, expiry extensions, revocation material, or a replacement primary key. A
+future signer/key update requires a separately designed owner-visible trust transition. Until then,
+a key lifecycle change can intentionally make updates fail closed rather than silently changing who
+may sign releases.
+
+### Establishing the signer root
+
+After the provenance-capable release is installed and File Integrity v1 records that exact release,
+the owner can inspect and pin a locally supplied public key:
+
+```text
+sudo open-mmi-trust-provenance status
+sudo open-mmi-trust-provenance bootstrap --key-file /path/to/reviewed-release-key.asc
+```
+
+Bootstrap requires root and a local interactive TTY, requires current File Integrity v1 to match,
+verifies that the integrity-bound commit is already signed by the proposed key, and requires the
+exact confirmation `PIN RELEASE SIGNER <FULL_PRIMARY_FINGERPRINT>`. The full fingerprint must be
+verified through an independent owner/auditor channel before confirmation. The CLI re-reads the key,
+active integrity state, repository identity, and signature after confirmation before create-once
+persistence. It accepts public key material only and rejects symlinked key-file input.
+
+The first provenance baseline is deliberately non-retroactive. In particular, Release Provenance
+v1 cannot honestly claim that the update which first installed the provenance verifier was itself
+pre-install provenance-gated. That release must be installed by the already-established Integrity,
+Transition Gate, and Lineage path while the old runtime still matches its recorded integrity state;
+then the signer root is pinned against the newly installed, integrity-bound signed commit.
+
+For development systems where the integrity-bound checkout is also the active runtime, do not patch
+that live checkout in place to introduce Provenance v1. Build and sign the candidate in a separate
+worktree/clone, push it, then let the existing old-trusted prepared updater install it. Re-baselining
+integrity after directly replacing the protected runtime would erase the very continuity this layer
+is intended to preserve.
+
+Once the root exists, future prepared updates fail closed unless **both** the currently installed
+integrity commit and the exact candidate commit verify against that root before the Trust Transition
+Gate and before any candidate-controlled PEP 517 build/deployment begins.
+
+Arbitrary privileged code can still replace the installed verifier and local signer/integrity state,
+so local `release.provenance: PASS` is not an external attestation. A future independent Trust
+Checker should carry or independently obtain the same reviewed signer root and verify release
+lineage/installed evidence from outside the inspected installation.
 
 ## SI and downstream distributions
 
@@ -527,13 +607,15 @@ candidate deployment, and Git-object candidate-manifest inspection. Trust Transi
 is inspected as a hash-chained local record and becomes `PASS` once a locally confirmed baseline
 exists and its head anchors current accepted state. Installed Release/File Integrity v1 can make
 `release.file-integrity` `PASS` once its locally confirmed baseline exists and both active runtime
-roots match it. `release.provenance` deliberately remains `UNVERIFIED` because no independently
-pinned Open MMI release-signing identity exists yet. A normal current installation therefore still
-has an overall `UNVERIFIED` result even when all available concrete checks pass.
+roots match it. `release.provenance` remains `UNVERIFIED` until a Release Provenance v1 signer
+root is locally established; after bootstrap it becomes `PASS` only when the integrity-bound commit
+verifies against that exact pinned root. A normal installation can still have an overall
+`UNVERIFIED` result because generic network egress, persistence, and remote identity enforcement
+remain declaration-level.
 
 That limitation is intentional. The built-in inspector is evidence produced by the installed
-software itself; local File Integrity v1 makes silent byte drift detectable relative to its local
-anchor, but sufficiently privileged modified software can replace both the inspector and that
-local anchor. A later independent Trust Checker with a pinned signer/external integrity root should
-consume the same kinds of evidence from outside the inspected installation and turn more of these
-`UNVERIFIED` results into independently grounded conclusions.
+software itself; File Integrity v1 plus a pinned signer root make byte drift and signer mismatch
+detectable relative to local anchors, but sufficiently privileged modified software can replace the
+inspector and those local anchors together. A later independent Trust Checker should carry an
+independently reviewed signer root and consume the same evidence from outside the inspected
+installation to provide externally grounded conclusions.

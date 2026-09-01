@@ -155,7 +155,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
         "inventory_digest": state["inventory_digest"],
         "integrity_state_digest": integrity_state_digest(state),
         "verification": verification,
-        "provenance": "unverified-signer-root",
+        "provenance": "separate-release-provenance-state",
     }, indent=2, sort_keys=True))
     return 0 if verification["matches"] else 4
 
@@ -183,7 +183,7 @@ def _cmd_bootstrap(args: argparse.Namespace) -> int:
         "inventory_digest": proposed["inventory_digest"],
         "files": verification["files_expected"],
         "history_before_baseline": "unverified",
-        "release_signer_provenance": "unverified",
+        "release_signer_provenance": "not-established-by-integrity-bootstrap",
     }, indent=2, sort_keys=True))
     print(
         "This proves byte identity to this exact committed Git tree from this point forward; "
@@ -226,7 +226,7 @@ def _cmd_bootstrap(args: argparse.Namespace) -> int:
         "inventory_digest": state["inventory_digest"],
         "integrity_state_digest": integrity_state_digest(state),
         "files_verified": final_verification["files_expected"],
-        "release_signer_provenance": "unverified",
+        "release_signer_provenance": "not-established-by-integrity-bootstrap",
     }, indent=2, sort_keys=True))
     return 0
 

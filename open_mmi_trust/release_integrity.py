@@ -2,8 +2,8 @@
 
 The integrity state binds the managed Open MMI release source and active package
 runtime bytes to an exact Git commit whose Trust Manifest was handled by the
-already-installed trust stack.  It deliberately does *not* claim independent release provenance: v1
-has no pinned signer identity yet.
+already-installed trust stack.  It deliberately does *not* claim independent release provenance:
+that is a separate Release Provenance / Pinned Signer Root trust state and check.
 
 Candidate inventories are derived from Git objects, not from the candidate
 worktree.  State mutation is private and confined by CI to the local owner CLI
