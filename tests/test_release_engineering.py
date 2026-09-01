@@ -73,5 +73,26 @@ class DevelopmentLauncherTests(unittest.TestCase):
         self.assertNotIn("canbusd/canbusd.py", source)
 
 
+class TrustReleaseContractTests(unittest.TestCase):
+    def test_trust_manifest_is_documented_packaged_and_checked_in_ci(self):
+        self.assertTrue((ROOT / "docs" / "trust-architecture.md").is_file())
+        self.assertTrue((ROOT / "open_mmi_trust" / "manifest.py").is_file())
+        self.assertTrue(
+            (ROOT / "open_mmi_trust" / "data" / "trust-manifest.v1.json").is_file()
+        )
+        ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertIn("python tools/verify_trust_manifest.py", ci)
+        self.assertIn("python -m unittest tests.test_trust_invariants", ci)
+        self.assertIn("import open_mmi_trust", ci)
+        wheel = (ROOT / "tools" / "verify_wheel.py").read_text(encoding="utf-8")
+        self.assertIn('"open_mmi_trust/manifest.py"', wheel)
+        self.assertIn('"open_mmi_trust/data/trust-manifest.v1.json"', wheel)
+
+    def test_trust_package_data_is_in_build_configuration(self):
+        pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        self.assertIn('"open_mmi_trust*"', pyproject)
+        self.assertIn('open_mmi_trust = ["data/*.json"]', pyproject)
+
+
 if __name__ == "__main__":
     unittest.main()

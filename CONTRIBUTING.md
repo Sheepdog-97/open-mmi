@@ -118,6 +118,39 @@ open-mmi-config vehicle-setup statuses --check pdc_signal
 
 ---
 
+## Trust-boundary changes
+
+Open MMI keeps security- and privacy-relevant capability declarations in
+`open_mmi_trust/data/trust-manifest.v1.json`. A change that introduces, removes,
+widens, narrows, or weakens enforcement for a declared capability must review the
+Trust Manifest and `docs/trust-architecture.md` in the same pull request.
+
+Do not treat a maintainer signature as permission to bypass this review boundary.
+The manifest describes what a release proposes; future owner-accepted state will be
+kept separately so candidate software cannot authorize its own expansion.
+
+Examples of trust-relevant changes include:
+
+- CAN transmission or a weaker receive-only control;
+- telemetry or analytics collection;
+- a new external-network purpose;
+- remote vehicle-identity resolution;
+- a new purpose for persistent vehicle-derived data;
+- removal or weakening of an established trust guard.
+
+Run:
+
+```bash
+python tools/verify_trust_manifest.py
+python -m unittest tests.test_trust_invariants tests.test_trust_manifest
+```
+
+The first Trust Manifest generation is intentionally conservative: some capabilities
+are only `declared` today. Do not raise an assurance level unless the corresponding
+control is actually present and tested.
+
+---
+
 ## Branch workflow
 
 Open MMI uses three long-lived branches with a one-way promotion path:
@@ -253,6 +286,7 @@ Generated catalogue and capability documentation must remain current:
 
 ```bash
 python tools/generate_vehicle_catalogue_docs.py --check
+python tools/verify_trust_manifest.py
 ```
 
 ---
@@ -304,7 +338,7 @@ A good pull request explains:
 * why it changed
 * how it was tested
 * whether it was tested in a vehicle
-* whether it touches CAN receive, CAN transmit, actions, install/update, udev, service permissions, or UI
+* whether it touches CAN receive, CAN transmit, actions, install/update, udev, service permissions, UI, or a declared trust boundary
 * whether documentation needs updating
 * whether the change is experimental, alpha, or intended as a longer-term interface
 

@@ -102,6 +102,11 @@ jobs:
       - name: Verify generated vehicle catalogue documentation
         run: python tools/generate_vehicle_catalogue_docs.py --check
 
+      - name: Verify Open MMI trust boundary
+        run: |
+          python tools/verify_trust_manifest.py
+          python -m unittest tests.test_trust_invariants
+
       - name: Verify CSS module cascade
         run: python tools/verify_css_split.py
 
@@ -160,6 +165,7 @@ jobs:
           import json
           import bindings
           import canbusd
+          import open_mmi_trust
           import ui.web_dashboard
           from canbusd import event_registry as vehicle_events
           from canbusd import profile_catalogue, profile_replay
@@ -214,6 +220,9 @@ jobs:
           missing = [f"{name}: {path}" for name, path in roots.items() if not path.is_file()]
           if missing:
               raise SystemExit("Missing installed assets:\n" + "\n".join(missing))
+          trust_manifest = open_mmi_trust.load_manifest()
+          if trust_manifest["capabilities"]["vehicle.can.transmit"]["policy"] != "prohibited":
+              raise SystemExit("Installed trust manifest does not preserve the receive-only CAN boundary")
           registry = vehicle_events.registry_payload()
           if "mute_toggle" not in registry["events"]:
               raise SystemExit("Installed vehicle-event registry is incomplete")

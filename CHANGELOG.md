@@ -1,4 +1,14 @@
 # Changelog
+## Unreleased — Trust architecture generation 1
+
+### Added
+- Strict machine-readable Trust Manifest v1 with stable capability identifiers, explicit policy/assurance separation, deterministic SHA-256 fingerprinting, fail-closed validation, packaging checks, documentation, and CI verification.
+- Initial CI trust tripwires that pin the currently declared remote dashboard assets and reject CAN-runtime `send`/`send_periodic` calls while CAN transmission remains prohibited.
+
+### Changed
+- Existing jsDelivr Bootstrap and Bootstrap Icons dependencies are now explicitly represented in the network-egress trust declaration; local vendoring remains a pre-anchor boundary-narrowing task.
+- Project philosophy and security documentation now state that trust-boundary changes must be declared and distinguish operational local processing from telemetry-purpose collection.
+
 ## Unreleased — V1 vehicle setup coordinator
 - Added formal maintained-profile qualification records, reviewed lifecycle transitions, compatibility boundaries, and stale-review warnings.
 - Added a hierarchical maintained vehicle catalogue with stable IDs, legacy aliases, contributor templates, deterministic mapping replay fixtures, and exact migration of missing legacy maintained runtime paths.

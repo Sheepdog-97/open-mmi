@@ -72,6 +72,16 @@ Do not add vehicle CAN transmit/control behaviour without:
 
 The default project posture should remain passive observation first.
 
+## Trust-boundary declarations
+
+Open MMI maintains a strict machine-readable Trust Manifest describing security- and privacy-relevant capability boundaries. The manifest is release-supplied evidence, not owner authorization: future candidate software must not be able to grant itself a broader trust boundary merely by changing its own manifest.
+
+Current Nightly assurance levels distinguish declaration from enforcement. A capability marked `declared` is a reviewable project policy but is not represented as an OS-level sandbox. `ci-guarded` means checked source/CI tripwires support the claim. Later phases may add runtime, OS and hardware-backed enforcement.
+
+For trust purposes, ordinary local processing needed to provide a requested feature is distinct from telemetry. Telemetry means collection or retention for analytics, profiling, product metrics, fleet statistics, usage measurement, reporting, remote submission, or similar secondary measurement purposes. Changing data purpose or weakening an established enforcement layer is a trust-relevant change.
+
+See `docs/trust-architecture.md` and `open_mmi_trust/data/trust-manifest.v1.json`.
+
 ## Local permissions model
 
 `open-mmi` performs local Linux actions such as media key events, brightness changes, screen wake/sleep behaviour, and dashboard/status output.

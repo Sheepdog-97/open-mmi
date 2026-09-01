@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "manifest_id": "org.open-mmi.trust-manifest",
+  "policy_generation": 1,
+  "capabilities": {
+    "network.external-egress": {
+      "policy": "declared-purposes-only",
+      "assurance": "declared",
+      "purposes": [
+        "dashboard.configured-ui",
+        "frontend.bootstrap-cdn",
+        "frontend.bootstrap-icons-cdn",
+        "media.internet-radio",
+        "media.jellyfin",
+        "updates.release-fetch"
+      ]
+    },
+    "telemetry.collection": {
+      "policy": "prohibited",
+      "assurance": "declared"
+    },
+    "vehicle-data.persistence": {
+      "policy": "declared-purposes-only",
+      "assurance": "declared",
+      "purposes": [
+        "service-reminder",
+        "trip-a",
+        "trip-b",
+        "trip-distance",
+        "vehicle-runtime-status"
+      ]
+    },
+    "vehicle.can.receive": {
+      "policy": "allowed",
+      "assurance": "ci-guarded"
+    },
+    "vehicle.can.transmit": {
+      "policy": "prohibited",
+      "assurance": "ci-guarded"
+    },
+    "vehicle.identity.remote-resolution": {
+      "policy": "prohibited",
+      "assurance": "declared"
+    }
+  }
+}

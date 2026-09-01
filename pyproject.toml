@@ -39,11 +39,13 @@ include = [
     "bindings*",
     "canbusd*",
     "powerd*",
+    "open_mmi_trust*",
     "ui*",
     "vehicles*"
 ]
 
 [tool.setuptools.package-data]
+open_mmi_trust = ["data/*.json"]
 bindings = ["*.json"]
 canbusd = ["data/*.json"]
 vehicles = [

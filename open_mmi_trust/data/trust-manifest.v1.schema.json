@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-mmi.invalid/schema/trust-manifest.v1.schema.json",
+  "title": "Open MMI Trust Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "manifest_id", "policy_generation", "capabilities"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "manifest_id": {"const": "org.open-mmi.trust-manifest"},
+    "policy_generation": {"type": "integer", "minimum": 1},
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "network.external-egress",
+        "telemetry.collection",
+        "vehicle-data.persistence",
+        "vehicle.can.receive",
+        "vehicle.can.transmit",
+        "vehicle.identity.remote-resolution"
+      ],
+      "properties": {
+        "network.external-egress": {
+          "$ref": "#/$defs/networkExternalEgress"
+        },
+        "telemetry.collection": {
+          "$ref": "#/$defs/telemetryCollection"
+        },
+        "vehicle-data.persistence": {
+          "$ref": "#/$defs/vehicleDataPersistence"
+        },
+        "vehicle.can.receive": {
+          "$ref": "#/$defs/canReceive"
+        },
+        "vehicle.can.transmit": {
+          "$ref": "#/$defs/canTransmit"
+        },
+        "vehicle.identity.remote-resolution": {
+          "$ref": "#/$defs/remoteVehicleIdentity"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "assurance": {
+      "enum": [
+        "declared",
+        "ci-guarded",
+        "runtime-guarded",
+        "os-enforced",
+        "hardware-enforced"
+      ]
+    },
+    "purposeIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9.-]{0,95}$"
+      }
+    },
+    "canReceive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "assurance"],
+      "properties": {
+        "policy": {"enum": ["allowed", "prohibited"]},
+        "assurance": {"$ref": "#/$defs/assurance"}
+      }
+    },
+    "canTransmit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "assurance"],
+      "properties": {
+        "policy": {"enum": ["allowed", "prohibited"]},
+        "assurance": {"$ref": "#/$defs/assurance"}
+      }
+    },
+    "telemetryCollection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "assurance"],
+      "properties": {
+        "policy": {"enum": ["prohibited", "local-owner-opt-in"]},
+        "assurance": {"$ref": "#/$defs/assurance"}
+      }
+    },
+    "remoteVehicleIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "assurance"],
+      "properties": {
+        "policy": {"enum": ["allowed", "prohibited"]},
+        "assurance": {"$ref": "#/$defs/assurance"}
+      }
+    },
+    "networkExternalEgress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "assurance", "purposes"],
+      "properties": {
+        "policy": {"enum": ["prohibited", "declared-purposes-only", "allowed"]},
+        "assurance": {"$ref": "#/$defs/assurance"},
+        "purposes": {"$ref": "#/$defs/purposeIds"}
+      }
+    },
+    "vehicleDataPersistence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "assurance", "purposes"],
+      "properties": {
+        "policy": {"enum": ["prohibited", "declared-purposes-only", "allowed"]},
+        "assurance": {"$ref": "#/$defs/assurance"},
+        "purposes": {"$ref": "#/$defs/purposeIds"}
+      }
+    }
+  }
+}

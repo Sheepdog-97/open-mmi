@@ -79,7 +79,17 @@ bindings/actions:
   flexible and user-controlled
   replaceable behind stable action identifiers
   built on decoded events and state, not raw CAN
+```
 
+## Trust boundaries
+
+Open MMI should make important trust boundaries visible in code and documentation rather than relying only on maintainer intent. Local-first, passive-first and owner-controlled behavior are therefore design constraints as well as project values.
+
+A maintainer signature establishes provenance; it does not by itself authorize a silent expansion of an owner's established trust boundary. Boundaries may be redrawn when the project has a legitimate reason to do so, but material changes must be declared and, where the architecture can enforce it, require an owner-visible transition.
+
+The project should prefer mechanisms that make trustworthy behavior independently reviewable and make undeclared capability expansion conspicuous. System integrators and downstream distributions may extend Open MMI, but additional behavior should be clearly distinguishable from the guarantees made by upstream Open MMI.
+
+See [`trust-architecture.md`](trust-architecture.md).
 
 ## Evidence without gatekeeping
 
