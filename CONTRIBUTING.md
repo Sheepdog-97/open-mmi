@@ -126,8 +126,10 @@ widens, narrows, or weakens enforcement for a declared capability must review th
 Trust Manifest and `docs/trust-architecture.md` in the same pull request.
 
 Do not treat a maintainer signature as permission to bypass this review boundary.
-The manifest describes what a release proposes; future owner-accepted state will be
-kept separately so candidate software cannot authorize its own expansion.
+The manifest describes what a release proposes; Accepted Owner Trust State is kept
+separately so candidate software cannot silently redefine the owner's accepted ceiling.
+Normal production code must not call accepted-state mutation primitives, and the
+`accept-current` CLI must never be extended into a post-install expansion bypass.
 
 Examples of trust-relevant changes include:
 
@@ -142,7 +144,7 @@ Run:
 
 ```bash
 python tools/verify_trust_manifest.py
-python -m unittest tests.test_trust_invariants tests.test_trust_manifest
+python -m unittest tests.test_trust_invariants tests.test_trust_manifest tests.test_telemetry_guard tests.test_trust_inspector tests.test_accepted_trust_state
 ```
 
 The first Trust Manifest generation is intentionally conservative: some capabilities

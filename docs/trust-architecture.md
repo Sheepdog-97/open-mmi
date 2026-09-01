@@ -22,8 +22,9 @@ Future update-continuity work will therefore keep three concepts separate:
 3. **Transition history** — records explicit boundary transitions so lineage can later be
    checked independently.
 
-Trust Manifest v1 establishes only the first of these. It does not yet implement automatic
-update-transition enforcement or owner authorization storage.
+Trust Manifest v1 establishes the release declaration, and Accepted Owner Trust State v1
+now establishes the second local authority record. Append-only transition history and
+automatic update-transition enforcement remain future work.
 
 ## Current v1 capabilities
 
@@ -79,11 +80,12 @@ Trust policy generation 2 is the first declared capability expansion after the m
 foundation. `telemetry.collection` changes from `prohibited` to `local-owner-opt-in`; the
 release does not authorize collection merely by declaring that policy.
 
-The accepted-owner trust state and trust-aware update gate are not implemented yet, so the
-current updater does not pre-authorize or pre-reject generation 2 as a transition. This is
-recorded as a limitation rather than hidden. The enforcement available in this generation is
-post-install: actual telemetry sampling remains denied until the local owner authorization
-boundary succeeds.
+Generation 2 originally landed before Accepted Owner Trust State and the trust-aware update
+gate existed, so the current updater did not pre-authorize or pre-reject that transition.
+Accepted Owner Trust State v1 can now bootstrap the currently trusted installed boundary, but
+it deliberately cannot retroactively prove that generation-2 installation was pre-screened.
+The updater still does not gate candidate deployment. Actual telemetry sampling remains denied
+until the separate local Telemetry Guard authorization boundary succeeds.
 
 Telemetry Guard v1 is deliberately narrow:
 
@@ -184,6 +186,57 @@ The initial CI check is deliberately only a tripwire. It is not presented as pro
 process with a SocketCAN socket could never be modified to transmit. Later work should add
 stronger process, SocketCAN, adapter, and hardware controls where platforms support them.
 
+## Accepted Owner Trust State v1
+
+Accepted Owner Trust State v1 is the local authority record that is deliberately separate
+from a release-supplied Trust Manifest. Its production state is:
+
+```text
+/var/lib/open-mmi/trust/accepted-owner-trust.v1.json
+```
+
+The final directory is root-owned mode `0700`; the state file is root-owned mode `0600`,
+written atomically and validated strictly. The record contains the exact normalized accepted
+Trust Manifest, its deterministic SHA-256 digest and a local acceptance timestamp. It does
+not contain a maintainer signature or claim independent release provenance.
+
+The owner surface is intentionally narrow:
+
+```text
+sudo open-mmi-trust-state status
+sudo open-mmi-trust-state accept-current
+```
+
+`accept-current` accepts no candidate path, repository, URL, command or non-interactive
+confirmation flag. On a machine with no prior accepted state it can bootstrap only the exact
+currently installed Trust Manifest after an interactive digest-bound confirmation. Once
+state exists, the command may refresh it only when the installed boundary is equivalent or
+narrower. The underlying state mutation primitive independently enforces the same monotonic
+rule, so reusing it cannot broaden existing accepted authority or accept a policy-generation
+regression. Expansion acknowledgement belongs on the old-trusted side of a future pre-install
+transition gate, not in already-installed candidate code.
+
+The reusable comparison function applies these v1 rules capability by capability:
+
+- a candidate policy may not rank above the accepted policy;
+- for `declared-purposes-only`, candidate purposes must be a subset of accepted purposes;
+- candidate assurance must be equal or stronger; weakening assurance is a trust expansion;
+- a lower `policy_generation` is blocked as a generation regression until trusted downgrade
+  lineage exists;
+- equal or narrower authority is marked safe to proceed without new owner acknowledgement;
+  an expansion is marked as requiring an old-side owner acknowledgement.
+
+Trust Inspector v1 reads this state without mutation. Missing state remains `UNVERIFIED`; an
+invalid state file or an installed manifest that exceeds/regresses the accepted ceiling is a
+`FAIL`; an equal or narrower installed manifest is `PASS` for the accepted-state check. CI
+also rejects normal Open MMI production code that mutates accepted state: the raw writer is
+module-internal and the local owner CLI may call only the monotonic record primitive.
+
+This is still software enforcement on a privileged machine. Arbitrary root software can
+replace Open MMI or its state. Signed installed-file integrity, append-only transition
+lineage and an independent checker are later layers needed to make that tampering externally
+verifiable.
+
 ## Future transition rule
 
 The intended update rule is monotonic:
@@ -239,21 +292,22 @@ used by a stricter local checker that wants any remaining unverified evidence to
 non-zero. A `FAIL` is always non-zero.
 
 V1 reports the strict Trust Manifest parse, policy generation and deterministic manifest
-self-digest; every declared capability and assurance level; redacted Telemetry Guard
+self-digest; every declared capability and assurance level; Accepted Owner Trust State and
+the installed manifest's relation to that accepted ceiling; redacted Telemetry Guard
 authorization state and exact authorized scope when readable; a no-authorization runtime
-probe that verifies telemetry sampling does not begin before the guard; the installed-source
-tripwire preventing normal Open MMI production code from calling telemetry authorization
-mutators; the current CAN no-send source tripwire; and the dashboard's local Bootstrap /
-no-remote-render-dependency contract. VIN salt and fingerprint bytes are intentionally not
-part of the inspection report schema.
+probe that verifies telemetry sampling does not begin before the guard; installed-source
+tripwires preventing normal Open MMI production code from calling telemetry or accepted-state
+mutation primitives; the current CAN no-send source tripwire; and the dashboard's local
+Bootstrap / no-remote-render-dependency contract. VIN salt and fingerprint bytes are
+intentionally not part of the inspection report schema.
 
 The inspector also states what it cannot currently prove. In generation 2, generic network
 egress enforcement, generic vehicle-data persistence enforcement and remote VIN-resolution
-enforcement remain declaration-level. Signed installed-file integrity, accepted owner release
-trust state, append-only transition lineage and the trusted updater's pre-installation
-capability-expansion gate are not implemented yet. Those checks therefore report
-`UNVERIFIED`, and a normal current installation has an overall `UNVERIFIED` result even when
-all available concrete checks pass.
+enforcement remain declaration-level. Accepted owner release trust state is now inspectable
+once locally bootstrapped, but signed installed-file integrity, append-only transition lineage
+and the trusted updater's pre-installation capability-expansion gate are not implemented yet.
+Those remaining checks therefore report `UNVERIFIED`, and a normal current installation still
+has an overall `UNVERIFIED` result even when all available concrete checks pass.
 
 That limitation is intentional. The built-in inspector is evidence produced by the installed
 software itself; without an independent integrity/lineage root, a sufficiently privileged

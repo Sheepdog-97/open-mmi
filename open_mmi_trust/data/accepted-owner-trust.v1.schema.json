@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:open-mmi:accepted-owner-trust:v1",
+  "title": "Open MMI Accepted Owner Trust State v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "state_id",
+    "accepted_at",
+    "manifest_digest",
+    "manifest"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "state_id": {
+      "const": "org.open-mmi.accepted-owner-trust"
+    },
+    "accepted_at": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "manifest_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "manifest": {
+      "$ref": "#/$defs/manifest"
+    }
+  },
+  "$defs": {
+    "assurance": {
+      "type": "string",
+      "enum": [
+        "declared",
+        "ci-guarded",
+        "runtime-guarded",
+        "os-enforced",
+        "hardware-enforced"
+      ]
+    },
+    "purposes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 96,
+        "pattern": "^[a-z0-9.-]+$"
+      },
+      "uniqueItems": true
+    },
+    "simpleCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy",
+        "assurance"
+      ],
+      "properties": {
+        "policy": {
+          "type": "string",
+          "enum": [
+            "allowed",
+            "prohibited"
+          ]
+        },
+        "assurance": {
+          "$ref": "#/$defs/assurance"
+        }
+      }
+    },
+    "purposeCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy",
+        "assurance",
+        "purposes"
+      ],
+      "properties": {
+        "policy": {
+          "type": "string",
+          "enum": [
+            "prohibited",
+            "declared-purposes-only",
+            "allowed"
+          ]
+        },
+        "assurance": {
+          "$ref": "#/$defs/assurance"
+        },
+        "purposes": {
+          "$ref": "#/$defs/purposes"
+        }
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "manifest_id",
+        "policy_generation",
+        "capabilities"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "manifest_id": {
+          "const": "org.open-mmi.trust-manifest"
+        },
+        "policy_generation": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "network.external-egress",
+            "telemetry.collection",
+            "vehicle-data.persistence",
+            "vehicle.can.receive",
+            "vehicle.can.transmit",
+            "vehicle.identity.remote-resolution"
+          ],
+          "properties": {
+            "network.external-egress": {
+              "$ref": "#/$defs/purposeCapability"
+            },
+            "telemetry.collection": {
+              "$ref": "#/$defs/telemetryCapability"
+            },
+            "vehicle-data.persistence": {
+              "$ref": "#/$defs/purposeCapability"
+            },
+            "vehicle.can.receive": {
+              "$ref": "#/$defs/simpleCapability"
+            },
+            "vehicle.can.transmit": {
+              "$ref": "#/$defs/simpleCapability"
+            },
+            "vehicle.identity.remote-resolution": {
+              "$ref": "#/$defs/simpleCapability"
+            }
+          }
+        }
+      }
+    },
+    "telemetryCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy",
+        "assurance"
+      ],
+      "properties": {
+        "policy": {
+          "type": "string",
+          "enum": [
+            "prohibited",
+            "local-owner-opt-in"
+          ]
+        },
+        "assurance": {
+          "$ref": "#/$defs/assurance"
+        }
+      }
+    }
+  }
+}

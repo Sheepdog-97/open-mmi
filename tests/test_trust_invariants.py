@@ -100,6 +100,47 @@ class TrustInvariantTests(unittest.TestCase):
             "production telemetry self-authorization calls found: " + ", ".join(offenders),
         )
 
+    def test_production_code_cannot_silently_mutate_accepted_owner_trust_state(self):
+        state_module = ROOT / "open_mmi_trust" / "accepted_state.py"
+        owner_cli = ROOT / "open_mmi_trust" / "accepted_state_cli.py"
+        mutation_names = {"_record_accepted_manifest", "_write_accepted_state"}
+        offenders: list[str] = []
+        ignored_roots = {"tests", "tools", ".git", ".venv", "venv", "__pycache__", "build", "dist"}
+        for path in sorted(ROOT.rglob("*.py")):
+            if ignored_roots.intersection(path.relative_to(ROOT).parts):
+                continue
+            if path == state_module:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    for alias in node.names:
+                        if alias.name not in mutation_names:
+                            continue
+                        if path == owner_cli and alias.name == "_record_accepted_manifest":
+                            continue
+                        offenders.append(
+                            f"{path.relative_to(ROOT)}:{node.lineno}:import:{alias.name}"
+                        )
+                if not isinstance(node, ast.Call):
+                    continue
+                if isinstance(node.func, ast.Name):
+                    name = node.func.id
+                elif isinstance(node.func, ast.Attribute):
+                    name = node.func.attr
+                else:
+                    name = ""
+                if name not in mutation_names:
+                    continue
+                if path == owner_cli and name == "_record_accepted_manifest":
+                    continue
+                offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}:{name}")
+        self.assertEqual(
+            offenders,
+            [],
+            "production accepted-state mutation calls found: " + ", ".join(offenders),
+        )
+
     def test_current_assurance_matches_enforcement_layers(self):
         manifest = load_manifest()
         self.assertEqual(

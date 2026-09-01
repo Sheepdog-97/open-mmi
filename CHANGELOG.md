@@ -5,6 +5,7 @@
 - Strict machine-readable Trust Manifest v1 with stable capability identifiers, explicit policy/assurance separation, deterministic SHA-256 fingerprinting, fail-closed validation, packaging checks, documentation, and CI verification.
 - Initial CI trust tripwires that reject remote dashboard render dependencies and CAN-runtime `send`/`send_periodic` calls while CAN transmission remains prohibited.
 - Telemetry Guard v1 with default-deny collection, exact scope digests, local owner authorization, VIN-bound salted fingerprints, atomic root-owned authorization state, interactive TTY-only owner mutation, revocation, CI self-authorization tripwires, and a pre-sampling guard API.
+- Accepted Owner Trust State v1 with a strict root-owned accepted-manifest record, deterministic transition comparison, interactive current-boundary bootstrap/narrowing only, generation-regression blocking, assurance-downgrade detection, and Trust Inspector integration.
 - Trust Inspector v1 with read-only human/JSON reporting, strict PASS/UNVERIFIED/FAIL evidence semantics, redacted telemetry authorization inspection, runtime default-deny probing, installed-source CAN/telemetry tripwire reproduction, dashboard local-render verification, and a checked machine-readable report schema.
 
 ### Changed

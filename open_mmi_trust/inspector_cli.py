@@ -53,6 +53,24 @@ def render_text(report: Mapping[str, Any]) -> str:
     else:
         lines.append(f"Manifest: unavailable ({manifest.get('error', 'unknown error')})")
 
+    accepted_check = next(
+        (check for check in report["checks"] if check.get("id") == "owner.accepted-release-state"),
+        None,
+    )
+    if accepted_check is not None:
+        evidence = accepted_check.get("evidence", {})
+        if evidence.get("established") is True:
+            lines.append(
+                "Accepted owner trust: ESTABLISHED "
+                f"generation={evidence['accepted_generation']} "
+                f"manifest={evidence['accepted_manifest_digest']} "
+                f"current={evidence.get('current_relation', 'unverified')}"
+            )
+        elif evidence.get("established") is False:
+            lines.append("Accepted owner trust: NOT ESTABLISHED")
+        else:
+            lines.append(f"Accepted owner trust: {accepted_check['status']}")
+
     telemetry = report["telemetry_authorization"]
     if telemetry.get("authorized") is True:
         lines.append(

@@ -23,6 +23,15 @@ from open_mmi_telemetry.guard import (
     read_authorization,
 )
 
+from .accepted_state import (
+    DEFAULT_ACCEPTED_STATE_PATH,
+    TRANSITION_EXPANSION,
+    TRANSITION_GENERATION_REGRESSION,
+    AcceptedTrustStateError,
+    accepted_state_digest,
+    compare_trust_manifests,
+    read_accepted_state,
+)
 from .manifest import DEFAULT_MANIFEST_PATH, ManifestError, load_manifest, manifest_digest
 
 
@@ -104,6 +113,111 @@ def _inspect_manifest(path: Path) -> tuple[dict[str, Any] | None, dict[str, Any]
             digest=digest,
             note="This proves internal manifest consistency, not release provenance or file integrity.",
         ),
+    )
+
+
+def _inspect_accepted_owner_state(
+    path: Path,
+    manifest: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return _check(
+            "owner.accepted-release-state",
+            UNVERIFIED,
+            "Accepted Owner Trust State is not established yet.",
+            path=str(path),
+            established=False,
+            note="Telemetry authorization is feature-specific consent, not accepted release authority.",
+        )
+    except PermissionError:
+        return _check(
+            "owner.accepted-release-state",
+            UNVERIFIED,
+            "Accepted Owner Trust State exists behind a permission boundary and could not be inspected.",
+            path=str(path),
+            established=None,
+            suggestion="Run the inspector with local read authority for the root-owned trust state.",
+        )
+    except OSError as exc:
+        return _check(
+            "owner.accepted-release-state",
+            UNVERIFIED,
+            "Accepted Owner Trust State could not be inspected.",
+            path=str(path),
+            established=None,
+            error=str(exc),
+        )
+
+    if not os.access(path, os.R_OK):
+        return _check(
+            "owner.accepted-release-state",
+            UNVERIFIED,
+            "Accepted Owner Trust State is present but not readable by this inspector process.",
+            path=str(path),
+            established=None,
+            mode=oct(metadata.st_mode & 0o777),
+            uid=metadata.st_uid,
+            suggestion="Run the inspector with local read authority for the root-owned trust state.",
+        )
+
+    try:
+        state = read_accepted_state(path)
+    except AcceptedTrustStateError as exc:
+        return _check(
+            "owner.accepted-release-state",
+            FAIL,
+            "Accepted Owner Trust State is present but fails strict validation.",
+            path=str(path),
+            established=None,
+            error=str(exc),
+        )
+
+    if state is None:
+        return _check(
+            "owner.accepted-release-state",
+            UNVERIFIED,
+            "Accepted Owner Trust State is not established yet.",
+            path=str(path),
+            established=False,
+        )
+
+    evidence = {
+        "path": str(path),
+        "established": True,
+        "accepted_at": state["accepted_at"],
+        "accepted_state_digest": accepted_state_digest(state),
+        "accepted_manifest_digest": state["manifest_digest"],
+        "accepted_generation": state["manifest"]["policy_generation"],
+        "accepted_capabilities": state["manifest"]["capabilities"],
+    }
+    if manifest is None:
+        evidence["current_relation"] = "unverified"
+        return _check(
+            "owner.accepted-release-state",
+            UNVERIFIED,
+            "Accepted Owner Trust State is valid, but the installed Trust Manifest is unavailable for comparison.",
+            **evidence,
+        )
+
+    comparison = compare_trust_manifests(state["manifest"], manifest)
+    evidence["current_relation"] = comparison["relation"]
+    evidence["current_manifest_digest"] = comparison["candidate_manifest_digest"]
+    evidence["comparison"] = comparison
+    if comparison["relation"] in {TRANSITION_EXPANSION, TRANSITION_GENERATION_REGRESSION}:
+        return _check(
+            "owner.accepted-release-state",
+            FAIL,
+            "Installed Trust Manifest exceeds or regresses the locally accepted owner trust boundary.",
+            **evidence,
+        )
+
+    return _check(
+        "owner.accepted-release-state",
+        PASS,
+        "Installed Trust Manifest does not exceed the locally accepted owner trust boundary.",
+        **evidence,
     )
 
 
@@ -343,6 +457,86 @@ def _inspect_telemetry_self_authorization_source(root: Path) -> dict[str, Any]:
         note="This constrains official Open MMI code; it does not prevent arbitrary root software from modifying the machine.",
     )
 
+def _inspect_accepted_state_self_authorization_source(root: Path) -> dict[str, Any]:
+    mutation_names = {"_record_accepted_manifest", "_write_accepted_state"}
+    package_roots = (
+        "actions",
+        "bindings",
+        "canbusd",
+        "open_mmi_telemetry",
+        "open_mmi_trust",
+        "powerd",
+        "ui",
+        "vehicles",
+    )
+    state_module = root / "open_mmi_trust" / "accepted_state.py"
+    owner_cli = root / "open_mmi_trust" / "accepted_state_cli.py"
+    offenders: list[str] = []
+    scanned = 0
+    try:
+        for package_name in package_roots:
+            package_root = root / package_name
+            if not package_root.exists():
+                continue
+            for path in sorted(package_root.rglob("*.py")):
+                if path == state_module or "__pycache__" in path.parts:
+                    continue
+                scanned += 1
+                tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.ImportFrom):
+                        for alias in node.names:
+                            if alias.name not in mutation_names:
+                                continue
+                            if path == owner_cli and alias.name == "_record_accepted_manifest":
+                                continue
+                            offenders.append(
+                                f"{path.relative_to(root)}:{node.lineno}:import:{alias.name}"
+                            )
+                    if not isinstance(node, ast.Call):
+                        continue
+                    if isinstance(node.func, ast.Name):
+                        name = node.func.id
+                    elif isinstance(node.func, ast.Attribute):
+                        name = node.func.attr
+                    else:
+                        name = ""
+                    if name not in mutation_names:
+                        continue
+                    if path == owner_cli and name == "_record_accepted_manifest":
+                        continue
+                    offenders.append(f"{path.relative_to(root)}:{node.lineno}:{name}")
+    except (OSError, UnicodeError, SyntaxError) as exc:
+        return _check(
+            "owner.accepted-state-self-authorization-source-tripwire",
+            FAIL,
+            "Installed production source could not be inspected for silent accepted-state mutation calls.",
+            error=f"{type(exc).__name__}: {exc}",
+        )
+
+    if scanned == 0:
+        return _check(
+            "owner.accepted-state-self-authorization-source-tripwire",
+            FAIL,
+            "No installed Open MMI Python source was available to reproduce the accepted-state mutation tripwire.",
+        )
+    if offenders:
+        return _check(
+            "owner.accepted-state-self-authorization-source-tripwire",
+            FAIL,
+            "Production code contains Accepted Owner Trust State mutation calls outside the monotonic owner surface.",
+            offenders=offenders,
+            files_scanned=scanned,
+        )
+    return _check(
+        "owner.accepted-state-self-authorization-source-tripwire",
+        PASS,
+        "Installed production source reproduces the monotonic accepted-state mutation tripwire.",
+        files_scanned=scanned,
+        note="The owner CLI may call only the monotonic record primitive; the raw writer remains module-internal.",
+    )
+
+
 def _inspect_can_transmit_source(canbus_root: Path, manifest: Mapping[str, Any] | None) -> dict[str, Any]:
     policy = None
     assurance = None
@@ -521,6 +715,7 @@ def inspect_system(
     *,
     manifest_path: Path = DEFAULT_MANIFEST_PATH,
     authorization_path: Path = DEFAULT_AUTHORIZATION_PATH,
+    accepted_state_path: Path = DEFAULT_ACCEPTED_STATE_PATH,
     install_root: Path | None = None,
 ) -> dict[str, Any]:
     """Inspect local trust evidence without mutating trust state or contacting a network."""
@@ -528,10 +723,12 @@ def inspect_system(
     root = Path(install_root) if install_root is not None else _default_install_root()
     manifest, manifest_summary, manifest_check = _inspect_manifest(Path(manifest_path))
     telemetry_summary, telemetry_check = _inspect_telemetry_authorization(Path(authorization_path))
+    accepted_check = _inspect_accepted_owner_state(Path(accepted_state_path), manifest)
 
-    checks: list[dict[str, Any]] = [manifest_check, telemetry_check]
+    checks: list[dict[str, Any]] = [manifest_check, telemetry_check, accepted_check]
     checks.append(_inspect_telemetry_default_deny())
     checks.append(_inspect_telemetry_self_authorization_source(root))
+    checks.append(_inspect_accepted_state_self_authorization_source(root))
     checks.append(_inspect_can_transmit_source(root / "canbusd", manifest))
     checks.extend(_inspect_dashboard_render(root / "ui" / "web_dashboard" / "static"))
     checks.extend(_declared_assurance_checks(manifest))
@@ -543,12 +740,6 @@ def inspect_system(
                 UNVERIFIED,
                 "No independently signed installed-file integrity index is defined yet.",
                 note="The manifest self-digest is not a substitute for release-file integrity.",
-            ),
-            _check(
-                "owner.accepted-release-state",
-                UNVERIFIED,
-                "Accepted owner release trust state is not implemented yet.",
-                note="Telemetry authorization is feature-specific consent, not accepted release authority.",
             ),
             _check(
                 "release.transition-lineage",
