@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:open-mmi:trust-inspection:v1",
+  "title": "Open MMI Trust Inspection v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "manifest",
+    "telemetry_authorization",
+    "checks"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "status": {
+      "$ref": "#/$defs/status"
+    },
+    "manifest": {
+      "$ref": "#/$defs/manifest"
+    },
+    "telemetry_authorization": {
+      "$ref": "#/$defs/telemetryAuthorization"
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/check"
+      }
+    }
+  },
+  "$defs": {
+    "status": {
+      "type": "string",
+      "enum": ["PASS", "UNVERIFIED", "FAIL"]
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "assurance"],
+      "properties": {
+        "policy": {
+          "type": "string"
+        },
+        "assurance": {
+          "type": "string"
+        },
+        "purposes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "path"],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "manifest_id": {
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "integer"
+        },
+        "policy_generation": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/capability"
+          }
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "purpose", "signals", "retention", "destination"],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "purpose": {
+          "type": "string"
+        },
+        "signals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "retention": {
+          "const": "session"
+        },
+        "destination": {
+          "const": "local-only"
+        }
+      }
+    },
+    "vinBindingRedacted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "iterations"],
+      "properties": {
+        "algorithm": {
+          "type": "string"
+        },
+        "iterations": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "telemetryAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authorized", "state"],
+      "properties": {
+        "authorized": {
+          "type": ["boolean", "null"]
+        },
+        "state": {
+          "type": "string",
+          "enum": ["not-authorized", "authorized", "inaccessible", "unreadable", "invalid"]
+        },
+        "authorized_at": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "scope_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "vin_binding": {
+          "$ref": "#/$defs/vinBindingRedacted"
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "summary", "evidence"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

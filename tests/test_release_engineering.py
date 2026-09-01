@@ -79,17 +79,29 @@ class TrustReleaseContractTests(unittest.TestCase):
         self.assertTrue((ROOT / "open_mmi_telemetry" / "guard.py").is_file())
         self.assertTrue((ROOT / "open_mmi_telemetry" / "cli.py").is_file())
         self.assertTrue((ROOT / "open_mmi_trust" / "manifest.py").is_file())
+        self.assertTrue((ROOT / "open_mmi_trust" / "inspector.py").is_file())
+        self.assertTrue((ROOT / "open_mmi_trust" / "inspector_cli.py").is_file())
         self.assertTrue(
             (ROOT / "open_mmi_trust" / "data" / "trust-manifest.v1.json").is_file()
         )
+        self.assertTrue(
+            (ROOT / "open_mmi_trust" / "data" / "trust-inspection.v1.schema.json").is_file()
+        )
         ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("python tools/verify_trust_manifest.py", ci)
-        self.assertIn("tests.test_trust_invariants tests.test_telemetry_guard", ci)
+        self.assertIn(
+            "tests.test_trust_invariants tests.test_telemetry_guard tests.test_trust_inspector",
+            ci,
+        )
+        self.assertIn("trust_inspector.inspect_system()", ci)
         self.assertIn("import open_mmi_trust", ci)
         wheel = (ROOT / "tools" / "verify_wheel.py").read_text(encoding="utf-8")
         self.assertIn('"open_mmi_telemetry/guard.py"', wheel)
         self.assertIn('"open_mmi_telemetry/cli.py"', wheel)
         self.assertIn('"open_mmi_trust/manifest.py"', wheel)
+        self.assertIn('"open_mmi_trust/inspector.py"', wheel)
+        self.assertIn('"open_mmi_trust/inspector_cli.py"', wheel)
+        self.assertIn('"open_mmi_trust/data/trust-inspection.v1.schema.json"', wheel)
         self.assertIn('"open_mmi_trust/data/trust-manifest.v1.json"', wheel)
         self.assertTrue((ROOT / "tools" / "vendor_bootstrap.py").is_file())
         self.assertTrue((ROOT / "ui" / "web_dashboard" / "static" / "vendor" / "BOOTSTRAP-LICENSE.txt").is_file())
@@ -100,6 +112,7 @@ class TrustReleaseContractTests(unittest.TestCase):
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn('"open_mmi_telemetry*"', pyproject)
         self.assertIn('open-mmi-telemetry = "open_mmi_telemetry.cli:main"', pyproject)
+        self.assertIn('open-mmi-trust-inspect = "open_mmi_trust.inspector_cli:main"', pyproject)
         self.assertIn('"open_mmi_trust*"', pyproject)
         self.assertIn('open_mmi_trust = ["data/*.json"]', pyproject)
         self.assertIn('"static/vendor/*.css"', pyproject)

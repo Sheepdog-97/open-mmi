@@ -106,7 +106,7 @@ jobs:
         run: |
           python tools/verify_trust_manifest.py
           python tools/vendor_bootstrap.py --check
-          python -m unittest tests.test_trust_invariants tests.test_telemetry_guard
+          python -m unittest tests.test_trust_invariants tests.test_telemetry_guard tests.test_trust_inspector
 
       - name: Verify CSS module cascade
         run: python tools/verify_css_split.py
@@ -168,6 +168,7 @@ jobs:
           import canbusd
           import open_mmi_telemetry
           import open_mmi_trust
+          from open_mmi_trust import inspector as trust_inspector
           import ui.web_dashboard
           from canbusd import event_registry as vehicle_events
           from canbusd import profile_catalogue, profile_replay
@@ -184,6 +185,7 @@ jobs:
           roots = {
               "bindings": Path(bindings.__file__).parent / "default.json",
               "telemetry_guard": Path(open_mmi_telemetry.__file__),
+              "trust_inspector": Path(trust_inspector.__file__),
               "vehicle_events": vehicle_events.DEFAULT_REGISTRY_PATH,
               "vehicle_statuses": vehicle_statuses.DEFAULT_REGISTRY_PATH,
               "bluetooth": Path(bluetooth.__file__),
@@ -226,6 +228,16 @@ jobs:
           trust_manifest = open_mmi_trust.load_manifest()
           if trust_manifest["capabilities"]["vehicle.can.transmit"]["policy"] != "prohibited":
               raise SystemExit("Installed trust manifest does not preserve the receive-only CAN boundary")
+          trust_report = trust_inspector.inspect_system()
+          if trust_report["status"] == "FAIL":
+              failures = [
+                  check["id"]
+                  for check in trust_report["checks"]
+                  if check["status"] == "FAIL"
+              ]
+              raise SystemExit(
+                  "Installed Trust Inspector reported FAIL: " + ", ".join(failures)
+              )
           registry = vehicle_events.registry_payload()
           if "mute_toggle" not in registry["events"]:
               raise SystemExit("Installed vehicle-event registry is incomplete")
@@ -279,6 +291,8 @@ jobs:
               "open-mmi-dashboard": "ui.web_dashboard.server:main",
               "open-mmi-launcher": "ui.launcher:main",
               "open-mmi-status": "ui.dashboard.status_cli:main",
+              "open-mmi-telemetry": "open_mmi_telemetry.cli:main",
+              "open-mmi-trust-inspect": "open_mmi_trust.inspector_cli:main",
               "open-mmi-update-coordinator": "ui.update_coordinator:main",
               "open-mmi-update-installer": "ui.update_installer:main",
               "open-mmi-vehicle-config-coordinator": "ui.vehicle_config_coordinator:main",

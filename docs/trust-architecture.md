@@ -209,3 +209,54 @@ support that reputation.
 Future Trust Inspection and independent-verifier work should therefore evaluate demonstrated
 capabilities and lineage rather than simply checking whether an installation has an official
 Open MMI file hash.
+
+## Trust Inspector v1
+
+Trust Inspector v1 is a read-only local evidence surface. It does not authorize a
+capability, modify telemetry consent, contact a network service, or change Trust Manifest
+policy generation 2. Run it with:
+
+```text
+open-mmi-trust-inspect
+open-mmi-trust-inspect --json
+```
+
+The machine-readable report contract is checked in at:
+
+```text
+open_mmi_trust/data/trust-inspection.v1.schema.json
+```
+
+Inspection results use three deliberately different states:
+
+- `PASS` — one concrete local check succeeded;
+- `FAIL` — observed local state contradicts the inspected trust contract;
+- `UNVERIFIED` — the current architecture cannot prove the claim.
+
+`UNVERIFIED` must never be presented as equivalent to `PASS`. The default human command
+therefore exits successfully when no contradiction was found, while `--require-pass` can be
+used by a stricter local checker that wants any remaining unverified evidence to be
+non-zero. A `FAIL` is always non-zero.
+
+V1 reports the strict Trust Manifest parse, policy generation and deterministic manifest
+self-digest; every declared capability and assurance level; redacted Telemetry Guard
+authorization state and exact authorized scope when readable; a no-authorization runtime
+probe that verifies telemetry sampling does not begin before the guard; the installed-source
+tripwire preventing normal Open MMI production code from calling telemetry authorization
+mutators; the current CAN no-send source tripwire; and the dashboard's local Bootstrap /
+no-remote-render-dependency contract. VIN salt and fingerprint bytes are intentionally not
+part of the inspection report schema.
+
+The inspector also states what it cannot currently prove. In generation 2, generic network
+egress enforcement, generic vehicle-data persistence enforcement and remote VIN-resolution
+enforcement remain declaration-level. Signed installed-file integrity, accepted owner release
+trust state, append-only transition lineage and the trusted updater's pre-installation
+capability-expansion gate are not implemented yet. Those checks therefore report
+`UNVERIFIED`, and a normal current installation has an overall `UNVERIFIED` result even when
+all available concrete checks pass.
+
+That limitation is intentional. The built-in inspector is evidence produced by the installed
+software itself; without an independent integrity/lineage root, a sufficiently privileged
+modified installation can modify the inspector too. A later independent Trust Checker should
+consume the same kinds of evidence from outside the inspected installation and turn more of
+these `UNVERIFIED` results into independently grounded conclusions.
