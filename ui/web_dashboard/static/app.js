@@ -13,12 +13,13 @@ const openMmiBluetoothMediaClient = window.openMmiBluetoothMediaController;
 const openMmiSystemSettingsClient = window.openMmiSystemSettings;
 const openMmiVehicleSetupSettingsClient = window.openMmiVehicleSetupSettings;
 const openMmiRuntimeDiagnosticsClient = window.openMmiRuntimeDiagnostics;
+const openMmiTrustStatusClient = window.openMmiTrustStatus;
 const openMmiServiceReminderClient = window.openMmiServiceReminder;
 const openMmiTripDistanceClient = window.openMmiTripDistance;
 const openMmiTripAClient = window.openMmiTripA;
 const openMmiTripBClient = window.openMmiTripB;
 const openMmiTripSwitcherClient = window.openMmiTripSwitcher;
-if (!openMmiApiClient || !openMmiDashboardConnectionClient || !openMmiPrefs || !openMmiStatusClient || !openMmiNavigationClient || !openMmiOverlaysClient || !openMmiVehicleClient || !openMmiMediaClient || !openMmiRadioMediaClient || !openMmiUsbMediaClient || !openMmiJellyfinMediaClient || !openMmiBluetoothMediaClient || !openMmiSystemSettingsClient || !openMmiVehicleSetupSettingsClient || !openMmiRuntimeDiagnosticsClient || !openMmiServiceReminderClient || !openMmiTripDistanceClient || !openMmiTripAClient || !openMmiTripBClient || !openMmiTripSwitcherClient) {
+if (!openMmiApiClient || !openMmiDashboardConnectionClient || !openMmiPrefs || !openMmiStatusClient || !openMmiNavigationClient || !openMmiOverlaysClient || !openMmiVehicleClient || !openMmiMediaClient || !openMmiRadioMediaClient || !openMmiUsbMediaClient || !openMmiJellyfinMediaClient || !openMmiBluetoothMediaClient || !openMmiSystemSettingsClient || !openMmiVehicleSetupSettingsClient || !openMmiRuntimeDiagnosticsClient || !openMmiTrustStatusClient || !openMmiServiceReminderClient || !openMmiTripDistanceClient || !openMmiTripAClient || !openMmiTripBClient || !openMmiTripSwitcherClient) {
   throw new Error("Open MMI frontend modules did not load");
 }
 
@@ -31,6 +32,7 @@ const openMmiMediaSourcesController = openMmiMediaClient.createController({ pref
 const openMmiSystemSettingsController = openMmiSystemSettingsClient.install({ api: openMmiApiClient });
 const openMmiVehicleSetupSettingsController = openMmiVehicleSetupSettingsClient.install({ api: openMmiApiClient });
 const openMmiRuntimeDiagnosticsController = openMmiRuntimeDiagnosticsClient.install({ api: openMmiApiClient });
+const openMmiTrustStatusController = openMmiTrustStatusClient.install({ api: openMmiApiClient });
 const openMmiServiceReminderController = openMmiServiceReminderClient.install({ api: openMmiApiClient, preferences: openMmiPrefs });
 const openMmiTripDistanceController = openMmiTripDistanceClient.install({ api: openMmiApiClient });
 const openMmiTripAController = openMmiTripAClient.install({ api: openMmiApiClient, preferences: openMmiPrefs, distance: openMmiTripDistanceController });
@@ -46,6 +48,7 @@ window.openMmiMediaSources = openMmiMediaSourcesController;
 window.openMmiSystemSettingsController = openMmiSystemSettingsController;
 window.openMmiVehicleSetupSettingsController = openMmiVehicleSetupSettingsController;
 window.openMmiRuntimeDiagnosticsController = openMmiRuntimeDiagnosticsController;
+window.openMmiTrustStatusController = openMmiTrustStatusController;
 window.openMmiServiceReminderController = openMmiServiceReminderController;
 window.openMmiTripDistanceController = openMmiTripDistanceController;
 window.openMmiTripAController = openMmiTripAController;
@@ -896,6 +899,17 @@ openMmiNavigationController.init();
       return diagnosticsTemplate(payload);
     }
 
+    if (section === "trust") {
+      return `
+        <div data-openmmi-trust-panel="true">
+          <div class="openmmi-settings-panel-head">
+            <span>Trust</span>
+            <small>loading local trust evidence</small>
+          </div>
+        </div>
+      `;
+    }
+
     if (section === "media") {
       return `
         <div class="openmmi-settings-panel-head"><span>Media</span><small>server-side</small></div>
@@ -931,6 +945,7 @@ openMmiNavigationController.init();
     system: "system",
     media: "system",
     diagnostics: "advanced",
+    trust: "advanced",
   });
 
   function settingsGroupForSection(section) {
@@ -1175,6 +1190,7 @@ openMmiNavigationController.init();
               </button>
               <div id="openmmiSettingsAdvanced" class="openmmi-settings-tree-children" role="group" data-openmmi-settings-group-children hidden>
                 <button type="button" role="treeitem" data-openmmi-settings-parent="advanced" data-openmmi-settings-section="diagnostics">Diagnostics <small>live decoded state</small></button>
+                <button type="button" role="treeitem" data-openmmi-settings-parent="advanced" data-openmmi-settings-section="trust">Trust <small>local trust evidence</small></button>
               </div>
             </div>
           </nav>

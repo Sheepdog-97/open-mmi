@@ -16,6 +16,7 @@ SYSTEM_SETTINGS = STATIC / "system-settings.js"
 SYSTEM_SETTINGS_STYLES = STATIC / "styles-system-settings.css"
 VEHICLE_SETUP_SETTINGS = STATIC / "vehicle-setup-settings.js"
 RUNTIME_DIAGNOSTICS = STATIC / "runtime-diagnostics.js"
+TRUST_STATUS = STATIC / "trust-status.js"
 SERVICE_REMINDER = STATIC / "service-reminder.js"
 TRIP_DISTANCE = STATIC / "trip-distance.js"
 TRIP_A = STATIC / "trip-a.js"
@@ -43,6 +44,7 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         system_settings_index = html.index('<script src="/system-settings.js"></script>')
         vehicle_setup_settings_index = html.index('<script src="/vehicle-setup-settings.js"></script>')
         runtime_diagnostics_index = html.index('<script src="/runtime-diagnostics.js"></script>')
+        trust_status_index = html.index('<script src="/trust-status.js"></script>')
         service_reminder_index = html.index('<script src="/service-reminder.js"></script>')
         trip_distance_index = html.index('<script src="/trip-distance.js"></script>')
         trip_a_index = html.index('<script src="/trip-a.js"></script>')
@@ -65,7 +67,8 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertLess(preferences_index, system_settings_index)
         self.assertLess(system_settings_index, vehicle_setup_settings_index)
         self.assertLess(vehicle_setup_settings_index, runtime_diagnostics_index)
-        self.assertLess(runtime_diagnostics_index, service_reminder_index)
+        self.assertLess(runtime_diagnostics_index, trust_status_index)
+        self.assertLess(trust_status_index, service_reminder_index)
         self.assertLess(service_reminder_index, trip_distance_index)
         self.assertLess(trip_distance_index, trip_a_index)
         self.assertLess(trip_a_index, trip_b_index)
@@ -91,6 +94,7 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertIn("window.openMmiSystemSettings", source)
         self.assertIn("window.openMmiVehicleSetupSettings", source)
         self.assertIn("window.openMmiRuntimeDiagnostics", source)
+        self.assertIn("window.openMmiTrustStatus", source)
         self.assertIn("window.openMmiServiceReminder", source)
         self.assertIn("window.openMmiTripDistance", source)
         self.assertIn("window.openMmiTripA", source)
@@ -111,6 +115,9 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         self.assertIn("openMmiVehicleClient.createRenderer({ preferences: openMmiPrefs })", source)
         self.assertIn("openMmiMediaClient.createController({ preferences: openMmiPrefs })", source)
         self.assertIn("openMmiVehicleSetupSettingsClient.install({ api: openMmiApiClient })", source)
+        self.assertIn("openMmiTrustStatusClient.install({ api: openMmiApiClient })", source)
+        self.assertIn('data-openmmi-settings-section="trust"', source)
+        self.assertIn('data-openmmi-trust-panel="true"', source)
         self.assertIn("openMmiRadioMediaClient.installPrivacy({ preferences: openMmiPrefs })", source)
         self.assertIn("openMmiJellyfinMediaClient.installController({", source)
         self.assertIn("openMmiRadioMediaClient.installController({ preferences: openMmiPrefs })", source)
@@ -130,6 +137,7 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
         system_settings = SYSTEM_SETTINGS.read_text(encoding="utf-8")
         vehicle_setup_settings = VEHICLE_SETUP_SETTINGS.read_text(encoding="utf-8")
         runtime_diagnostics = RUNTIME_DIAGNOSTICS.read_text(encoding="utf-8")
+        trust_status = TRUST_STATUS.read_text(encoding="utf-8")
         status = STATUS.read_text(encoding="utf-8")
         navigation = NAVIGATION.read_text(encoding="utf-8")
         overlays = OVERLAYS.read_text(encoding="utf-8")
@@ -148,6 +156,7 @@ class FrontendModuleBoundaryTests(unittest.TestCase):
             (system_settings, "openMmiSystemSettings"),
             (vehicle_setup_settings, "openMmiVehicleSetupSettings"),
             (runtime_diagnostics, "openMmiRuntimeDiagnostics"),
+            (trust_status, "openMmiTrustStatus"),
             (SERVICE_REMINDER.read_text(encoding="utf-8"), "openMmiServiceReminder"),
             (TRIP_A.read_text(encoding="utf-8"), "openMmiTripA"),
             (TRIP_B.read_text(encoding="utf-8"), "openMmiTripB"),

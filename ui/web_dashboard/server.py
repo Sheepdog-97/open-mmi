@@ -335,6 +335,13 @@ except ModuleNotFoundError as exc:  # pragma: no cover - direct script fallback
         raise
     import runtime_diagnostics as runtime_diagnostics_backend  # type: ignore[no-redef]
 
+try:
+    from ui.web_dashboard import trust_status as trust_status_backend
+except ModuleNotFoundError as exc:  # pragma: no cover - direct script fallback
+    if exc.name not in {"ui", "ui.web_dashboard"}:
+        raise
+    import trust_status as trust_status_backend  # type: ignore[no-redef]
+
 
 class DashboardHandler(SimpleHTTPRequestHandler):
     status_path: Path = default_status_path()
@@ -492,6 +499,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         if parsed.path == "/api/system/diagnostics/runtime":
             self._send_json(runtime_diagnostics_backend.runtime_diagnostics_payload())
+            return
+
+        if parsed.path == "/api/trust/status":
+            self._send_json(trust_status_backend.trust_status_payload())
             return
 
         if parsed.path == "/api/status":

@@ -135,6 +135,38 @@ class DashboardVersionHttpTests(unittest.TestCase):
         self.assertEqual(headers.get("Cache-Control"), "no-store")
         self.assertEqual(json.loads(body), fixture)
 
+    def test_trust_status_endpoint_is_uncached_and_read_only(self):
+        fixture = {
+            "api_version": 1,
+            "status": "UNVERIFIED",
+            "report": {
+                "status": "UNVERIFIED",
+                "manifest": {
+                    "available": True,
+                    "policy_generation": 6,
+                    "digest": "sha256:test-manifest",
+                    "capabilities": {},
+                },
+                "checks": [],
+                "telemetry_authorization": {
+                    "authorized": False,
+                },
+            },
+            "error": None,
+        }
+
+        with patch.object(
+            server.trust_status_backend,
+            "trust_status_payload",
+            return_value=fixture,
+        ):
+            status, headers, body = self.fetch("/api/trust/status")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("Cache-Control"), "no-store")
+        self.assertEqual(headers.get("Content-Type"), "application/json; charset=utf-8")
+        self.assertEqual(json.loads(body), fixture)
+
 
 if __name__ == "__main__":
     unittest.main()

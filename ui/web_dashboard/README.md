@@ -45,6 +45,7 @@ importable modules:
 - `bluetooth.py` — BlueZ status, opaque players, allowlisted controls;
 - `system_settings.py` — local launcher/Jellyfin/Vehicle Setup/update routes;
 - `runtime_diagnostics.py` — bounded local runtime/thermal/power state;
+- `trust_status.py` — read-only adapter for local Trust Inspector evidence;
 - `update_status.py` — installed source and policy/check state;
 - `versioning.py` — server/frontend build identity and asset policy.
 
@@ -74,6 +75,7 @@ Static modules load before `app.js` and have explicit state ownership:
 - `vehicle-setup-settings.js` — configured/draft/loaded state, custom operations,
   preview/review, confirmed Apply, coordinator polling, restoration feedback;
 - `runtime-diagnostics.js` — Diagnostics-only system polling and derived state;
+- `trust-status.js` — read-only rendering of local Trust Inspector evidence;
 - `service-reminder.js` — inspection interval settings, live due-state evaluation, MIB-style detail notification and persistent acknowledgement;
 - `trip-distance.js` — shared speed-integrated fractional distance with periodic private checkpoints;
 - `trip-a.js` — host-backed Trip A, one-decimal unit-aware display and conservative parked-time automatic reset;
@@ -84,6 +86,23 @@ Static modules load before `app.js` and have explicit state ownership:
 
 Modules resolve `window.fetch` and `window.localStorage` at call time to preserve
 instrumentation and fail safely when browser storage is unavailable.
+
+## Trust status route
+
+The owner-facing Trust surface consumes fresh local Trust Inspector evidence:
+
+```text
+GET /api/trust/status
+```
+
+This route is read-only. It exposes the existing local Inspector result and does
+not acknowledge trust expansion, mutate accepted owner state, authorize
+telemetry, replace release signers, or call a remote trust/scoring service.
+Missing or malformed evidence remains `UNVERIFIED`; the dashboard does not
+upgrade trust state independently of the Inspector.
+
+The browser exposes this under **Settings → Advanced → Trust**. Trust controls
+are deliberately outside this read-only surface.
 
 ## Vehicle Setup routes
 

@@ -183,7 +183,7 @@ jobs:
               vehicle_profile_qualification,
               vehicle_profile_scaffold,
           )
-          from ui.web_dashboard import bluetooth, jellyfin, radio, usb
+          from ui.web_dashboard import bluetooth, jellyfin, radio, trust_status, usb
           import vehicles
 
           roots = {
@@ -194,6 +194,7 @@ jobs:
               "trust_release_integrity": Path(trust_release_integrity.__file__),
               "trust_release_provenance": Path(trust_release_provenance.__file__),
               "trust_transition_gate": Path(trust_transition_gate.__file__),
+              "dashboard_trust_status": Path(trust_status.__file__),
               "vehicle_events": vehicle_events.DEFAULT_REGISTRY_PATH,
               "vehicle_statuses": vehicle_statuses.DEFAULT_REGISTRY_PATH,
               "bluetooth": Path(bluetooth.__file__),
@@ -211,6 +212,7 @@ jobs:
               "frontend_preferences": Path(ui.web_dashboard.__file__).parent / "static" / "preferences.js",
               "frontend_clock": Path(ui.web_dashboard.__file__).parent / "static" / "clock.js",
               "frontend_system_settings": Path(ui.web_dashboard.__file__).parent / "static" / "system-settings.js",
+              "frontend_trust_status": Path(ui.web_dashboard.__file__).parent / "static" / "trust-status.js",
               "frontend_status": Path(ui.web_dashboard.__file__).parent / "static" / "status.js",
               "frontend_vehicle": Path(ui.web_dashboard.__file__).parent / "static" / "vehicle.js",
               "frontend_media": Path(ui.web_dashboard.__file__).parent / "static" / "media.js",
