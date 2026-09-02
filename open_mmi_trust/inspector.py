@@ -34,6 +34,7 @@ from .accepted_state import (
 )
 from .manifest import DEFAULT_MANIFEST_PATH, ManifestError, load_manifest, manifest_digest
 from .release_integrity import (
+    DEFAULT_INSTALL_ROOT as INTEGRITY_DEFAULT_INSTALL_ROOT,
     DEFAULT_INTEGRITY_STATE_PATH,
     ReleaseIntegrityError,
     default_install_root as integrity_default_install_root,
@@ -1624,14 +1625,21 @@ def inspect_system(
     integrity_check, integrity_state = _inspect_release_integrity(
         Path(integrity_path), integrity_source_root, integrity_package_root
     )
-    production = install_root is None and package_root is None
+    production = (
+        install_root is None
+        and package_root is None
+        and integrity_source_root == INTEGRITY_DEFAULT_INSTALL_ROOT
+    )
     privileged_runtime_check = (
         _inspect_privileged_runtime_integrity(integrity_state)
         if production
         else None
     )
     network_check = _inspect_network_egress_enforcement(
-        root, manifest, privileged_runtime_check, production=production
+        integrity_source_root,
+        manifest,
+        privileged_runtime_check,
+        production=production,
     )
     if network_check is not None:
         checks.append(network_check)

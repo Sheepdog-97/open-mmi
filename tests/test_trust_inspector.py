@@ -414,6 +414,44 @@ class TrustInspectorTests(unittest.TestCase):
             self.assertFalse(accepted_state.exists())
 
 
+    def test_default_package_context_is_not_mistaken_for_production_runtime(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            package_root = root / "site-packages"
+            source_root = root / "release-source"
+            package_root.mkdir()
+            source_root.mkdir()
+            trust_state = root / "trust"
+            with (
+                mock.patch(
+                    "open_mmi_trust.inspector._default_install_root",
+                    return_value=package_root,
+                ),
+                mock.patch(
+                    "open_mmi_trust.inspector.integrity_default_install_root",
+                    return_value=source_root,
+                ),
+                mock.patch(
+                    "open_mmi_trust.inspector.integrity_default_package_root",
+                    return_value=package_root,
+                ),
+                mock.patch(
+                    "open_mmi_trust.inspector._inspect_network_egress_enforcement",
+                    return_value=None,
+                ) as network_check,
+            ):
+                inspect_system(
+                    manifest_path=MANIFEST,
+                    authorization_path=trust_state / "telemetry.json",
+                    accepted_state_path=trust_state / "accepted.json",
+                    lineage_path=trust_state / "lineage",
+                    integrity_path=trust_state / "integrity.json",
+                    provenance_path=trust_state / "provenance.json",
+                )
+
+        self.assertEqual(network_check.call_args.args[0], source_root)
+        self.assertFalse(network_check.call_args.kwargs["production"])
+
     def test_inspector_source_has_no_trust_mutation_or_network_surface(self):
         forbidden_modules = {"socket", "subprocess", "urllib", "http", "requests"}
         forbidden_calls = {
