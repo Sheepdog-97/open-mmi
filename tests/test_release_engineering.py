@@ -100,7 +100,7 @@ class TrustReleaseContractTests(unittest.TestCase):
         ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("python tools/verify_trust_manifest.py", ci)
         self.assertIn(
-            "tests.test_trust_invariants tests.test_telemetry_guard tests.test_trust_inspector tests.test_accepted_trust_state tests.test_trust_transition_gate tests.test_trust_lineage tests.test_release_integrity tests.test_release_provenance",
+            "tests.test_trust_invariants tests.test_telemetry_guard tests.test_trust_inspector tests.test_accepted_trust_state tests.test_trust_transition_gate tests.test_trust_lineage tests.test_release_integrity tests.test_release_provenance tests.test_vehicle_identity_remote_resolution",
             ci,
         )
         self.assertIn("trust_inspector.inspect_system()", ci)
@@ -109,6 +109,7 @@ class TrustReleaseContractTests(unittest.TestCase):
         self.assertIn('"open_mmi_telemetry/guard.py"', wheel)
         self.assertIn('"open_mmi_telemetry/cli.py"', wheel)
         self.assertIn('"open_mmi_trust/manifest.py"', wheel)
+        self.assertIn('"open_mmi_trust/vehicle_identity.py"', wheel)
         self.assertIn('"open_mmi_trust/accepted_state.py"', wheel)
         self.assertIn('"open_mmi_trust/accepted_state_cli.py"', wheel)
         self.assertIn('"open_mmi_trust/transition_gate.py"', wheel)

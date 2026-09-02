@@ -37,8 +37,12 @@ class PersistenceEnforcementTests(unittest.TestCase):
         self.assertNotIn("/home", unit)
 
     def test_other_privileged_services_cannot_write_vehicle_data_store(self):
+        coordinator = (
+            ROOT / "systemd/system/open-mmi-update-coordinator.service"
+        ).read_text(encoding="utf-8")
+        self.assertIn("InaccessiblePaths=", coordinator)
+        self.assertIn("-/var/lib/open-mmi/vehicle-data", coordinator)
         for relative in (
-            "systemd/system/open-mmi-update-coordinator.service",
             "systemd/system/open-mmi-update-installer.service",
             "systemd/system/open-mmi-vehicle-config-coordinator.service",
         ):

@@ -1573,6 +1573,268 @@ def _inspect_network_egress_enforcement(
     )
 
 
+_IDENTITY_ASSURANCE = "runtime-guarded"
+_IDENTITY_AUTHORIZATION_PATH = "/var/lib/open-mmi/trust/telemetry-authorization.v1.json"
+_IDENTITY_NETWORK_DENY_PATHS = (
+    _IDENTITY_AUTHORIZATION_PATH,
+    "/var/lib/open-mmi/vehicle-data",
+)
+
+
+def _vehicle_identity_unit_contract(root: Path) -> tuple[list[str], dict[str, Any]]:
+    inaccessible = (
+        "InaccessiblePaths=-/var/lib/open-mmi/trust/telemetry-authorization.v1.json "
+        "-/var/lib/open-mmi/vehicle-data"
+    )
+    required: dict[str, tuple[str, ...]] = {
+        "systemd/system/open-mmi-media-egress.service": (
+            "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+            inaccessible,
+        ),
+        "systemd/system/open-mmi-update-coordinator.service": (
+            "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+            inaccessible,
+        ),
+        "systemd/user/open-mmi-dashboard.service": (
+            "IPAddressDeny=any",
+            "IPAddressAllow=localhost",
+        ),
+        "systemd/user/canbusd.service": (
+            "RestrictAddressFamilies=AF_CAN AF_UNIX",
+        ),
+        "systemd/user/open-mmi-owner-config.service": (
+            "RestrictAddressFamilies=AF_UNIX",
+        ),
+        "systemd/system/open-mmi-vehicle-store.service": (
+            "RestrictAddressFamilies=AF_UNIX",
+        ),
+    }
+    failures: list[str] = []
+    evidence: dict[str, Any] = {}
+    for relative, fragments in required.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            failures.append(f"{relative}:unreadable:{type(exc).__name__}")
+            continue
+        missing = [fragment for fragment in fragments if fragment not in text]
+        if relative.endswith("canbusd.service") and ("AF_INET" in text or "AF_INET6" in text):
+            missing.append("must-not-authorize-AF_INET")
+        if missing:
+            failures.extend(f"{relative}:missing:{fragment}" for fragment in missing)
+        evidence[relative] = {"required_fragments": list(fragments)}
+    return sorted(set(failures)), evidence
+
+
+def _vehicle_identity_source_contract(root: Path) -> list[str]:
+    required_fragments = {
+        "open_mmi_telemetry/guard.py": (
+            '"destination": "local-only"',
+            "def normalize_vin(vin: str)",
+            "def _vin_fingerprint(vin: str, salt: bytes",
+        ),
+        "open_mmi_trust/vehicle_identity.py": (
+            "class RemoteVehicleIdentityDenied",
+            "def contains_vehicle_identity_material",
+            "def require_remote_identity_safe",
+        ),
+        "ui/media_egress.py": (
+            "RemoteVehicleIdentityDenied",
+            "require_remote_identity_safe(",
+            "except RemoteVehicleIdentityDenied as exc:",
+        ),
+        "ui/update_coordinator.py": (
+            "no caller-selected path, ref, repository, command, or service exists",
+        ),
+    }
+    failures: list[str] = []
+    for relative, fragments in required_fragments.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            failures.append(f"{relative}:unreadable:{type(exc).__name__}")
+            continue
+        for fragment in fragments:
+            if fragment not in text:
+                failures.append(f"{relative}:missing:{fragment}")
+
+    # The local telemetry package is the only production component that accepts
+    # a raw VIN.  It must remain free of network client primitives.
+    network_import_roots = {
+        "socket", "urllib", "http", "requests", "httpx", "aiohttp", "ftplib", "smtplib",
+    }
+    telemetry_root = root / "open_mmi_telemetry"
+    if telemetry_root.is_dir():
+        for path in sorted(telemetry_root.glob("*.py")):
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            except (OSError, UnicodeError, SyntaxError) as exc:
+                failures.append(f"{path.relative_to(root)}:unreadable:{type(exc).__name__}")
+                continue
+            for node in ast.walk(tree):
+                module = ""
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name.split(".", 1)[0] in network_import_roots:
+                            failures.append(
+                                f"{path.relative_to(root)}:{node.lineno}:network-import:{alias.name}"
+                            )
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    module = node.module
+                    if module.split(".", 1)[0] in network_import_roots:
+                        failures.append(
+                            f"{path.relative_to(root)}:{node.lineno}:network-import:{module}"
+                        )
+
+    # Network-capable actors must not import vehicle/telemetry data providers.
+    forbidden_egress_import_fragments = (
+        "open_mmi_telemetry",
+        "canbusd",
+        "vehicle_store",
+        "status_bus",
+        "service_reminder",
+        "trip_distance",
+        "trip_a",
+        "trip_b",
+    )
+    for relative in ("ui/media_egress.py", "ui/update_coordinator.py"):
+        path = root / relative
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (OSError, UnicodeError, SyntaxError) as exc:
+            failures.append(f"{relative}:unreadable:{type(exc).__name__}")
+            continue
+        for node in ast.walk(tree):
+            modules: list[str] = []
+            if isinstance(node, ast.Import):
+                modules.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                modules.append(node.module)
+            for module in modules:
+                if any(fragment in module for fragment in forbidden_egress_import_fragments):
+                    failures.append(f"{relative}:{node.lineno}:identity-source-import:{module}")
+
+    # Adding a new production VIN/identity consumer is an explicit trust-boundary
+    # change.  Keep the small reviewed local set closed by default.
+    allowed_identity_python = {
+        "open_mmi_telemetry/guard.py",
+        "open_mmi_telemetry/cli.py",
+        "open_mmi_trust/vehicle_identity.py",
+        "open_mmi_trust/inspector.py",
+        "open_mmi_trust/accepted_state.py",
+        "open_mmi_trust/manifest.py",
+        "ui/media_egress.py",
+    }
+    ignored_roots = {"tests", "tools", ".git", ".venv", "venv", "__pycache__", "build", "dist"}
+    identity_re = re.compile(
+        r"\bvin\b|vin_binding|normalize_vin|_vin_fingerprint|vehicle\.identity\.remote-resolution",
+        re.IGNORECASE,
+    )
+    resolver_markers = (
+        "vpic", "nhtsa", "vindecoder", "vin-decoder", "vehiclehistory", "vehicle-history",
+    )
+    for path in sorted(root.rglob("*.py")):
+        relative = path.relative_to(root)
+        relative_text = relative.as_posix()
+        if ignored_roots.intersection(relative.parts):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            failures.append(f"{relative_text}:unreadable:{type(exc).__name__}")
+            continue
+        if identity_re.search(text) and relative_text not in allowed_identity_python:
+            failures.append(f"{relative_text}:undeclared-identity-consumer")
+        lowered = text.lower()
+        if relative_text not in {"open_mmi_trust/inspector.py"}:
+            for marker in resolver_markers:
+                if marker in lowered:
+                    failures.append(f"{relative_text}:remote-resolver-marker:{marker}")
+
+    return sorted(set(failures))
+
+
+def _inspect_vehicle_identity_remote_resolution_enforcement(
+    root: Path,
+    manifest: Mapping[str, Any] | None,
+    network_check: Mapping[str, Any] | None,
+    *,
+    production: bool,
+) -> dict[str, Any] | None:
+    if manifest is None:
+        return None
+    capability = manifest["capabilities"]["vehicle.identity.remote-resolution"]
+    if capability["assurance"] == "declared":
+        return None
+    if capability["policy"] != "prohibited" or capability["assurance"] != _IDENTITY_ASSURANCE:
+        return _check(
+            "capability.vehicle.identity.remote-resolution.enforcement",
+            FAIL,
+            "Remote vehicle-identity manifest semantics do not match the enforced local-only boundary.",
+            capability=capability,
+            expected_policy="prohibited",
+            expected_assurance=_IDENTITY_ASSURANCE,
+        )
+
+    network_capability = manifest["capabilities"]["network.external-egress"]
+    if (
+        network_capability["policy"] != "declared-purposes-only"
+        or network_capability["assurance"] != "os-enforced"
+        or network_capability.get("purposes")
+        != ["media.internet-radio", "media.jellyfin", "updates.release-fetch"]
+    ):
+        return _check(
+            "capability.vehicle.identity.remote-resolution.enforcement",
+            FAIL,
+            "Remote identity prohibition depends on the exact OS-enforced external-egress purpose boundary.",
+            network_capability=network_capability,
+        )
+
+    unit_failures, unit_evidence = _vehicle_identity_unit_contract(root)
+    source_failures = _vehicle_identity_source_contract(root)
+    if unit_failures or source_failures:
+        return _check(
+            "capability.vehicle.identity.remote-resolution.enforcement",
+            FAIL if production else UNVERIFIED,
+            (
+                "Installed source does not reproduce the remote vehicle-identity prohibition contract."
+                if production
+                else "Remote vehicle-identity prohibition cannot be reproduced from this non-production fixture."
+            ),
+            unit_failures=unit_failures,
+            source_failures=source_failures,
+            units=unit_evidence,
+        )
+    if not production:
+        return _check(
+            "capability.vehicle.identity.remote-resolution.enforcement",
+            UNVERIFIED,
+            "Local-only identity guards are present, but effective production network isolation was not inspected.",
+            assurance=capability["assurance"],
+        )
+    if network_check is None or network_check.get("status") != PASS:
+        status = FAIL if (network_check or {}).get("status") == FAIL else UNVERIFIED
+        return _check(
+            "capability.vehicle.identity.remote-resolution.enforcement",
+            status,
+            "Remote identity prohibition cannot be proven while the external network boundary is not proven.",
+            network_enforcement_status=(network_check or {}).get("status"),
+        )
+    return _check(
+        "capability.vehicle.identity.remote-resolution.enforcement",
+        PASS,
+        "Vehicle identity remains local: VIN handling is local-only, identity-bearing media egress is rejected, and network actors cannot read Open MMI identity state.",
+        policy="prohibited",
+        assurance=capability["assurance"],
+        authorized_remote_identity_purposes=[],
+        local_vin_use="telemetry-authorization-binding-only",
+        inaccessible_identity_paths=list(_IDENTITY_NETWORK_DENY_PATHS),
+        network_enforcement_status=network_check.get("status"),
+    )
+
+
 _PERSISTENCE_DURABLE_PURPOSES = (
     "service-reminder",
     "trip-a",
@@ -1613,7 +1875,8 @@ def _vehicle_persistence_unit_contract(root: Path) -> tuple[list[str], dict[str,
             "RestrictAddressFamilies=AF_UNIX",
         ),
         "systemd/system/open-mmi-update-coordinator.service": (
-            "ReadOnlyPaths=/var/lib/open-mmi/network-egress /var/lib/open-mmi/vehicle-data",
+            "ReadOnlyPaths=/var/lib/open-mmi/network-egress",
+            "InaccessiblePaths=-/var/lib/open-mmi/trust/telemetry-authorization.v1.json -/var/lib/open-mmi/vehicle-data",
         ),
         "systemd/system/open-mmi-update-installer.service": (
             "ReadOnlyPaths=/var/lib/open-mmi/network-egress /var/lib/open-mmi/vehicle-data",
@@ -2051,6 +2314,14 @@ def inspect_system(
     )
     if persistence_check is not None:
         checks.append(persistence_check)
+    identity_check = _inspect_vehicle_identity_remote_resolution_enforcement(
+        integrity_source_root,
+        manifest,
+        network_check,
+        production=production,
+    )
+    if identity_check is not None:
+        checks.append(identity_check)
     provenance_check = _inspect_release_provenance(
         Path(provenance_path), integrity_state, integrity_source_root
     )

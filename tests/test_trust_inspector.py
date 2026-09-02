@@ -93,10 +93,10 @@ class TrustInspectorTests(unittest.TestCase):
 
         self.assertEqual(report["schema_version"], 1)
         self.assertEqual(report["status"], UNVERIFIED)
-        self.assertEqual(report["manifest"]["policy_generation"], 4)
+        self.assertEqual(report["manifest"]["policy_generation"], 5)
         self.assertEqual(
             report["manifest"]["digest"],
-            "sha256:e21ee12b5290da2bc229a88b9ca804f4e36cb9fffaaaa863f237daa32bdfd9b5",
+            "sha256:510796ed814cbd164c7caee553541b2158c11c3fb5438c683550e2999bb6f68d",
         )
         self.assertEqual(report["telemetry_authorization"], {"authorized": False, "state": "not-authorized"})
         self.assertNotIn("accepted_owner_trust", report)

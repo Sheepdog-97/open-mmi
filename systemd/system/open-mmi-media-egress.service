@@ -24,6 +24,7 @@ ProtectKernelLogs=yes
 ProtectKernelModules=yes
 ProtectKernelTunables=yes
 ProtectSystem=strict
+InaccessiblePaths=-/var/lib/open-mmi/trust/telemetry-authorization.v1.json -/var/lib/open-mmi/vehicle-data
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 RestrictNamespaces=yes
 RestrictRealtime=yes

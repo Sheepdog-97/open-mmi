@@ -528,6 +528,16 @@ class TrustInvariantTests(unittest.TestCase):
             manifest["capabilities"]["vehicle-data.persistence"]["assurance"],
             "os-enforced",
         )
+        self.assertEqual(
+            manifest["capabilities"]["vehicle.identity.remote-resolution"],
+            {"policy": "prohibited", "assurance": "runtime-guarded"},
+        )
+        self.assertFalse(
+            any(
+                "identity" in purpose or "vin" in purpose
+                for purpose in manifest["capabilities"]["network.external-egress"]["purposes"]
+            )
+        )
 
 
 if __name__ == "__main__":

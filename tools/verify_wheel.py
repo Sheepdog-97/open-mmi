@@ -35,6 +35,7 @@ REQUIRED_PATHS = {
     "open_mmi_trust/inspector.py",
     "open_mmi_trust/inspector_cli.py",
     "open_mmi_trust/manifest.py",
+    "open_mmi_trust/vehicle_identity.py",
     "open_mmi_trust/data/trust-inspection.v1.schema.json",
     "open_mmi_trust/data/accepted-owner-trust.v1.schema.json",
     "open_mmi_trust/data/trust-transition-authorization.v1.schema.json",

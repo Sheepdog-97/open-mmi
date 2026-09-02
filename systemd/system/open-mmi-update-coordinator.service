@@ -23,7 +23,8 @@ PrivateTmp=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 ProtectHome=read-only
 ProtectSystem=strict
-ReadOnlyPaths=/var/lib/open-mmi/network-egress /var/lib/open-mmi/vehicle-data
+ReadOnlyPaths=/var/lib/open-mmi/network-egress
+InaccessiblePaths=-/var/lib/open-mmi/trust/telemetry-authorization.v1.json -/var/lib/open-mmi/vehicle-data
 ReadWritePaths=/var/lib/open-mmi /run/open-mmi
 
 [Install]

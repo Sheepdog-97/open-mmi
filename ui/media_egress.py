@@ -24,6 +24,10 @@ from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 from urllib.parse import parse_qs, unquote, urlparse
 
+from open_mmi_trust.vehicle_identity import (
+    RemoteVehicleIdentityDenied,
+    require_remote_identity_safe,
+)
 from ui import media_egress_config
 from ui.web_dashboard import jellyfin, radio
 
@@ -203,6 +207,8 @@ class MediaEgressHandler(BaseHTTPRequestHandler):
                 self._proxy_media(payload)
                 return
             self.send_error(404)
+        except RemoteVehicleIdentityDenied as exc:
+            _send_json(self, {"ok": False, "error": str(exc)}, 403)
         except PermissionError as exc:
             _send_json(self, {"ok": False, "error": str(exc)}, 403)
         except ValueError as exc:
@@ -233,6 +239,9 @@ class MediaEgressHandler(BaseHTTPRequestHandler):
             self.headers["Range"] = range_header
 
         query = parse_qs(query_text, keep_blank_values=True)
+        require_remote_identity_safe(
+            [path, query_text, range_header, *(item for values in query.values() for item in values)]
+        )
         if source == "radio":
             config = _broker_radio_config()
             if path == "/api/radio/status":
