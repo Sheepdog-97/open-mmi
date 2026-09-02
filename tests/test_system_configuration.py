@@ -103,22 +103,24 @@ class SystemConfigurationTests(unittest.TestCase):
         self.assertTrue(system_settings._request_allowed(Handler()))
 
     def test_launcher_update_uses_shared_launcher_configuration(self):
-        with patch.object(system_settings.launcher, "save_preferences") as save, patch.object(
-            system_settings.launcher, "configure_open_at_login"
-        ) as configure, patch.object(system_settings, "_launcher_status", return_value={"default_ui": "tui"}):
-            result = system_settings._update_launcher({"default_ui": "tui", "open_at_login": True})
-        configure.assert_called_once_with(True)
-        save.assert_called_once_with({"default_ui": "tui"})
-        self.assertTrue(result["ok"])
+        expected = {"ok": True, "launcher": {"default_ui": "tui"}}
+        payload = {"default_ui": "tui", "open_at_login": True}
+        with patch.object(
+            system_settings.owner_config_client, "update_launcher", return_value=expected
+        ) as update:
+            result = system_settings._update_launcher(payload)
+        update.assert_called_once_with(payload)
+        self.assertEqual(result, expected)
 
     def test_launcher_autostart_only_update_does_not_require_json_preferences(self):
-        with patch.object(system_settings.launcher, "save_preferences") as save, patch.object(
-            system_settings.launcher, "configure_open_at_login"
-        ) as configure, patch.object(system_settings, "_launcher_status", return_value={"open_at_login": False}):
-            result = system_settings._update_launcher({"open_at_login": False})
-        configure.assert_called_once_with(False)
-        save.assert_not_called()
-        self.assertTrue(result["ok"])
+        expected = {"ok": True, "launcher": {"open_at_login": False}}
+        payload = {"open_at_login": False}
+        with patch.object(
+            system_settings.owner_config_client, "update_launcher", return_value=expected
+        ) as update:
+            result = system_settings._update_launcher(payload)
+        update.assert_called_once_with(payload)
+        self.assertEqual(result, expected)
 
     def test_vehicle_setup_route_is_local_fixed_and_read_only(self):
         class Handler:
@@ -348,8 +350,8 @@ class SystemConfigurationTests(unittest.TestCase):
         }
         handler = Handler()
         with patch.object(
-            system_settings.vehicle_catalogue,
-            "copy_maintained_template",
+            system_settings.owner_config_client,
+            "create_custom",
             return_value=result,
         ) as copy:
             self.assertTrue(
@@ -364,8 +366,8 @@ class SystemConfigurationTests(unittest.TestCase):
         handler = Handler()
         handler.client_address = ("192.0.2.10", 1234)
         with patch.object(
-            system_settings.vehicle_catalogue,
-            "copy_maintained_template",
+            system_settings.owner_config_client,
+            "create_custom",
         ) as copy:
             system_settings._handle_post(
                 handler,
@@ -376,9 +378,9 @@ class SystemConfigurationTests(unittest.TestCase):
 
         handler = Handler()
         with patch.object(
-            system_settings.vehicle_catalogue,
-            "copy_maintained_template",
-            side_effect=system_settings.vehicle_catalogue.VehicleCatalogueConflictError(
+            system_settings.owner_config_client,
+            "create_custom",
+            side_effect=system_settings.owner_config_client.OwnerConfigConflictError(
                 "Maintained template changed",
                 "template-stale",
             ),
@@ -462,8 +464,8 @@ class SystemConfigurationTests(unittest.TestCase):
         }
         handler = Handler(save_request)
         with patch.object(
-            system_settings.vehicle_catalogue,
-            "save_custom_item",
+            system_settings.owner_config_client,
+            "save_custom",
             return_value=saved,
         ) as save:
             self.assertTrue(system_settings._handle_post(
@@ -474,9 +476,9 @@ class SystemConfigurationTests(unittest.TestCase):
 
         handler = Handler(save_request)
         with patch.object(
-            system_settings.vehicle_catalogue,
-            "save_custom_item",
-            side_effect=system_settings.vehicle_catalogue.VehicleCatalogueConflictError(
+            system_settings.owner_config_client,
+            "save_custom",
+            side_effect=system_settings.owner_config_client.OwnerConfigConflictError(
                 "Custom catalogue item changed", "custom-stale"
             ),
         ):
@@ -536,8 +538,8 @@ class SystemConfigurationTests(unittest.TestCase):
         }
         handler = Handler()
         with patch.object(
-            system_settings.vehicle_catalogue,
-            "import_custom_item",
+            system_settings.owner_config_client,
+            "import_custom",
             return_value=result,
         ) as import_item:
             self.assertTrue(system_settings._handle_post(
@@ -548,9 +550,9 @@ class SystemConfigurationTests(unittest.TestCase):
 
         handler = Handler()
         with patch.object(
-            system_settings.vehicle_catalogue,
-            "import_custom_item",
-            side_effect=system_settings.vehicle_catalogue.VehicleCatalogueConflictError(
+            system_settings.owner_config_client,
+            "import_custom",
+            side_effect=system_settings.owner_config_client.OwnerConfigConflictError(
                 "A custom catalogue item with that id already exists",
                 "custom-exists",
             ),
@@ -564,7 +566,7 @@ class SystemConfigurationTests(unittest.TestCase):
         handler = Handler()
         handler.client_address = ("192.0.2.10", 1234)
         with patch.object(
-            system_settings.vehicle_catalogue, "import_custom_item"
+            system_settings.owner_config_client, "import_custom"
         ) as import_item:
             system_settings._handle_post(
                 handler, "/api/system/vehicle-custom/import"
@@ -612,8 +614,8 @@ class SystemConfigurationTests(unittest.TestCase):
         }
         handler = Handler()
         with patch.object(
-            system_settings.vehicle_catalogue,
-            "manage_custom_item",
+            system_settings.owner_config_client,
+            "manage_custom",
             return_value=result,
         ) as manage:
             self.assertTrue(system_settings._handle_post(
@@ -624,9 +626,9 @@ class SystemConfigurationTests(unittest.TestCase):
 
         handler = Handler()
         with patch.object(
-            system_settings.vehicle_catalogue,
-            "manage_custom_item",
-            side_effect=system_settings.vehicle_catalogue.VehicleCatalogueConflictError(
+            system_settings.owner_config_client,
+            "manage_custom",
+            side_effect=system_settings.owner_config_client.OwnerConfigConflictError(
                 "Active custom catalogue items cannot be renamed or deleted",
                 "custom-active",
             ),
@@ -640,7 +642,7 @@ class SystemConfigurationTests(unittest.TestCase):
         handler = Handler()
         handler.client_address = ("192.0.2.10", 1234)
         with patch.object(
-            system_settings.vehicle_catalogue, "manage_custom_item"
+            system_settings.owner_config_client, "manage_custom"
         ) as manage:
             system_settings._handle_post(
                 handler, "/api/system/vehicle-custom/manage"
@@ -677,8 +679,8 @@ class SystemConfigurationTests(unittest.TestCase):
 
         handler = Handler()
         with patch.object(
-            system_settings.vehicle_catalogue,
-            "save_custom_item",
+            system_settings.owner_config_client,
+            "save_custom",
             return_value={"ok": True},
         ) as save:
             system_settings._handle_post(

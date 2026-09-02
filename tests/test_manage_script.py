@@ -437,6 +437,12 @@ write_checkout_update_source_metadata
             'install -m 0644 -o "$REAL_USER" -g "$REAL_USER" "$REPO_ROOT/systemd/user/open-mmi-dashboard.service"',
             self.text,
         )
+        self.assertIn('"$REPO_ROOT/systemd/user/$OWNER_CONFIG_UNIT"', self.text)
+        self.assertIn('"$SYSTEMD_USER_UNIT_ROOT/$OWNER_CONFIG_UNIT"', self.text)
+        self.assertNotIn(
+            'install -m 0644 -o "$REAL_USER" -g "$REAL_USER" "$REPO_ROOT/systemd/user/$OWNER_CONFIG_UNIT"',
+            self.text,
+        )
 
     def test_update_command_has_no_direct_systemctl_or_git_network_authority(self) -> None:
         start = self.text.index("cmd_update() {")
@@ -449,14 +455,14 @@ write_checkout_update_source_metadata
         self.assertIn("ui.config_cli updates prepare", update_block)
         self.assertIn("ui.config_cli updates install", update_block)
 
-    def test_update_manages_both_service_units(self) -> None:
+    def test_update_manages_trusted_user_service_units(self) -> None:
         self.assertIn(
-            "systemctl --user restart "
-            "canbusd.service open-mmi-dashboard.service",
+            'systemctl --user restart canbusd.service "$OWNER_CONFIG_UNIT" '
+            "open-mmi-dashboard.service",
             self.text,
         )
         self.assertIn(
-            "systemctl --user enable canbusd.service",
+            'systemctl --user enable canbusd.service "$OWNER_CONFIG_UNIT"',
             self.text,
         )
         self.assertNotIn(
@@ -633,9 +639,26 @@ write_checkout_update_source_metadata
         rollback_loop = 'for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$MEDIA_EGRESS_UNIT"'
         self.assertGreaterEqual(self.text.count(rollback_loop), 2)
 
+    def test_vehicle_store_service_is_managed_as_root_owned_system_unit(self) -> None:
+        self.assertIn('VEHICLE_STORE_UNIT="open-mmi-vehicle-store.service"', self.text)
+        self.assertIn('VEHICLE_STORE_ROOT="/var/lib/open-mmi/vehicle-data"', self.text)
+        self.assertIn('install_vehicle_store_service() {', self.text)
+        self.assertIn('"$REPO_ROOT/systemd/system/$VEHICLE_STORE_UNIT"', self.text)
+        self.assertIn('"/etc/systemd/system/$VEHICLE_STORE_UNIT"', self.text)
+        self.assertIn('install -d -m 0700 -o root -g root "$VEHICLE_STORE_ROOT"', self.text)
+        self.assertIn('systemctl enable "$VEHICLE_STORE_UNIT"', self.text)
+        self.assertIn('systemctl restart "$VEHICLE_STORE_UNIT"', self.text)
+        self.assertIn('systemctl disable --now "$VEHICLE_STORE_UNIT"', self.text)
+        self.assertGreaterEqual(self.text.count('install_vehicle_store_service'), 3)
+        rollback_loop = (
+            'for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" '
+            '"$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"'
+        )
+        self.assertGreaterEqual(self.text.count(rollback_loop), 2)
+
     def test_uninstall_handles_absent_units_quietly(self) -> None:
         self.assertIn(
-            "for service in canbusd.service open-mmi-dashboard.service; do",
+            'for service in canbusd.service open-mmi-dashboard.service "$OWNER_CONFIG_UNIT"; do',
             self.text,
         )
         self.assertIn(

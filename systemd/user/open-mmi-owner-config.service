@@ -1,0 +1,26 @@
+[Unit]
+Description=Open MMI Owner Configuration Broker
+Documentation=https://github.com/open-mmi/open-mmi
+After=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/open-mmi
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/opt/open-mmi/venv/bin/python -I -m ui.owner_config serve
+RuntimeDirectory=open-mmi-owner-config
+RuntimeDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=%h/.config/open-mmi %h/.config/autostart
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+
+[Install]
+WantedBy=default.target

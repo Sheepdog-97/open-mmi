@@ -66,10 +66,12 @@ PRIVILEGED_SYSTEM_UNITS = (
     "open-mmi-update-coordinator.service",
     "open-mmi-update-installer.service",
     "open-mmi-media-egress.service",
+    "open-mmi-vehicle-store.service",
 )
 PRIVILEGED_USER_UNITS = (
     "canbusd.service",
     "open-mmi-dashboard.service",
+    "open-mmi-owner-config.service",
 )
 _PYTHON_LIB_RE = re.compile(r"^python[0-9]+\.[0-9]+$")
 PACKAGE_SOURCE_ONLY_PATHS = {"ui/web_dashboard/README.md"}

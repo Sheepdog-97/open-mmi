@@ -24,7 +24,7 @@ class TrustManifestTests(unittest.TestCase):
         manifest = load_manifest()
         self.assertEqual(manifest["schema_version"], 1)
         self.assertEqual(manifest["manifest_id"], "org.open-mmi.trust-manifest")
-        self.assertEqual(manifest["policy_generation"], 3)
+        self.assertEqual(manifest["policy_generation"], 4)
         self.assertEqual(set(manifest["capabilities"]), set(CAPABILITY_POLICIES))
         self.assertEqual(
             manifest["capabilities"]["vehicle.can.transmit"],
@@ -43,6 +43,20 @@ class TrustManifestTests(unittest.TestCase):
                     "media.internet-radio",
                     "media.jellyfin",
                     "updates.release-fetch",
+                ],
+            },
+        )
+        self.assertEqual(
+            manifest["capabilities"]["vehicle-data.persistence"],
+            {
+                "policy": "declared-purposes-only",
+                "assurance": "os-enforced",
+                "purposes": [
+                    "service-reminder",
+                    "trip-a",
+                    "trip-b",
+                    "trip-distance",
+                    "vehicle-runtime-status",
                 ],
             },
         )

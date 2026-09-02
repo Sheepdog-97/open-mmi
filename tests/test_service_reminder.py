@@ -107,31 +107,51 @@ class ServiceReminderTests(unittest.TestCase):
             def _send_json(self, payload, status=200):
                 self.responses.append((status, payload))
 
-        with tempfile.TemporaryDirectory() as temporary, patch.dict(
-            os.environ,
-            {"OPEN_MMI_SERVICE_REMINDER_FILE": str(Path(temporary) / "service-reminder.json")},
-        ):
-            get_handler = Handler()
-            self.assertTrue(system_settings._handle_get(get_handler, "/api/system/service-reminder"))
-            self.assertEqual(get_handler.responses[-1][0], 200)
-            self.assertFalse(get_handler.responses[-1][1]["configured"])
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "service-reminder.json"
+            with (
+                patch.object(
+                    system_settings.vehicle_store_client,
+                    "service_reminder_status",
+                    side_effect=lambda: service_reminder.status_payload(path),
+                ),
+                patch.object(
+                    system_settings.vehicle_store_client,
+                    "service_reminder_settings",
+                    side_effect=lambda payload: service_reminder.update_settings(payload, path),
+                ),
+                patch.object(
+                    system_settings.vehicle_store_client,
+                    "service_reminder_reset",
+                    side_effect=lambda payload: service_reminder.reset_interval(payload, path),
+                ),
+                patch.object(
+                    system_settings.vehicle_store_client,
+                    "service_reminder_acknowledge",
+                    side_effect=lambda payload: service_reminder.acknowledge(payload, path),
+                ),
+            ):
+                get_handler = Handler()
+                self.assertTrue(system_settings._handle_get(get_handler, "/api/system/service-reminder"))
+                self.assertEqual(get_handler.responses[-1][0], 200)
+                self.assertFalse(get_handler.responses[-1][1]["configured"])
 
-            save_handler = Handler({
-                "enabled": True,
-                "distance_interval_km": 20000,
-                "time_interval_months": 18,
-                "warning_distance_km": 2000,
-                "warning_days": 45,
-            })
-            self.assertTrue(system_settings._handle_post(save_handler, "/api/system/service-reminder/settings"))
-            self.assertEqual(save_handler.responses[-1][1]["settings"]["time_interval_months"], 18)
+                save_handler = Handler({
+                    "enabled": True,
+                    "distance_interval_km": 20000,
+                    "time_interval_months": 18,
+                    "warning_distance_km": 2000,
+                    "warning_days": 45,
+                })
+                self.assertTrue(system_settings._handle_post(save_handler, "/api/system/service-reminder/settings"))
+                self.assertEqual(save_handler.responses[-1][1]["settings"]["time_interval_months"], 18)
 
-            reset_handler = Handler({"confirm": True, "odometer_km": 123456})
-            self.assertTrue(system_settings._handle_post(reset_handler, "/api/system/service-reminder/reset"))
-            acknowledge_handler = Handler({"confirm": True, "level": "soon"})
-            self.assertTrue(system_settings._handle_post(acknowledge_handler, "/api/system/service-reminder/acknowledge"))
-            self.assertTrue(reset_handler.responses[-1][1]["configured"])
-            self.assertEqual(reset_handler.responses[-1][1]["reset"]["odometer_km"], 123456)
+                reset_handler = Handler({"confirm": True, "odometer_km": 123456})
+                self.assertTrue(system_settings._handle_post(reset_handler, "/api/system/service-reminder/reset"))
+                acknowledge_handler = Handler({"confirm": True, "level": "soon"})
+                self.assertTrue(system_settings._handle_post(acknowledge_handler, "/api/system/service-reminder/acknowledge"))
+                self.assertTrue(reset_handler.responses[-1][1]["configured"])
+                self.assertEqual(reset_handler.responses[-1][1]["reset"]["odometer_km"], 123456)
 
     def test_v1_document_migrates_and_acknowledgement_tracks_current_schedule(self):
         with tempfile.TemporaryDirectory() as temporary:

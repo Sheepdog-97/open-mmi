@@ -16,26 +16,26 @@ from typing import Any, Dict, Mapping
 from urllib.parse import urlparse
 
 try:
-    from ui import egress_client, launcher, update_coordinator, update_readiness
+    from ui import egress_client, launcher, owner_config_client, update_coordinator, update_readiness, vehicle_store_client
     from ui import vehicle_catalogue, vehicle_config_coordinator, vehicle_setup
     from ui.configuration import (
         ConfigurationError,
         client_is_loopback,
         restart_dashboard,
     )
-    from ui.web_dashboard import service_reminder, trip_a, trip_b, trip_distance, update_status
+    from ui.web_dashboard import update_status
 except ModuleNotFoundError as exc:  # pragma: no cover - direct script fallback
     if exc.name != "ui":
         raise
     sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]))
-    from ui import egress_client, launcher, update_coordinator, update_readiness
+    from ui import egress_client, launcher, owner_config_client, update_coordinator, update_readiness, vehicle_store_client
     from ui import vehicle_catalogue, vehicle_config_coordinator, vehicle_setup
     from ui.configuration import (
         ConfigurationError,
         client_is_loopback,
         restart_dashboard,
     )
-    from ui.web_dashboard import service_reminder, trip_a, trip_b, trip_distance, update_status
+    from ui.web_dashboard import update_status
 
 SYSTEM_MAX_BODY_BYTES = 16 * 1024
 SYSTEM_CUSTOM_EDIT_MAX_BODY_BYTES = vehicle_setup.MAX_PROFILE_BYTES * 6 + SYSTEM_MAX_BODY_BYTES
@@ -123,32 +123,7 @@ def _settings_status() -> Dict[str, Any]:
 
 
 def _update_launcher(payload: Mapping[str, Any]) -> Dict[str, Any]:
-    allowed = {"default_ui", "open_at_login"}
-    unknown = sorted(set(payload) - allowed)
-    if unknown:
-        raise ConfigurationError(f"unsupported launcher settings: {', '.join(unknown)}")
-
-    updates: Dict[str, Any] = {}
-    changed = False
-    if "default_ui" in payload:
-        selected = str(payload["default_ui"] or "").strip().lower()
-        if selected not in {"web", "tui"}:
-            raise ConfigurationError("default_ui must be web or tui")
-        updates["default_ui"] = selected
-        changed = True
-
-    if "open_at_login" in payload:
-        enabled = payload["open_at_login"]
-        if not isinstance(enabled, bool):
-            raise ConfigurationError("open_at_login must be true or false")
-        launcher.configure_open_at_login(enabled)
-        changed = True
-
-    if not changed:
-        raise ConfigurationError("no launcher settings were supplied")
-    if updates:
-        launcher.save_preferences(updates)
-    return {"ok": True, "launcher": _launcher_status()}
+    return owner_config_client.update_launcher(payload)
 
 
 def _jellyfin_authority_change_requires_cli() -> ConfigurationError:
@@ -192,10 +167,10 @@ def _handle_get(handler: Any, path: str) -> bool:
         "/api/system/update-status": update_status.status_payload,
         "/api/system/update-readiness": lambda: update_readiness.readiness_payload(update_status.status_payload()),
         "/api/system/update-coordinator": update_coordinator.client_status,
-        "/api/system/service-reminder": service_reminder.status_payload,
-        "/api/system/trip-distance": trip_distance.status_payload,
-        "/api/system/trip-a": trip_a.status_payload,
-        "/api/system/trip-b": trip_b.status_payload,
+        "/api/system/service-reminder": vehicle_store_client.service_reminder_status,
+        "/api/system/trip-distance": vehicle_store_client.trip_distance_status,
+        "/api/system/trip-a": vehicle_store_client.trip_a_status,
+        "/api/system/trip-b": vehicle_store_client.trip_b_status,
     }
     if path not in routes:
         return False
@@ -209,6 +184,7 @@ def _handle_get(handler: Any, path: str) -> bool:
     except (
         update_coordinator.CoordinatorError,
         vehicle_config_coordinator.CoordinatorError,
+        vehicle_store_client.VehicleStoreClientError,
     ) as exc:
         handler._send_json({"ok": False, "error": str(exc)}, 502)
     except (RuntimeError, TimeoutError, OSError):
@@ -260,35 +236,35 @@ def _handle_post(handler: Any, path: str) -> bool:
         elif path == "/api/system/vehicle-setup/apply":
             result = vehicle_config_coordinator.client_apply(_json_body(handler))
         elif path == "/api/system/vehicle-custom/create":
-            result = vehicle_catalogue.copy_maintained_template(_json_body(handler))
+            result = owner_config_client.create_custom(_json_body(handler))
         elif path == "/api/system/vehicle-custom/load":
             result = vehicle_catalogue.load_custom_item(_json_body(handler))
         elif path == "/api/system/vehicle-custom/save":
-            result = vehicle_catalogue.save_custom_item(
+            result = owner_config_client.save_custom(
                 _json_body(handler, maximum_bytes=SYSTEM_CUSTOM_EDIT_MAX_BODY_BYTES)
             )
         elif path == "/api/system/vehicle-custom/manage":
-            result = vehicle_catalogue.manage_custom_item(_json_body(handler))
+            result = owner_config_client.manage_custom(_json_body(handler))
         elif path == "/api/system/vehicle-custom/import":
-            result = vehicle_catalogue.import_custom_item(
+            result = owner_config_client.import_custom(
                 _json_body(handler, maximum_bytes=SYSTEM_CUSTOM_EDIT_MAX_BODY_BYTES)
             )
         elif path == "/api/system/service-reminder/settings":
-            result = service_reminder.update_settings(_json_body(handler))
+            result = vehicle_store_client.service_reminder_settings(_json_body(handler))
         elif path == "/api/system/service-reminder/reset":
-            result = service_reminder.reset_interval(_json_body(handler))
+            result = vehicle_store_client.service_reminder_reset(_json_body(handler))
         elif path == "/api/system/trip-a/reset":
-            result = trip_a.reset_trip(_json_body(handler))
+            result = vehicle_store_client.trip_a_reset(_json_body(handler))
         elif path == "/api/system/trip-a/settings":
-            result = trip_a.update_settings(_json_body(handler))
+            result = vehicle_store_client.trip_a_settings(_json_body(handler))
         elif path == "/api/system/trip-a/observe":
-            result = trip_a.observe_vehicle(_json_body(handler))
+            result = vehicle_store_client.trip_a_observe(_json_body(handler))
         elif path == "/api/system/trip-b/reset":
-            result = trip_b.reset_trip(_json_body(handler))
+            result = vehicle_store_client.trip_b_reset(_json_body(handler))
         elif path == "/api/system/trip-distance/observe":
-            result = trip_distance.observe(_json_body(handler))
+            result = vehicle_store_client.trip_distance_observe(_json_body(handler))
         elif path == "/api/system/service-reminder/acknowledge":
-            result = service_reminder.acknowledge(_json_body(handler))
+            result = vehicle_store_client.service_reminder_acknowledge(_json_body(handler))
         elif path == "/api/system/update-check":
             payload = _json_body(handler)
             if payload not in ({}, {"confirm": True}):
@@ -313,6 +289,11 @@ def _handle_post(handler: Any, path: str) -> bool:
         else:
             result = routes[path](_json_body(handler))
         handler._send_json(result)
+    except owner_config_client.OwnerConfigConflictError as exc:
+        handler._send_json(
+            {"ok": False, "code": exc.code, "error": str(exc)},
+            409,
+        )
     except vehicle_catalogue.VehicleCatalogueConflictError as exc:
         handler._send_json(
             {"ok": False, "code": exc.code, "error": str(exc)},
@@ -341,6 +322,8 @@ def _handle_post(handler: Any, path: str) -> bool:
         launcher.LauncherError,
         update_coordinator.CoordinatorError,
         vehicle_config_coordinator.CoordinatorError,
+        vehicle_store_client.VehicleStoreClientError,
+        owner_config_client.OwnerConfigClientError,
         update_status.UpdateStatusError,
         vehicle_catalogue.VehicleCatalogueError,
         vehicle_setup.VehicleSetupError,

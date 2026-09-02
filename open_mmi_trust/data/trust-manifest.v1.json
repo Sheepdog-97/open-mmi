@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "manifest_id": "org.open-mmi.trust-manifest",
-  "policy_generation": 3,
+  "policy_generation": 4,
   "capabilities": {
     "network.external-egress": {
       "policy": "declared-purposes-only",
@@ -18,7 +18,7 @@
     },
     "vehicle-data.persistence": {
       "policy": "declared-purposes-only",
-      "assurance": "declared",
+      "assurance": "os-enforced",
       "purposes": [
         "service-reminder",
         "trip-a",

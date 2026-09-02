@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -1388,6 +1389,11 @@ def _network_egress_unit_contract(root: Path) -> tuple[list[str], dict[str, Any]
         "systemd/user/canbusd.service": (
             "RestrictAddressFamilies=AF_CAN AF_UNIX",
         ),
+        "systemd/user/open-mmi-owner-config.service": (
+            "ProtectSystem=strict",
+            "ProtectHome=read-only",
+            "RestrictAddressFamilies=AF_UNIX",
+        ),
     }
     failures: list[str] = []
     evidence: dict[str, Any] = {}
@@ -1454,7 +1460,11 @@ def _network_egress_user_shadow_paths() -> list[str]:
                 Path(runtime) / "systemd" / "user.control",
             ]
         )
-    protected = ("canbusd.service", "open-mmi-dashboard.service")
+    protected = (
+        "canbusd.service",
+        "open-mmi-dashboard.service",
+        "open-mmi-owner-config.service",
+    )
     forbidden_directives = (
         "ExecStart=",
         "IPAddressDeny=",
@@ -1562,6 +1572,396 @@ def _inspect_network_egress_enforcement(
         launcher_ui_target="loopback-only",
     )
 
+
+_PERSISTENCE_DURABLE_PURPOSES = (
+    "service-reminder",
+    "trip-a",
+    "trip-b",
+    "trip-distance",
+)
+_PERSISTENCE_PURPOSES = [*_PERSISTENCE_DURABLE_PURPOSES, "vehicle-runtime-status"]
+_PERSISTENCE_STORAGE_ROOT = Path("/var/lib/open-mmi/vehicle-data")
+
+
+def _vehicle_persistence_unit_contract(root: Path) -> tuple[list[str], dict[str, Any]]:
+    required: dict[str, tuple[str, ...]] = {
+        "systemd/system/open-mmi-vehicle-store.service": (
+            "User=root",
+            "StateDirectory=open-mmi/vehicle-data",
+            "StateDirectoryMode=0700",
+            "ProtectHome=yes",
+            "ProtectSystem=strict",
+            "RestrictAddressFamilies=AF_UNIX",
+            "CapabilityBoundingSet=",
+            "AmbientCapabilities=",
+        ),
+        "systemd/user/open-mmi-dashboard.service": (
+            "ProtectHome=read-only",
+            "ProtectSystem=strict",
+        ),
+        "systemd/user/canbusd.service": (
+            "RuntimeDirectory=open-mmi",
+            "RuntimeDirectoryMode=0700",
+            "ProtectHome=read-only",
+            "ProtectSystem=strict",
+            "ReadWritePaths=%t/open-mmi",
+        ),
+        "systemd/user/open-mmi-owner-config.service": (
+            "ProtectHome=read-only",
+            "ProtectSystem=strict",
+            "ReadWritePaths=%h/.config/open-mmi %h/.config/autostart",
+            "RestrictAddressFamilies=AF_UNIX",
+        ),
+        "systemd/system/open-mmi-update-coordinator.service": (
+            "ReadOnlyPaths=/var/lib/open-mmi/network-egress /var/lib/open-mmi/vehicle-data",
+        ),
+        "systemd/system/open-mmi-update-installer.service": (
+            "ReadOnlyPaths=/var/lib/open-mmi/network-egress /var/lib/open-mmi/vehicle-data",
+        ),
+        "systemd/system/open-mmi-vehicle-config-coordinator.service": (
+            "ReadOnlyPaths=/var/lib/open-mmi/vehicle-data",
+        ),
+    }
+    forbidden: dict[str, tuple[str, ...]] = {
+        "systemd/user/open-mmi-dashboard.service": ("ReadWritePaths=",),
+        "systemd/user/canbusd.service": ("/var/lib", "/home"),
+        "systemd/user/open-mmi-owner-config.service": ("/var/lib/open-mmi/vehicle-data",),
+    }
+    failures: list[str] = []
+    evidence: dict[str, Any] = {}
+    for relative, fragments in required.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            failures.append(f"{relative}:unreadable:{type(exc).__name__}")
+            continue
+        missing = [fragment for fragment in fragments if fragment not in text]
+        present_forbidden = [fragment for fragment in forbidden.get(relative, ()) if fragment in text]
+        if missing:
+            failures.extend(f"{relative}:missing:{fragment}" for fragment in missing)
+        if present_forbidden:
+            failures.extend(f"{relative}:forbidden:{fragment}" for fragment in present_forbidden)
+        evidence[relative] = {
+            "required_fragments": list(fragments),
+            "forbidden_fragments": list(forbidden.get(relative, ())),
+        }
+    return failures, evidence
+
+
+def _vehicle_persistence_source_contract(root: Path) -> list[str]:
+    required_fragments = {
+        "ui/vehicle_store.py": (
+            'DEFAULT_STORAGE_ROOT = Path("/var/lib/open-mmi/vehicle-data")',
+            'PURPOSES = frozenset({"service-reminder", "trip-a", "trip-b", "trip-distance"})',
+            'raise ValueError("vehicle-data persistence operation is not declared")',
+        ),
+        "ui/vehicle_store_client.py": (
+            'return request_json("/v1/service-reminder/status")',
+            'return request_json("/v1/trip-a/status")',
+            'return request_json("/v1/trip-b/status")',
+            'return request_json("/v1/trip-distance/status")',
+        ),
+        "ui/web_dashboard/system_settings.py": (
+            "vehicle_store_client.service_reminder_status",
+            "vehicle_store_client.trip_a_status",
+            "vehicle_store_client.trip_b_status",
+            "vehicle_store_client.trip_distance_status",
+        ),
+        "canbusd/status_bus.py": (
+            'Path(runtime_dir) / "open-mmi" / "status.json"',
+        ),
+    }
+    failures: list[str] = []
+    for relative, fragments in required_fragments.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            failures.append(f"{relative}:unreadable:{type(exc).__name__}")
+            continue
+        for fragment in fragments:
+            if fragment not in text:
+                failures.append(f"{relative}:missing:{fragment}")
+
+    state_modules = {
+        "ui/web_dashboard/service_reminder.py",
+        "ui/web_dashboard/trip_a.py",
+        "ui/web_dashboard/trip_b.py",
+        "ui/web_dashboard/trip_distance.py",
+    }
+    allowed_direct = {*state_modules, "ui/vehicle_store.py"}
+    legacy_names = {
+        "service-reminder.json",
+        "trip-a.json",
+        "trip-b.json",
+        "trip-distance.json",
+    }
+    roots = [root / name for name in ("ui", "canbusd", "actions", "powerd", "scripts")]
+    for source_root in roots:
+        if not source_root.exists():
+            continue
+        for path in sorted(source_root.rglob("*.py")):
+            relative = path.relative_to(root).as_posix()
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError) as exc:
+                failures.append(f"{relative}:unreadable:{type(exc).__name__}")
+                continue
+            if relative not in allowed_direct:
+                if "/var/lib/open-mmi/vehicle-data" in text:
+                    failures.append(f"{relative}:direct-durable-root-reference")
+                for name in legacy_names:
+                    if name in text:
+                        failures.append(f"{relative}:legacy-vehicle-state-reference:{name}")
+            if relative in state_modules or relative == "ui/vehicle_store.py":
+                continue
+            try:
+                tree = ast.parse(text, filename=str(path))
+            except SyntaxError:
+                failures.append(f"{relative}:syntax-error")
+                continue
+            for node in ast.walk(tree):
+                modules: list[str] = []
+                if isinstance(node, ast.Import):
+                    modules.extend(alias.name for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    modules.append(node.module)
+                    if node.module == "ui.web_dashboard":
+                        modules.extend(f"{node.module}.{alias.name}" for alias in node.names)
+                for module in modules:
+                    if module in {
+                        "ui.web_dashboard.service_reminder",
+                        "ui.web_dashboard.trip_a",
+                        "ui.web_dashboard.trip_b",
+                        "ui.web_dashboard.trip_distance",
+                    }:
+                        failures.append(f"{relative}:direct-vehicle-state-import:{module}")
+    return sorted(set(failures))
+
+
+def _vehicle_persistence_storage_contract(
+    root: Path, *, expected_uid: int = 0
+) -> tuple[list[str], dict[str, Any]]:
+    failures: list[str] = []
+    evidence: dict[str, Any] = {
+        "root": str(root),
+        "expected_uid": expected_uid,
+        "durable_purposes": list(_PERSISTENCE_DURABLE_PURPOSES),
+    }
+    try:
+        metadata = root.lstat()
+    except FileNotFoundError:
+        return ["storage-root:missing"], evidence
+    except OSError as exc:
+        return [f"storage-root:unreadable:{type(exc).__name__}"], evidence
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        failures.append("storage-root:not-trusted-directory")
+        return failures, evidence
+    if metadata.st_uid != expected_uid:
+        failures.append(f"storage-root:uid:{metadata.st_uid}")
+    if metadata.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+        failures.append("storage-root:group-or-world-writable")
+
+    try:
+        children = {path.name: path for path in root.iterdir()}
+    except OSError as exc:
+        failures.append(f"storage-root:cannot-list:{type(exc).__name__}")
+        return failures, evidence
+    unexpected = sorted(set(children) - set(_PERSISTENCE_DURABLE_PURPOSES))
+    missing = sorted(set(_PERSISTENCE_DURABLE_PURPOSES) - set(children))
+    failures.extend(f"storage-root:unexpected:{name}" for name in unexpected)
+    failures.extend(f"storage-root:missing-purpose:{name}" for name in missing)
+
+    purpose_evidence: dict[str, Any] = {}
+    for purpose in _PERSISTENCE_DURABLE_PURPOSES:
+        directory = children.get(purpose)
+        if directory is None:
+            continue
+        try:
+            item = directory.lstat()
+        except OSError as exc:
+            failures.append(f"{purpose}:unreadable:{type(exc).__name__}")
+            continue
+        if stat.S_ISLNK(item.st_mode) or not stat.S_ISDIR(item.st_mode):
+            failures.append(f"{purpose}:not-trusted-directory")
+            continue
+        if item.st_uid != expected_uid:
+            failures.append(f"{purpose}:uid:{item.st_uid}")
+        if item.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+            failures.append(f"{purpose}:group-or-world-writable")
+        try:
+            entries = list(directory.iterdir())
+        except OSError as exc:
+            failures.append(f"{purpose}:cannot-list:{type(exc).__name__}")
+            continue
+        unexpected_entries = [entry for entry in entries if entry.name != "state.json"]
+        failures.extend(f"{purpose}:unexpected:{entry.name}" for entry in unexpected_entries)
+        state_path = directory / "state.json"
+        if state_path.exists() or state_path.is_symlink():
+            try:
+                state_meta = state_path.lstat()
+            except OSError as exc:
+                failures.append(f"{purpose}:state-unreadable:{type(exc).__name__}")
+            else:
+                if stat.S_ISLNK(state_meta.st_mode) or not stat.S_ISREG(state_meta.st_mode):
+                    failures.append(f"{purpose}:state-not-regular")
+                if state_meta.st_uid != expected_uid:
+                    failures.append(f"{purpose}:state-uid:{state_meta.st_uid}")
+                if state_meta.st_nlink != 1:
+                    failures.append(f"{purpose}:state-hardlinked")
+                if state_meta.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+                    failures.append(f"{purpose}:state-group-or-world-writable")
+        purpose_evidence[purpose] = {
+            "path": str(directory),
+            "state_present": state_path.exists(),
+        }
+    evidence["purposes"] = purpose_evidence
+    return sorted(set(failures)), evidence
+
+
+
+
+def _vehicle_persistence_user_shadow_paths() -> list[str]:
+    home = Path.home()
+    runtime = os.getenv("XDG_RUNTIME_DIR", "").strip()
+    bases = [home / ".config" / "systemd" / "user", home / ".local" / "share" / "systemd" / "user"]
+    if runtime:
+        bases.extend(
+            [
+                Path(runtime) / "systemd" / "user",
+                Path(runtime) / "systemd" / "user.control",
+            ]
+        )
+    protected = (
+        "canbusd.service",
+        "open-mmi-dashboard.service",
+        "open-mmi-owner-config.service",
+    )
+    forbidden_directives = (
+        "ExecStart=",
+        "ProtectHome=",
+        "ProtectSystem=",
+        "ReadWritePaths=",
+        "ReadOnlyPaths=",
+        "BindPaths=",
+        "BindReadOnlyPaths=",
+        "RuntimeDirectory=",
+        "StateDirectory=",
+    )
+    offenders: list[str] = []
+    for base in bases:
+        for unit in protected:
+            full = base / unit
+            if full.exists() or full.is_symlink():
+                offenders.append(str(full))
+            dropin = base / f"{unit}.d"
+            if not dropin.is_dir():
+                continue
+            for path in sorted(dropin.glob("*.conf")):
+                try:
+                    text = path.read_text(encoding="utf-8")
+                except (OSError, UnicodeError):
+                    offenders.append(str(path) + ":unreadable")
+                    continue
+                for raw in text.splitlines():
+                    line = raw.strip()
+                    if any(line.startswith(prefix) for prefix in forbidden_directives):
+                        offenders.append(f"{path}:{line}")
+    return sorted(set(offenders))
+
+
+def _inspect_vehicle_data_persistence_enforcement(
+    root: Path,
+    manifest: Mapping[str, Any] | None,
+    privileged_runtime_check: Mapping[str, Any] | None,
+    *,
+    production: bool,
+    storage_root: Path = _PERSISTENCE_STORAGE_ROOT,
+    storage_expected_uid: int = 0,
+) -> dict[str, Any] | None:
+    if manifest is None:
+        return None
+    capability = manifest["capabilities"]["vehicle-data.persistence"]
+    if capability["assurance"] == "declared":
+        return None
+    if (
+        capability["policy"] != "declared-purposes-only"
+        or capability["assurance"] != "os-enforced"
+        or capability.get("purposes") != _PERSISTENCE_PURPOSES
+    ):
+        return _check(
+            "capability.vehicle-data.persistence.enforcement",
+            FAIL,
+            "Vehicle-data persistence manifest semantics do not match the enforced purpose boundary.",
+            capability=capability,
+            expected_purposes=_PERSISTENCE_PURPOSES,
+        )
+
+    unit_failures, unit_evidence = _vehicle_persistence_unit_contract(root)
+    source_failures = _vehicle_persistence_source_contract(root)
+    if unit_failures or source_failures:
+        return _check(
+            "capability.vehicle-data.persistence.enforcement",
+            FAIL if production else UNVERIFIED,
+            (
+                "Installed source does not reproduce the declared vehicle-data persistence enforcement contract."
+                if production
+                else "Vehicle-data persistence enforcement cannot be reproduced from this non-production fixture."
+            ),
+            unit_failures=unit_failures,
+            source_failures=source_failures,
+            units=unit_evidence,
+        )
+    if not production:
+        return _check(
+            "capability.vehicle-data.persistence.enforcement",
+            UNVERIFIED,
+            "Vehicle-data persistence enforcement source is present, but effective production filesystem/runtime state was not inspected.",
+            purposes=_PERSISTENCE_PURPOSES,
+            assurance=capability["assurance"],
+            runtime_status="ephemeral-/run-only",
+        )
+    if privileged_runtime_check is None or privileged_runtime_check.get("status") != PASS:
+        return _check(
+            "capability.vehicle-data.persistence.enforcement",
+            UNVERIFIED,
+            "Persistence policy source is present, but root-owned deployed unit integrity is not currently proven.",
+            purposes=_PERSISTENCE_PURPOSES,
+            privileged_runtime_status=(privileged_runtime_check or {}).get("status"),
+        )
+    shadow_paths = _vehicle_persistence_user_shadow_paths()
+    if shadow_paths:
+        return _check(
+            "capability.vehicle-data.persistence.enforcement",
+            FAIL,
+            "Owner-writable user-unit state can shadow or weaken an Open MMI persistence sandbox.",
+            shadow_paths=shadow_paths,
+        )
+    storage_failures, storage_evidence = _vehicle_persistence_storage_contract(
+        Path(storage_root), expected_uid=storage_expected_uid
+    )
+    if storage_failures:
+        return _check(
+            "capability.vehicle-data.persistence.enforcement",
+            FAIL,
+            "The durable vehicle-data store does not match the declared root-owned purpose boundary.",
+            storage_failures=storage_failures,
+            storage=storage_evidence,
+        )
+    return _check(
+        "capability.vehicle-data.persistence.enforcement",
+        PASS,
+        "Durable vehicle-derived state is confined to root-owned declared-purpose storage; runtime status remains ephemeral under /run.",
+        purposes=_PERSISTENCE_PURPOSES,
+        durable_purposes=list(_PERSISTENCE_DURABLE_PURPOSES),
+        runtime_status="vehicle-runtime-status:/run-only",
+        assurance=capability["assurance"],
+        root_owned_units=True,
+        owner_unit_shadows=[],
+        storage=storage_evidence,
+    )
+
 def _declared_assurance_checks(manifest: Mapping[str, Any] | None) -> list[dict[str, Any]]:
     if manifest is None:
         return []
@@ -1643,6 +2043,14 @@ def inspect_system(
     )
     if network_check is not None:
         checks.append(network_check)
+    persistence_check = _inspect_vehicle_data_persistence_enforcement(
+        integrity_source_root,
+        manifest,
+        privileged_runtime_check,
+        production=production,
+    )
+    if persistence_check is not None:
+        checks.append(persistence_check)
     provenance_check = _inspect_release_provenance(
         Path(provenance_path), integrity_state, integrity_source_root
     )

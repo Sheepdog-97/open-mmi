@@ -526,7 +526,7 @@ class TrustInvariantTests(unittest.TestCase):
         )
         self.assertEqual(
             manifest["capabilities"]["vehicle-data.persistence"]["assurance"],
-            "declared",
+            "os-enforced",
         )
 
 

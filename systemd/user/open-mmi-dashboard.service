@@ -1,7 +1,8 @@
 [Unit]
 Description=Open MMI Web Dashboard
 Documentation=https://github.com/open-mmi/open-mmi
-After=graphical-session.target canbusd.service
+After=graphical-session.target canbusd.service open-mmi-owner-config.service
+Wants=open-mmi-owner-config.service
 
 [Service]
 Type=simple
@@ -14,6 +15,9 @@ IPAddressAllow=localhost
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 NoNewPrivileges=true
 PrivateDevices=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
 RestrictNamespaces=true
 RestrictRealtime=true
 LockPersonality=true

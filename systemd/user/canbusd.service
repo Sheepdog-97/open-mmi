@@ -34,6 +34,11 @@ Environment="OPEN_MMI_BINDINGS=default"
 
 # Execution
 ExecStart=/opt/open-mmi/venv/bin/python -m canbusd.core
+RuntimeDirectory=open-mmi
+RuntimeDirectoryMode=0700
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=%t/open-mmi
 RestrictAddressFamilies=AF_CAN AF_UNIX
 NoNewPrivileges=true
 RestrictNamespaces=true

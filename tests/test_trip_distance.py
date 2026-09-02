@@ -105,19 +105,29 @@ class TripDistanceTests(unittest.TestCase):
             def _send_json(self, payload, status=200):
                 self.responses.append((status, payload))
 
-        with tempfile.TemporaryDirectory() as temporary, patch.dict(
-            os.environ,
-            {"OPEN_MMI_TRIP_DISTANCE_FILE": str(Path(temporary) / "trip-distance.json")},
-        ):
-            get_handler = Handler()
-            self.assertTrue(system_settings._handle_get(get_handler, "/api/system/trip-distance"))
-            self.assertEqual(get_handler.responses[-1][1]["total_km"], 0)
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "trip-distance.json"
+            with (
+                patch.object(
+                    system_settings.vehicle_store_client,
+                    "trip_distance_status",
+                    side_effect=lambda: trip_distance.status_payload(path),
+                ),
+                patch.object(
+                    system_settings.vehicle_store_client,
+                    "trip_distance_observe",
+                    side_effect=lambda payload: trip_distance.observe(payload, path),
+                ),
+            ):
+                get_handler = Handler()
+                self.assertTrue(system_settings._handle_get(get_handler, "/api/system/trip-distance"))
+                self.assertEqual(get_handler.responses[-1][1]["total_km"], 0)
 
-            observe_handler = Handler(
-                {"distance_delta_km": 0.1, "elapsed_seconds": 10, "odometer_km": 1000}
-            )
-            self.assertTrue(system_settings._handle_post(observe_handler, "/api/system/trip-distance/observe"))
-            self.assertAlmostEqual(observe_handler.responses[-1][1]["total_km"], 0.1)
+                observe_handler = Handler(
+                    {"distance_delta_km": 0.1, "elapsed_seconds": 10, "odometer_km": 1000}
+                )
+                self.assertTrue(system_settings._handle_post(observe_handler, "/api/system/trip-distance/observe"))
+                self.assertAlmostEqual(observe_handler.responses[-1][1]["total_km"], 0.1)
 
     def test_writer_refuses_symlink(self):
         with tempfile.TemporaryDirectory() as temporary:

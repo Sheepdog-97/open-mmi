@@ -28,6 +28,14 @@ class NetworkEgressUnitTests(unittest.TestCase):
         self.assertNotIn("AF_INET", unit)
         self.assertNotIn("AF_INET6", unit)
 
+    def test_owner_config_broker_cannot_create_inet_sockets(self):
+        unit = (ROOT / "systemd/user/open-mmi-owner-config.service").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("RestrictAddressFamilies=AF_UNIX", unit)
+        self.assertNotIn("AF_INET", unit)
+        self.assertNotIn("AF_INET6", unit)
+
     def test_media_egress_is_separate_unprivileged_system_service(self):
         unit = (ROOT / "systemd/system/open-mmi-media-egress.service").read_text(encoding="utf-8")
         self.assertIn("DynamicUser=yes", unit)

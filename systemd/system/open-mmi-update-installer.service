@@ -17,5 +17,5 @@ IPAddressAllow=localhost
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 ProtectHome=false
 ProtectSystem=strict
-ReadOnlyPaths=/var/lib/open-mmi/network-egress
+ReadOnlyPaths=/var/lib/open-mmi/network-egress /var/lib/open-mmi/vehicle-data
 ReadWritePaths=/opt /var/lib/open-mmi /run/open-mmi /etc/open-mmi /etc/systemd/system /etc/udev/rules.d /usr/lib/tmpfiles.d /usr/local/bin /home

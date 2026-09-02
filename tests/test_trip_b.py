@@ -63,14 +63,25 @@ class TripBTests(unittest.TestCase):
             def _send_json(self, payload, status=200):
                 self.responses.append((status, payload))
 
-        with tempfile.TemporaryDirectory() as temporary, patch.dict(
-            os.environ, {"OPEN_MMI_TRIP_B_FILE": str(Path(temporary) / "trip-b.json")}
-        ):
-            get_handler = Handler()
-            self.assertTrue(system_settings._handle_get(get_handler, "/api/system/trip-b"))
-            reset_handler = Handler({"confirm": True, "odometer_km": 123456})
-            self.assertTrue(system_settings._handle_post(reset_handler, "/api/system/trip-b/reset"))
-            self.assertTrue(reset_handler.responses[-1][1]["configured"])
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "trip-b.json"
+            with (
+                patch.object(
+                    system_settings.vehicle_store_client,
+                    "trip_b_status",
+                    side_effect=lambda: trip_b.status_payload(path),
+                ),
+                patch.object(
+                    system_settings.vehicle_store_client,
+                    "trip_b_reset",
+                    side_effect=lambda payload: trip_b.reset_trip(payload, path),
+                ),
+            ):
+                get_handler = Handler()
+                self.assertTrue(system_settings._handle_get(get_handler, "/api/system/trip-b"))
+                reset_handler = Handler({"confirm": True, "odometer_km": 123456})
+                self.assertTrue(system_settings._handle_post(reset_handler, "/api/system/trip-b/reset"))
+                self.assertTrue(reset_handler.responses[-1][1]["configured"])
 
     def test_writer_refuses_symlink(self):
         with tempfile.TemporaryDirectory() as temporary:

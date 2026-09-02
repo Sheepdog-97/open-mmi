@@ -82,22 +82,42 @@ class TripATests(unittest.TestCase):
             def _send_json(self, payload, status=200):
                 self.responses.append((status, payload))
 
-        with tempfile.TemporaryDirectory() as temporary, patch.dict(
-            os.environ,
-            {"OPEN_MMI_TRIP_A_FILE": str(Path(temporary) / "trip-a.json")},
-        ):
-            get_handler = Handler()
-            self.assertTrue(system_settings._handle_get(get_handler, "/api/system/trip-a"))
-            self.assertFalse(get_handler.responses[-1][1]["configured"])
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "trip-a.json"
+            with (
+                patch.object(
+                    system_settings.vehicle_store_client,
+                    "trip_a_status",
+                    side_effect=lambda: trip_a.status_payload(path),
+                ),
+                patch.object(
+                    system_settings.vehicle_store_client,
+                    "trip_a_reset",
+                    side_effect=lambda payload: trip_a.reset_trip(payload, path),
+                ),
+                patch.object(
+                    system_settings.vehicle_store_client,
+                    "trip_a_settings",
+                    side_effect=lambda payload: trip_a.update_settings(payload, path),
+                ),
+                patch.object(
+                    system_settings.vehicle_store_client,
+                    "trip_a_observe",
+                    side_effect=lambda payload: trip_a.observe_vehicle(payload, path),
+                ),
+            ):
+                get_handler = Handler()
+                self.assertTrue(system_settings._handle_get(get_handler, "/api/system/trip-a"))
+                self.assertFalse(get_handler.responses[-1][1]["configured"])
 
-            reset_handler = Handler({"confirm": True, "odometer_km": 123456})
-            self.assertTrue(system_settings._handle_post(reset_handler, "/api/system/trip-a/reset"))
-            settings_handler = Handler({"auto_reset_hours": 4})
-            self.assertTrue(system_settings._handle_post(settings_handler, "/api/system/trip-a/settings"))
-            observe_handler = Handler({"odometer_km": 123456})
-            self.assertTrue(system_settings._handle_post(observe_handler, "/api/system/trip-a/observe"))
-            self.assertTrue(reset_handler.responses[-1][1]["configured"])
-            self.assertEqual(reset_handler.responses[-1][1]["reset"]["odometer_km"], 123456)
+                reset_handler = Handler({"confirm": True, "odometer_km": 123456})
+                self.assertTrue(system_settings._handle_post(reset_handler, "/api/system/trip-a/reset"))
+                settings_handler = Handler({"auto_reset_hours": 4})
+                self.assertTrue(system_settings._handle_post(settings_handler, "/api/system/trip-a/settings"))
+                observe_handler = Handler({"odometer_km": 123456})
+                self.assertTrue(system_settings._handle_post(observe_handler, "/api/system/trip-a/observe"))
+                self.assertTrue(reset_handler.responses[-1][1]["configured"])
+                self.assertEqual(reset_handler.responses[-1][1]["reset"]["odometer_km"], 123456)
 
     def test_v1_documents_migrate_and_auto_reset_after_parked_interval(self):
         with tempfile.TemporaryDirectory() as temporary:

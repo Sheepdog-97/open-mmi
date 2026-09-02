@@ -60,6 +60,10 @@ class ReleaseIntegrityTests(unittest.TestCase):
             "[Service]\nExecStart=/opt/open-mmi/venv/bin/python -I -m ui.media_egress serve\n",
             encoding="utf-8",
         )
+        (repo / "systemd" / "system" / "open-mmi-vehicle-store.service").write_text(
+            "[Service]\nExecStart=/opt/open-mmi/venv/bin/python -I -m ui.vehicle_store serve\n",
+            encoding="utf-8",
+        )
         (repo / "systemd" / "user").mkdir(parents=True)
         (repo / "systemd" / "user" / "canbusd.service").write_text(
             "[Service]\nExecStart=/opt/open-mmi/venv/bin/python -I -m canbusd.core\n",
@@ -67,6 +71,10 @@ class ReleaseIntegrityTests(unittest.TestCase):
         )
         (repo / "systemd" / "user" / "open-mmi-dashboard.service").write_text(
             "[Service]\nExecStart=/opt/open-mmi/venv/bin/python -I -m ui.web_dashboard.server\n",
+            encoding="utf-8",
+        )
+        (repo / "systemd" / "user" / "open-mmi-owner-config.service").write_text(
+            "[Service]\nExecStart=/opt/open-mmi/venv/bin/python -I -m ui.owner_config serve\n",
             encoding="utf-8",
         )
         (repo / "ui" / "web_dashboard").mkdir(parents=True)

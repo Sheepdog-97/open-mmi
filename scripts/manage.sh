@@ -19,6 +19,9 @@ MEDIA_EGRESS_UNIT="open-mmi-media-egress.service"
 MEDIA_EGRESS_GROUP="open-mmi"
 MEDIA_EGRESS_CONFIG_DIR="/var/lib/open-mmi/network-egress"
 MEDIA_EGRESS_CONFIG="$MEDIA_EGRESS_CONFIG_DIR/media.v1.json"
+VEHICLE_STORE_UNIT="open-mmi-vehicle-store.service"
+VEHICLE_STORE_ROOT="/var/lib/open-mmi/vehicle-data"
+OWNER_CONFIG_UNIT="open-mmi-owner-config.service"
 SYSTEMD_USER_UNIT_ROOT="/etc/systemd/user"
 VEHICLE_CONFIG_COORDINATOR_GROUP="open-mmi-config"
 VEHICLE_CONFIG_COORDINATOR_UNIT="open-mmi-vehicle-config-coordinator.service"
@@ -791,14 +794,14 @@ PY_CONFIG
 
 configure_install_service_defaults() {
     export XDG_RUNTIME_DIR="/run/user/$USER_ID"
-    sudo -u "$REAL_USER" env HOME="$REAL_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" systemctl --user enable canbusd.service
+    sudo -u "$REAL_USER" env HOME="$REAL_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" systemctl --user enable canbusd.service "$OWNER_CONFIG_UNIT"
     sudo -u "$REAL_USER" env HOME="$REAL_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" systemctl --user disable open-mmi-dashboard.service >/dev/null 2>&1 || true
     migrate_legacy_dashboard_startup
 }
 
 configure_update_service_defaults() {
     export XDG_RUNTIME_DIR="/run/user/$USER_ID"
-    sudo -u "$REAL_USER" env HOME="$REAL_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" systemctl --user enable canbusd.service
+    sudo -u "$REAL_USER" env HOME="$REAL_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" systemctl --user enable canbusd.service "$OWNER_CONFIG_UNIT"
     migrate_legacy_dashboard_startup
 }
 
@@ -860,6 +863,32 @@ install_media_egress_service() {
     fi
 }
 
+install_vehicle_store_service() {
+    if ! getent group "$MEDIA_EGRESS_GROUP" >/dev/null 2>&1; then
+        groupadd --system "$MEDIA_EGRESS_GROUP"
+    fi
+    if ! id -nG "$REAL_USER" | tr ' ' '\n' | grep -Fqx "$MEDIA_EGRESS_GROUP"; then
+        usermod -aG "$MEDIA_EGRESS_GROUP" "$REAL_USER"
+    fi
+    install -d -m 0755 -o root -g root /etc/systemd/system
+    install -d -m 0700 -o root -g root "$VEHICLE_STORE_ROOT"
+    if ! env -u PYTHONPATH "$INSTALL_DIR/venv/bin/python" -I -m ui.vehicle_store migrate-legacy \
+        --legacy-root "$USER_CONFIG_DIR" \
+        --legacy-uid "$USER_ID" \
+        --storage-root "$VEHICLE_STORE_ROOT"; then
+        log_error "Legacy vehicle-data migration failed closed"
+        return 1
+    fi
+    install -m 0644 -o root -g root \
+        "$REPO_ROOT/systemd/system/$VEHICLE_STORE_UNIT" \
+        "/etc/systemd/system/$VEHICLE_STORE_UNIT"
+    systemctl daemon-reload
+    systemctl enable "$VEHICLE_STORE_UNIT"
+    if [ "${OPEN_MMI_PREPARED_DEPLOYMENT:-0}" != 1 ]; then
+        systemctl restart "$VEHICLE_STORE_UNIT"
+    fi
+}
+
 install_trusted_user_services() {
     install -d -m 0755 -o root -g root "$SYSTEMD_USER_UNIT_ROOT"
     install -m 0644 -o root -g root \
@@ -868,14 +897,20 @@ install_trusted_user_services() {
     install -m 0644 -o root -g root \
         "$REPO_ROOT/systemd/user/open-mmi-dashboard.service" \
         "$SYSTEMD_USER_UNIT_ROOT/open-mmi-dashboard.service"
+    install -m 0644 -o root -g root \
+        "$REPO_ROOT/systemd/user/$OWNER_CONFIG_UNIT" \
+        "$SYSTEMD_USER_UNIT_ROOT/$OWNER_CONFIG_UNIT"
 
     # These were historically installed as owner-writable full units.  Remove
     # the managed copies so they cannot shadow the root-owned policy units.
     rm -f \
         "$REAL_HOME/.config/systemd/user/canbusd.service" \
-        "$REAL_HOME/.config/systemd/user/open-mmi-dashboard.service"
+        "$REAL_HOME/.config/systemd/user/open-mmi-dashboard.service" \
+        "$REAL_HOME/.config/systemd/user/$OWNER_CONFIG_UNIT"
     install -d -m 0755 -o "$REAL_USER" -g "$REAL_USER" \
         "$REAL_HOME/.config/systemd/user"
+    install -d -m 0700 -o "$REAL_USER" -g "$REAL_USER" "$USER_CONFIG_DIR"
+    install -d -m 0755 -o "$REAL_USER" -g "$REAL_USER" "$REAL_HOME/.config/autostart"
 }
 
 install_open_mmi_transaction_locks() {
@@ -1344,6 +1379,7 @@ cmd_install() {
     fi
     install_update_coordinator
     install_media_egress_service
+    install_vehicle_store_service
     install_vehicle_config_coordinator
     install_power_manager
     
@@ -1384,7 +1420,7 @@ cmd_install() {
     
     # Start services
     log_info "Starting Open MMI services..."
-    sudo -u "$REAL_USER" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" systemctl --user restart canbusd open-mmi-dashboard
+    sudo -u "$REAL_USER" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" systemctl --user restart canbusd "$OWNER_CONFIG_UNIT" open-mmi-dashboard
     
     # Verify
     sleep 1
@@ -1483,14 +1519,14 @@ cmd_deploy_prepared() {
         "$rollback_root/system-files" \
         "$rollback_root/user-units" \
         "$rollback_root/trusted-user-units"
-    for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT" "$POWERD_UNIT"; do
+    for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT" "$POWERD_UNIT"; do
         if [ -e "/etc/systemd/system/$unit" ]; then
             cp -a -- "/etc/systemd/system/$unit" "$rollback_root/system-units/$unit"
         else
             : > "$rollback_root/system-units/$unit.absent"
         fi
     done
-    for unit in canbusd.service open-mmi-dashboard.service; do
+    for unit in canbusd.service open-mmi-dashboard.service "$OWNER_CONFIG_UNIT"; do
         if [ -e "$SYSTEMD_USER_UNIT_ROOT/$unit" ]; then
             cp -a -- "$SYSTEMD_USER_UNIT_ROOT/$unit" "$rollback_root/trusted-user-units/$unit"
         else
@@ -1561,7 +1597,7 @@ cmd_deploy_prepared() {
         if [ -d "${OPEN_MMI_MANAGED_REPOSITORY:-}/.git" ]; then
             sudo -u "$REAL_USER" git -C "$OPEN_MMI_MANAGED_REPOSITORY" reset --hard "$previous_commit" >/dev/null 2>&1 || true
         fi
-        for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT" "$POWERD_UNIT"; do
+        for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT" "$POWERD_UNIT"; do
             if [ -e "$rollback_root/system-units/$unit" ]; then
                 cp -a -- "$rollback_root/system-units/$unit" "/etc/systemd/system/$unit"
             elif [ -e "$rollback_root/system-units/$unit.absent" ]; then
@@ -1569,7 +1605,7 @@ cmd_deploy_prepared() {
             fi
         done
         install -d -m 0755 -o root -g root "$SYSTEMD_USER_UNIT_ROOT"
-        for unit in canbusd.service open-mmi-dashboard.service; do
+        for unit in canbusd.service open-mmi-dashboard.service "$OWNER_CONFIG_UNIT"; do
             if [ -e "$rollback_root/trusted-user-units/$unit" ]; then
                 cp -a -- "$rollback_root/trusted-user-units/$unit" "$SYSTEMD_USER_UNIT_ROOT/$unit"
             elif [ -e "$rollback_root/trusted-user-units/$unit.absent" ]; then
@@ -1638,6 +1674,11 @@ cmd_deploy_prepared() {
         else
             systemctl stop "$MEDIA_EGRESS_UNIT" >/dev/null 2>&1 || true
         fi
+        if [ -e "/etc/systemd/system/$VEHICLE_STORE_UNIT" ]; then
+            systemctl restart "$VEHICLE_STORE_UNIT" >/dev/null 2>&1 || true
+        else
+            systemctl stop "$VEHICLE_STORE_UNIT" >/dev/null 2>&1 || true
+        fi
         if [ -e "/etc/systemd/system/$VEHICLE_CONFIG_COORDINATOR_UNIT" ]; then
             systemctl restart "$VEHICLE_CONFIG_COORDINATOR_UNIT" >/dev/null 2>&1 || true
         else
@@ -1648,7 +1689,7 @@ cmd_deploy_prepared() {
         sudo -u "$REAL_USER" env HOME="$REAL_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
             systemctl --user daemon-reload >/dev/null 2>&1 || true
         sudo -u "$REAL_USER" env HOME="$REAL_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
-            systemctl --user restart canbusd.service open-mmi-dashboard.service >/dev/null 2>&1 || true
+            systemctl --user restart canbusd.service "$OWNER_CONFIG_UNIT" open-mmi-dashboard.service >/dev/null 2>&1 || true
     }
     trap rollback_prepared_deployment ERR
 
@@ -1694,6 +1735,7 @@ cmd_deploy_prepared() {
     deployment_stage="system-services"
     install_update_coordinator
     install_media_egress_service
+    install_vehicle_store_service
     deployment_stage="vehicle-config-coordinator"
     install_vehicle_config_coordinator
     deployment_stage="power-manager"
@@ -1709,11 +1751,11 @@ cmd_deploy_prepared() {
     sudo -u "$REAL_USER" env HOME="$REAL_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" systemctl --user daemon-reload
     configure_update_service_defaults
     sudo -u "$REAL_USER" env HOME="$REAL_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
-        systemctl --user restart canbusd.service open-mmi-dashboard.service
+        systemctl --user restart canbusd.service "$OWNER_CONFIG_UNIT" open-mmi-dashboard.service
 
     deployment_stage="service-health"
     sudo -u "$REAL_USER" env HOME="$REAL_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
-        systemctl --user is-active --quiet canbusd.service open-mmi-dashboard.service
+        systemctl --user is-active --quiet canbusd.service "$OWNER_CONFIG_UNIT" open-mmi-dashboard.service
     deployment_stage="api-health"
     local api_ready=false
     for _attempt in {1..15}; do
@@ -1773,11 +1815,12 @@ cmd_uninstall() {
     # Stop services
     log_info "Stopping systemd services..."
     export XDG_RUNTIME_DIR="/run/user/$USER_ID"
-    for service in canbusd.service open-mmi-dashboard.service; do
+    for service in canbusd.service open-mmi-dashboard.service "$OWNER_CONFIG_UNIT"; do
         sudo -u "$REAL_USER" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" systemctl --user disable --now "$service" >/dev/null 2>&1 || true
     done
     systemctl disable --now "$UPDATE_COORDINATOR_UNIT" >/dev/null 2>&1 || true
     systemctl disable --now "$MEDIA_EGRESS_UNIT" >/dev/null 2>&1 || true
+    systemctl disable --now "$VEHICLE_STORE_UNIT" >/dev/null 2>&1 || true
     systemctl disable --now "$VEHICLE_CONFIG_COORDINATOR_UNIT" >/dev/null 2>&1 || true
     systemctl disable --now "$POWERD_UNIT" >/dev/null 2>&1 || true
     systemctl stop "$VEHICLE_CAN_PROVISION_UNIT" >/dev/null 2>&1 || true
@@ -1786,8 +1829,10 @@ cmd_uninstall() {
         "/etc/systemd/system/$UPDATE_COORDINATOR_UNIT" \
         "/etc/systemd/system/$UPDATE_INSTALLER_UNIT" \
         "/etc/systemd/system/$MEDIA_EGRESS_UNIT" \
+        "/etc/systemd/system/$VEHICLE_STORE_UNIT" \
         "$SYSTEMD_USER_UNIT_ROOT/canbusd.service" \
         "$SYSTEMD_USER_UNIT_ROOT/open-mmi-dashboard.service" \
+        "$SYSTEMD_USER_UNIT_ROOT/$OWNER_CONFIG_UNIT" \
         "/etc/systemd/system/$VEHICLE_CONFIG_COORDINATOR_UNIT" \
         "/etc/systemd/system/$VEHICLE_CAN_PROVISION_UNIT" \
         "/etc/systemd/system/$POWERD_UNIT" \
@@ -1804,7 +1849,8 @@ cmd_uninstall() {
     log_info "Removing systemd service..."
     rm -f \
         "$REAL_HOME/.config/systemd/user/canbusd.service" \
-        "$REAL_HOME/.config/systemd/user/open-mmi-dashboard.service"
+        "$REAL_HOME/.config/systemd/user/open-mmi-dashboard.service" \
+        "$REAL_HOME/.config/systemd/user/$OWNER_CONFIG_UNIT"
     sudo -u "$REAL_USER" \
         XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
         systemctl --user daemon-reload
