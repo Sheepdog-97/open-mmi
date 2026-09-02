@@ -1727,7 +1727,10 @@ def _vehicle_identity_source_contract(root: Path) -> list[str]:
         "open_mmi_trust/manifest.py",
         "ui/media_egress.py",
     }
-    ignored_roots = {"tests", "tools", ".git", ".venv", "venv", "__pycache__", "build", "dist"}
+    ignored_roots = {
+        "tests", "tools", "independent_checker", ".git", ".venv", "venv",
+        "__pycache__", "build", "dist",
+    }
     identity_re = re.compile(
         r"\bvin\b|vin_binding|normalize_vin|_vin_fingerprint|vehicle\.identity\.remote-resolution",
         re.IGNORECASE,

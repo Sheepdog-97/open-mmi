@@ -106,7 +106,7 @@ jobs:
         run: |
           python tools/verify_trust_manifest.py
           python tools/vendor_bootstrap.py --check
-          python -m unittest tests.test_trust_invariants tests.test_telemetry_guard tests.test_trust_inspector tests.test_accepted_trust_state tests.test_trust_transition_gate tests.test_trust_lineage tests.test_release_integrity tests.test_release_provenance tests.test_vehicle_identity_remote_resolution
+          python -m unittest tests.test_trust_invariants tests.test_telemetry_guard tests.test_trust_inspector tests.test_accepted_trust_state tests.test_trust_transition_gate tests.test_trust_lineage tests.test_release_integrity tests.test_release_provenance tests.test_vehicle_identity_remote_resolution tests.test_independent_trust_checker
 
       - name: Verify CSS module cascade
         run: python tools/verify_css_split.py
