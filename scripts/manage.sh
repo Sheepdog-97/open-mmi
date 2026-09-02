@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 # =============================================================================
 # Open-MMI Installation Manager
@@ -1597,6 +1597,7 @@ cmd_deploy_local() {
     OPEN_MMI_MANAGED_REPOSITORY="$REPO_ROOT" \
     OPEN_MMI_MANAGED_BRANCH="$branch" \
     OPEN_MMI_MANAGED_UPSTREAM="$upstream" \
+    OPEN_MMI_PREPARED_DEPLOYMENT=1 \
     OPEN_MMI_PRESERVE_MANAGED_REPOSITORY=1 \
         cmd_deploy_prepared
 

@@ -728,6 +728,7 @@ write_checkout_update_source_metadata
             'OPEN_MMI_MANAGED_REPOSITORY="$REPO_ROOT"',
             'OPEN_MMI_MANAGED_BRANCH="$branch"',
             'OPEN_MMI_MANAGED_UPSTREAM="$upstream"',
+            'OPEN_MMI_PREPARED_DEPLOYMENT=1',
             'OPEN_MMI_PRESERVE_MANAGED_REPOSITORY=1',
         ):
             with self.subTest(required=required):
@@ -1026,6 +1027,48 @@ write_checkout_update_source_metadata
         self.assertIn('"/etc/systemd/system/$VEHICLE_CONFIG_COORDINATOR_UNIT"', self.text)
         self.assertIn('"/etc/systemd/system/$VEHICLE_CAN_PROVISION_UNIT"', self.text)
         self.assertIn('"$VEHICLE_CONFIG_UI_QUALIFICATION_GATE"', self.text)
+
+    def test_prepared_err_trap_reaches_nested_helper_failures(self) -> None:
+        self.assertIn("set -Eeuo pipefail", self.text)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            marker = Path(temporary) / "rollback-ran"
+
+            program = f"""
+source {shlex.quote(str(MANAGE_SCRIPT))}
+marker={shlex.quote(str(marker))}
+
+prepared_scope() {{
+    trap 'printf "%s\\n" rollback > "$marker"' ERR
+
+    nested_deployment_helper() {{
+        false
+    }}
+
+    nested_deployment_helper
+}}
+
+prepared_scope
+"""
+
+            completed = subprocess.run(
+                ["bash", "-c", program],
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertTrue(
+                marker.is_file(),
+                "nested helper failure did not reach the ERR rollback trap",
+            )
+            self.assertEqual(
+                marker.read_text(encoding="utf-8"),
+                "rollback\n",
+            )
 
     def test_prepared_deployment_is_fixed_root_only_and_rolls_back_on_error(self) -> None:
         start = self.text.index("cmd_deploy_prepared() {")
