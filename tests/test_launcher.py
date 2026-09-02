@@ -32,7 +32,7 @@ class LauncherConfigTests(unittest.TestCase):
         self.assertIn("--scope", command)
         self.assertIn("--property=IPAddressDeny=any", command)
         self.assertIn("--property=IPAddressAllow=localhost", command)
-        self.assertIn(
+        self.assertNotIn(
             "--property=RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
             command,
         )

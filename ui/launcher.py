@@ -1058,7 +1058,6 @@ def _network_sandbox_command(argv: Sequence[str]) -> list[str]:
         "--collect",
         "--property=IPAddressDeny=any",
         "--property=IPAddressAllow=localhost",
-        "--property=RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
         sys.executable,
         "-I",
         "-m",
