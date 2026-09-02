@@ -4,6 +4,7 @@ import ast
 import base64
 import hashlib
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -20,6 +21,7 @@ from open_mmi_trust.inspector import (
     UNVERIFIED,
     canonical_report_bytes,
     inspect_system,
+    _inspect_can_transmit_os_enforcement,
     _inspect_release_provenance,
     _inspect_updater_transition_gate_source,
 )
@@ -93,10 +95,10 @@ class TrustInspectorTests(unittest.TestCase):
 
         self.assertEqual(report["schema_version"], 1)
         self.assertEqual(report["status"], UNVERIFIED)
-        self.assertEqual(report["manifest"]["policy_generation"], 5)
+        self.assertEqual(report["manifest"]["policy_generation"], 6)
         self.assertEqual(
             report["manifest"]["digest"],
-            "sha256:510796ed814cbd164c7caee553541b2158c11c3fb5438c683550e2999bb6f68d",
+            "sha256:4cbdfa9dfdce2c8596f4a974b2bfe00987d49d976d2fed3e2d63eacfdc14d4a7",
         )
         self.assertEqual(report["telemetry_authorization"], {"authorized": False, "state": "not-authorized"})
         self.assertNotIn("accepted_owner_trust", report)
@@ -109,6 +111,10 @@ class TrustInspectorTests(unittest.TestCase):
         )
         self.assertEqual(statuses["owner.accepted-release-state"], UNVERIFIED)
         self.assertEqual(statuses["can.transmit-source-tripwire"], PASS)
+        self.assertEqual(
+            statuses["capability.vehicle.can.transmit.enforcement"],
+            UNVERIFIED,
+        )
         self.assertEqual(statuses["dashboard.render-egress"], PASS)
         self.assertEqual(statuses["dashboard.bootstrap-integrity"], PASS)
         self.assertEqual(statuses["release.file-integrity"], UNVERIFIED)
@@ -151,6 +157,76 @@ class TrustInspectorTests(unittest.TestCase):
             path=integrity_path,
         )
         return integrity_path
+
+    def test_can_os_enforcement_accepts_hardened_contract(self):
+        manifest = json.loads(
+            MANIFEST.read_text(encoding="utf-8")
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            udev = Path(tmp) / "80-canbus.rules"
+            udev.write_text(
+                'SUBSYSTEM=="net", KERNEL=="can0", ACTION=="add", '
+                'RUN+="/sbin/ip link set can0 down", '
+                'RUN+="/sbin/ip link set can0 type can '
+                'bitrate 100000 listen-only on", '
+                'RUN+="/sbin/ip link set can0 up"\n',
+                encoding="utf-8",
+            )
+            udev.chmod(0o644)
+
+            with mock.patch(
+                "open_mmi_trust.inspector."
+                "_can_transmit_user_shadow_paths",
+                return_value=[],
+            ):
+                result = _inspect_can_transmit_os_enforcement(
+                    ROOT,
+                    manifest,
+                    {"status": PASS},
+                    production=True,
+                    udev_rule_path=udev,
+                    udev_expected_uid=os.geteuid(),
+                )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["status"], PASS)
+
+    def test_can_os_enforcement_rejects_non_listen_only_udev(self):
+        manifest = json.loads(
+            MANIFEST.read_text(encoding="utf-8")
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            udev = Path(tmp) / "80-canbus.rules"
+            udev.write_text(
+                'SUBSYSTEM=="net", KERNEL=="can0", ACTION=="add", '
+                'RUN+="/sbin/ip link set can0 down", '
+                'RUN+="/sbin/ip link set can0 type can '
+                'bitrate 100000", '
+                'RUN+="/sbin/ip link set can0 up"\n',
+                encoding="utf-8",
+            )
+            udev.chmod(0o644)
+
+            with mock.patch(
+                "open_mmi_trust.inspector."
+                "_can_transmit_user_shadow_paths",
+                return_value=[],
+            ):
+                result = _inspect_can_transmit_os_enforcement(
+                    ROOT,
+                    manifest,
+                    {"status": PASS},
+                    production=True,
+                    udev_rule_path=udev,
+                    udev_expected_uid=os.geteuid(),
+                )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["status"], FAIL)
+        self.assertIn(
+            "udev-rule:physical-can-rule-not-listen-only",
+            result["evidence"]["udev_failures"],
+        )
 
     def test_established_file_integrity_passes_for_exact_runtime_bytes(self):
         with tempfile.TemporaryDirectory() as tmp:

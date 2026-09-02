@@ -175,7 +175,7 @@ def _udev_rules_text(
                 f"# CAN bus {active_bus}",
                 f'SUBSYSTEM=="net", KERNEL=="{interface}", ACTION=="add", '
                 f'RUN+="/sbin/ip link set {interface} down", '
-                f'RUN+="/sbin/ip link set {interface} type can bitrate {bitrate}", '
+                f'RUN+="/sbin/ip link set {interface} type can bitrate {bitrate} listen-only on", '
                 f'RUN+="/sbin/ip link set {interface} up"',
                 "",
             ]
@@ -287,6 +287,20 @@ def render_artifacts(
         bus = vehicle_setup._profile_bus_metadata(  # type: ignore[attr-defined]
             profile, normalized["runtime"]["active_bus"]
         )
+        active_bus = normalized["runtime"]["active_bus"]
+        interface = normalized["runtime"]["buses"][active_bus]["interface"]
+        if _PHYSICAL_CAN_INTERFACE_RE.fullmatch(interface):
+            bitrate = bus.get("bitrate")
+            if (
+                bus.get("provisioning") != "udev"
+                or not isinstance(bitrate, int)
+                or isinstance(bitrate, bool)
+                or bitrate <= 0
+            ):
+                raise ApplyOperationError(
+                    "Physical CAN activation requires bitrate and "
+                    "udev listen-only provisioning"
+                )
         descriptor = vehicle_configuration.descriptor_for_selection(
             normalized, applied_at=applied_at or _timestamp()
         )
@@ -592,6 +606,8 @@ def provision_can_target(
             "can",
             "bitrate",
             str(bitrate),
+            "listen-only",
+            "on",
         )
     )
     run(("/sbin/ip", "link", "set", "dev", interface, "up"))

@@ -204,18 +204,35 @@ def build_plan(
         if not isinstance(raw_meta, Mapping):
             raise ValueError(f"can_buses.{name} must be an object")
 
-        interface = (
+        interface = str(
             raw_meta.get("interface")
             or raw_meta.get("tested_interface")
             or DEFAULT_INTERFACE
         )
+        bitrate = _optional_int(raw_meta.get("bitrate"))
+        provisioning = str(raw_meta.get("provisioning") or "manual")
+
+        physical_can = (
+            interface.startswith("can")
+            and interface[3:].isdigit()
+            and 1 <= len(interface[3:]) <= 3
+        )
+        if physical_can and (
+            provisioning != "udev"
+            or bitrate is None
+            or bitrate <= 0
+        ):
+            raise ValueError(
+                "physical CAN interfaces require bitrate and "
+                "udev listen-only provisioning"
+            )
 
         buses.append(
             CanBusProvision(
                 name=str(name),
-                interface=str(interface),
-                bitrate=_optional_int(raw_meta.get("bitrate")),
-                provisioning=str(raw_meta.get("provisioning") or "manual"),
+                interface=interface,
+                bitrate=bitrate,
+                provisioning=provisioning,
                 capture_point=raw_meta.get("capture_point"),
                 bring_up=_optional_bool(raw_meta.get("bring_up"), False),
                 source="profile",
@@ -309,7 +326,7 @@ def render_udev_rules(plan: ProfileProvisionPlan) -> str:
         lines.append(
             f'SUBSYSTEM=="net", KERNEL=="{bus.interface}", ACTION=="add", '
             f'RUN+="/sbin/ip link set {bus.interface} down", '
-            f'RUN+="/sbin/ip link set {bus.interface} type can bitrate {bus.bitrate}", '
+            f'RUN+="/sbin/ip link set {bus.interface} type can bitrate {bus.bitrate} listen-only on", '
             f'RUN+="/sbin/ip link set {bus.interface} up"'
         )
         lines.append("")

@@ -24,11 +24,11 @@ class TrustManifestTests(unittest.TestCase):
         manifest = load_manifest()
         self.assertEqual(manifest["schema_version"], 1)
         self.assertEqual(manifest["manifest_id"], "org.open-mmi.trust-manifest")
-        self.assertEqual(manifest["policy_generation"], 5)
+        self.assertEqual(manifest["policy_generation"], 6)
         self.assertEqual(set(manifest["capabilities"]), set(CAPABILITY_POLICIES))
         self.assertEqual(
             manifest["capabilities"]["vehicle.can.transmit"],
-            {"policy": "prohibited", "assurance": "ci-guarded"},
+            {"policy": "prohibited", "assurance": "os-enforced"},
         )
         self.assertEqual(
             manifest["capabilities"]["telemetry.collection"],

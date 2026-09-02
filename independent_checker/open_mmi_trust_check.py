@@ -99,6 +99,7 @@ PRIVILEGED_SYSTEM_UNITS = (
     "open-mmi-update-installer.service",
     "open-mmi-media-egress.service",
     "open-mmi-vehicle-store.service",
+    "open-mmi-vehicle-can-provision.service",
 )
 PRIVILEGED_USER_UNITS = (
     "canbusd.service",
@@ -158,6 +159,7 @@ TARGET_PATHS = {
     "source_descriptor": "/opt/open-mmi/.update-source.json",
     "system_units": "/etc/systemd/system",
     "user_units": "/etc/systemd/user",
+    "udev_rules": "/etc/udev/rules.d/80-canbus.rules",
 }
 
 
@@ -916,12 +918,19 @@ def verify_static_enforcement(
     network = capabilities["network.external-egress"]
     persistence = capabilities["vehicle-data.persistence"]
     identity = capabilities["vehicle.identity.remote-resolution"]
+    can_transmit = capabilities["vehicle.can.transmit"]
     if network != {"policy": "declared-purposes-only", "assurance": "os-enforced", "purposes": KNOWN_NETWORK_PURPOSES}:
         unsupported.append("network.external-egress")
     if persistence != {"policy": "declared-purposes-only", "assurance": "os-enforced", "purposes": KNOWN_PERSISTENCE_PURPOSES}:
         unsupported.append("vehicle-data.persistence")
     if identity != {"policy": "prohibited", "assurance": "runtime-guarded"}:
         unsupported.append("vehicle.identity.remote-resolution")
+
+    if can_transmit != {
+        "policy": "prohibited",
+        "assurance": "os-enforced",
+    }:
+        unsupported.append("vehicle.can.transmit")
 
     contracts: dict[str, dict[str, str | None]] = {
         "system/open-mmi-media-egress.service": {
@@ -954,6 +963,11 @@ def verify_static_enforcement(
             "ReadOnlyPaths": "/var/lib/open-mmi/vehicle-data",
             "RestrictAddressFamilies": "AF_UNIX",
         },
+        "system/open-mmi-vehicle-can-provision.service": {
+            "ProtectSystem": "strict",
+            "RestrictAddressFamilies": "AF_NETLINK AF_UNIX",
+            "CapabilityBoundingSet": "CAP_NET_ADMIN CAP_DAC_READ_SEARCH",
+        },
         "user/open-mmi-dashboard.service": {
             "IPAddressDeny": "any",
             "IPAddressAllow": "localhost",
@@ -966,6 +980,8 @@ def verify_static_enforcement(
             "ProtectSystem": "strict",
             "ReadWritePaths": "%t/open-mmi",
             "RestrictAddressFamilies": "AF_CAN AF_UNIX",
+            "CapabilityBoundingSet": "",
+            "AmbientCapabilities": "",
         },
         "user/open-mmi-owner-config.service": {
             "ProtectHome": "read-only",
@@ -1003,6 +1019,109 @@ def verify_static_enforcement(
                     failures.append(f"{relative}:{key}:must-be-absent")
             elif observed != [expected_value]:
                 failures.append(f"{relative}:{key}:expected-single:{expected_value}")
+
+
+    # generation-6-can-static-enforcement
+    #
+    # CAN TX prohibition is not established merely by the manifest.  Bind the
+    # claim to the signed provisioning implementation plus the deployed,
+    # root-controlled udev rule.  Live controller state is measured separately
+    # by open_mmi_can_trust_test.py.
+    can_source_contracts = {
+        "scripts/profile_provision.py": (
+            "listen-only on",
+            "physical CAN interfaces require bitrate and ",
+            "udev listen-only provisioning",
+        ),
+        "ui/vehicle_config_apply.py": (
+            "listen-only on",
+            "Physical CAN activation requires bitrate and ",
+            "udev listen-only provisioning",
+            '"listen-only",',
+        ),
+    }
+
+    install_root = target_path(
+        target_root,
+        TARGET_PATHS["install_root"],
+    )
+
+    for relative, required_fragments in can_source_contracts.items():
+        expected_file = inventory_map.get(relative)
+        path = install_root / relative
+
+        if expected_file is None:
+            failures.append(
+                f"{relative}:missing-signed-inventory-entry"
+            )
+            continue
+
+        try:
+            trusted_file(path, uid)
+            raw = path.read_bytes()
+            source = raw.decode("utf-8")
+        except (
+            FileNotFoundError,
+            OSError,
+            UnicodeError,
+            CheckerError,
+        ):
+            failures.append(
+                f"{relative}:untrusted-or-missing"
+            )
+            continue
+
+        if (
+            len(raw) != expected_file["size"]
+            or sha256_bytes(raw) != expected_file["sha256"]
+        ):
+            failures.append(
+                f"{relative}:deployed-bytes-do-not-match-signed-release"
+            )
+            continue
+
+        for fragment in required_fragments:
+            if fragment not in source:
+                failures.append(
+                    f"{relative}:missing-can-contract:{fragment}"
+                )
+
+    udev_path = target_path(
+        target_root,
+        TARGET_PATHS["udev_rules"],
+    )
+    try:
+        trusted_file(udev_path, uid)
+        udev_source = udev_path.read_text(encoding="utf-8")
+    except (
+        FileNotFoundError,
+        OSError,
+        UnicodeError,
+        CheckerError,
+    ):
+        failures.append(
+            "udev/80-canbus.rules:untrusted-or-missing"
+        )
+    else:
+        physical_can_rules = [
+            line.strip()
+            for line in udev_source.splitlines()
+            if "RUN+=" in line
+            and " type can bitrate " in line
+        ]
+
+        if not physical_can_rules:
+            failures.append(
+                "udev/80-canbus.rules:no-physical-can-rule"
+            )
+
+        for rule in physical_can_rules:
+            if "listen-only on" not in rule:
+                failures.append(
+                    "udev/80-canbus.rules:"
+                    "physical-can-rule-not-listen-only"
+                )
+
 
     if failures:
         return FAIL, {"failures": sorted(failures), "unsupported_capabilities": unsupported}
@@ -1393,7 +1512,7 @@ def inspect(args: argparse.Namespace) -> dict[str, Any]:
         try:
             status, evidence = verify_static_enforcement(target_root, integrity["trust_manifest"], integrity["inventory"], uid)
             summary = {
-                PASS: "Externally measurable network, persistence, and identity unit contracts match checker v1.",
+                PASS: "Externally measurable network, persistence, identity, and CAN static contracts match checker v1.",
                 UNVERIFIED: "Installed manifest uses a capability contract this checker version does not understand.",
                 FAIL: "Externally measurable systemd enforcement contract is missing or weakened.",
             }[status]

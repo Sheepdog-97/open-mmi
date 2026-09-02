@@ -162,19 +162,40 @@ class ProfileProvisionTests(unittest.TestCase):
         self.assertEqual(plan.buses[0].bitrate, 125000)
         self.assertEqual(plan.buses[0].provisioning, "udev")
 
-    def test_build_plan_falls_back_for_legacy_profile(self):
-        plan = profile_provision.build_plan(
-            {"rules": [], "presence": [], "status": []},
-            Path("/tmp/profile.json"),
-            Path("/tmp/default.json"),
-            "legacy",
-            "default",
-        )
+    def test_build_plan_rejects_manual_physical_can(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "physical CAN interfaces require bitrate and udev listen-only provisioning",
+        ):
+            profile_provision.build_plan(
+                {
+                    "default_bus": "comfort",
+                    "can_buses": {
+                        "comfort": {
+                            "interface": "can0",
+                            "bitrate": 100000,
+                            "provisioning": "manual",
+                        }
+                    },
+                },
+                Path("/tmp/profile.json"),
+                Path("/tmp/default.json"),
+                "seat_1p",
+                "default",
+            )
 
-        self.assertEqual(plan.default_bus, "comfort")
-        self.assertEqual(plan.active_interface, "can0")
-        self.assertEqual(plan.buses[0].name, "comfort")
-        self.assertEqual(plan.buses[0].provisioning, "manual")
+    def test_build_plan_falls_back_for_legacy_profile(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "physical CAN interfaces require bitrate and udev listen-only provisioning",
+        ):
+            profile_provision.build_plan(
+                {"rules": [], "presence": [], "status": []},
+                Path("/tmp/profile.json"),
+                Path("/tmp/default.json"),
+                "legacy",
+                "default",
+            )
 
     def test_render_systemd_dropin(self):
         plan = profile_provision.build_plan(
@@ -221,7 +242,15 @@ class ProfileProvisionTests(unittest.TestCase):
 
         self.assertIn('KERNEL=="can0"', rendered)
         self.assertIn("bitrate 100000", rendered)
+        self.assertIn("listen-only on", rendered)
         self.assertIn('KERNEL=="uinput"', rendered)
+
+    def test_checked_in_default_udev_rule_is_listen_only(self):
+        rendered = (
+            MODULE_PATH.parents[1] / "udev" / "80-canbus.rules"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("bitrate 100000 listen-only on", rendered)
 
     def test_render_udev_rules_skips_manual_bus(self):
         plan = profile_provision.build_plan(
@@ -285,7 +314,16 @@ class ProfileProvisionTests(unittest.TestCase):
 
     def test_apply_plan_does_not_change_maintained_source_ownership(self):
         plan = profile_provision.build_plan(
-            {},
+            {
+                "default_bus": "comfort",
+                "can_buses": {
+                    "comfort": {
+                        "interface": "can0",
+                        "bitrate": 100000,
+                        "provisioning": "udev",
+                    }
+                },
+            },
             Path("/opt/open-mmi/vehicles/seat_1p/config.json"),
             Path("/opt/open-mmi/bindings/default.json"),
             "seat_1p",

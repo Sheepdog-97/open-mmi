@@ -67,6 +67,7 @@ PRIVILEGED_SYSTEM_UNITS = (
     "open-mmi-update-installer.service",
     "open-mmi-media-egress.service",
     "open-mmi-vehicle-store.service",
+    "open-mmi-vehicle-can-provision.service",
 )
 PRIVILEGED_USER_UNITS = (
     "canbusd.service",

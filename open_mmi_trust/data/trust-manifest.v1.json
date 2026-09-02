@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "manifest_id": "org.open-mmi.trust-manifest",
-  "policy_generation": 5,
+  "policy_generation": 6,
   "capabilities": {
     "network.external-egress": {
       "policy": "declared-purposes-only",
@@ -33,7 +33,7 @@
     },
     "vehicle.can.transmit": {
       "policy": "prohibited",
-      "assurance": "ci-guarded"
+      "assurance": "os-enforced"
     },
     "vehicle.identity.remote-resolution": {
       "policy": "prohibited",

@@ -57,6 +57,10 @@ class TrustInvariantTests(unittest.TestCase):
             manifest["capabilities"]["vehicle.can.transmit"]["policy"],
             "prohibited",
         )
+        self.assertEqual(
+            manifest["capabilities"]["vehicle.can.transmit"]["assurance"],
+            "os-enforced",
+        )
         offenders: list[str] = []
         for path in sorted((ROOT / "canbusd").glob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))

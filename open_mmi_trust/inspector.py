@@ -1279,6 +1279,362 @@ def _inspect_can_transmit_source(canbus_root: Path, manifest: Mapping[str, Any] 
     )
 
 
+
+_CAN_TRANSMIT_ASSURANCE = "os-enforced"
+_CAN_UDEV_RULE_PATH = Path("/etc/udev/rules.d/80-canbus.rules")
+
+
+def _can_transmit_unit_contract(
+    root: Path,
+) -> tuple[list[str], dict[str, Any]]:
+    required = {
+        "systemd/user/canbusd.service": (
+            "RestrictAddressFamilies=AF_CAN AF_UNIX",
+            "CapabilityBoundingSet=",
+            "AmbientCapabilities=",
+        ),
+        "systemd/system/open-mmi-vehicle-can-provision.service": (
+            "RestrictAddressFamilies=AF_NETLINK AF_UNIX",
+            "CapabilityBoundingSet=CAP_NET_ADMIN CAP_DAC_READ_SEARCH",
+        ),
+    }
+    forbidden = {
+        "systemd/user/canbusd.service": (
+            "CAP_NET_ADMIN",
+            "AF_INET",
+            "AF_INET6",
+        ),
+        "systemd/system/open-mmi-vehicle-can-provision.service": (
+            "AF_CAN",
+        ),
+    }
+
+    failures: list[str] = []
+    evidence: dict[str, Any] = {}
+
+    for relative, required_lines in required.items():
+        path = root / relative
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            failures.append(
+                f"{relative}:unreadable:{type(exc).__name__}"
+            )
+            continue
+
+        lines = {
+            line.strip()
+            for line in source.splitlines()
+            if line.strip()
+            and not line.lstrip().startswith("#")
+        }
+
+        missing = [
+            line
+            for line in required_lines
+            if line not in lines
+        ]
+        forbidden_hits = [
+            fragment
+            for fragment in forbidden.get(relative, ())
+            if any(fragment in line for line in lines)
+        ]
+
+        failures.extend(
+            f"{relative}:missing:{line}"
+            for line in missing
+        )
+        failures.extend(
+            f"{relative}:forbidden:{fragment}"
+            for fragment in forbidden_hits
+        )
+
+        evidence[relative] = {
+            "required_lines": list(required_lines),
+            "forbidden_fragments": list(
+                forbidden.get(relative, ())
+            ),
+        }
+
+    return sorted(set(failures)), evidence
+
+
+def _can_transmit_source_contract(root: Path) -> list[str]:
+    required = {
+        "scripts/profile_provision.py": (
+            "listen-only on",
+            "physical CAN interfaces require bitrate and ",
+            "udev listen-only provisioning",
+        ),
+        "ui/vehicle_config_apply.py": (
+            "listen-only on",
+            "Physical CAN activation requires bitrate and ",
+            "udev listen-only provisioning",
+            '"listen-only",',
+        ),
+    }
+
+    failures: list[str] = []
+
+    for relative, fragments in required.items():
+        path = root / relative
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            failures.append(
+                f"{relative}:unreadable:{type(exc).__name__}"
+            )
+            continue
+
+        for fragment in fragments:
+            if fragment not in source:
+                failures.append(
+                    f"{relative}:missing:{fragment}"
+                )
+
+    return sorted(set(failures))
+
+
+def _can_transmit_udev_contract(
+    path: Path,
+    *,
+    expected_uid: int = 0,
+) -> tuple[list[str], dict[str, Any]]:
+    evidence: dict[str, Any] = {
+        "path": str(path),
+        "expected_uid": expected_uid,
+    }
+    failures: list[str] = []
+
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return ["udev-rule:missing"], evidence
+    except OSError as exc:
+        return [
+            f"udev-rule:unreadable:{type(exc).__name__}"
+        ], evidence
+
+    if (
+        stat.S_ISLNK(metadata.st_mode)
+        or not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_nlink != 1
+        or metadata.st_uid != expected_uid
+        or metadata.st_mode & 0o022
+    ):
+        return ["udev-rule:unsafe-metadata"], evidence
+
+    try:
+        source = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        return [
+            f"udev-rule:unreadable:{type(exc).__name__}"
+        ], evidence
+
+    physical_rules = [
+        line.strip()
+        for line in source.splitlines()
+        if "RUN+=" in line
+        and " type can bitrate " in line
+    ]
+    evidence["physical_can_rules"] = physical_rules
+
+    if not physical_rules:
+        failures.append("udev-rule:no-physical-can-rule")
+
+    for rule in physical_rules:
+        if "listen-only on" not in rule:
+            failures.append(
+                "udev-rule:"
+                "physical-can-rule-not-listen-only"
+            )
+
+    return sorted(set(failures)), evidence
+
+
+def _can_transmit_user_shadow_paths() -> list[str]:
+    home = Path.home()
+    runtime = os.getenv("XDG_RUNTIME_DIR", "").strip()
+
+    bases = [
+        home / ".config" / "systemd" / "user",
+        home / ".local" / "share" / "systemd" / "user",
+    ]
+    if runtime:
+        bases.extend(
+            [
+                Path(runtime) / "systemd" / "user",
+                Path(runtime) / "systemd" / "user.control",
+            ]
+        )
+
+    forbidden_directives = (
+        "ExecStart=",
+        "RestrictAddressFamilies=",
+        "CapabilityBoundingSet=",
+        "AmbientCapabilities=",
+    )
+
+    offenders: list[str] = []
+
+    for base in bases:
+        full = base / "canbusd.service"
+        if full.exists() or full.is_symlink():
+            offenders.append(str(full))
+
+        dropin = base / "canbusd.service.d"
+        if not dropin.is_dir():
+            continue
+
+        for path in sorted(dropin.glob("*.conf")):
+            try:
+                source = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                offenders.append(str(path) + ":unreadable")
+                continue
+
+            for raw in source.splitlines():
+                line = raw.strip()
+                if any(
+                    line.startswith(prefix)
+                    for prefix in forbidden_directives
+                ):
+                    offenders.append(f"{path}:{line}")
+
+    return sorted(set(offenders))
+
+
+def _inspect_can_transmit_os_enforcement(
+    root: Path,
+    manifest: Mapping[str, Any] | None,
+    privileged_runtime_check: Mapping[str, Any] | None,
+    *,
+    production: bool,
+    udev_rule_path: Path = _CAN_UDEV_RULE_PATH,
+    udev_expected_uid: int = 0,
+) -> dict[str, Any] | None:
+    if manifest is None:
+        return None
+
+    capability = manifest["capabilities"]["vehicle.can.transmit"]
+
+    if capability != {
+        "policy": "prohibited",
+        "assurance": _CAN_TRANSMIT_ASSURANCE,
+    }:
+        return _check(
+            "capability.vehicle.can.transmit.enforcement",
+            FAIL,
+            (
+                "CAN transmit manifest semantics do not match "
+                "the enforced passive-CAN boundary."
+            ),
+            capability=capability,
+        )
+
+    unit_failures, unit_evidence = (
+        _can_transmit_unit_contract(root)
+    )
+    source_failures = _can_transmit_source_contract(root)
+
+    if unit_failures or source_failures:
+        return _check(
+            "capability.vehicle.can.transmit.enforcement",
+            FAIL if production else UNVERIFIED,
+            (
+                "Installed source does not reproduce the "
+                "declared CAN transmit prohibition."
+                if production
+                else
+                "CAN transmit OS enforcement cannot be "
+                "reproduced from this non-production fixture."
+            ),
+            unit_failures=unit_failures,
+            source_failures=source_failures,
+            units=unit_evidence,
+        )
+
+    if not production:
+        return _check(
+            "capability.vehicle.can.transmit.enforcement",
+            UNVERIFIED,
+            (
+                "CAN passive-enforcement source is present, "
+                "but effective production unit and udev state "
+                "were not inspected."
+            ),
+            assurance=capability["assurance"],
+        )
+
+    if (
+        privileged_runtime_check is None
+        or privileged_runtime_check.get("status") != PASS
+    ):
+        return _check(
+            "capability.vehicle.can.transmit.enforcement",
+            UNVERIFIED,
+            (
+                "CAN passive-enforcement source is present, "
+                "but deployed privileged unit integrity is "
+                "not currently proven."
+            ),
+            privileged_runtime_status=(
+                privileged_runtime_check or {}
+            ).get("status"),
+        )
+
+    shadow_paths = _can_transmit_user_shadow_paths()
+    if shadow_paths:
+        return _check(
+            "capability.vehicle.can.transmit.enforcement",
+            FAIL,
+            (
+                "Owner-writable user-unit state can shadow "
+                "or weaken the passive CAN daemon boundary."
+            ),
+            shadow_paths=shadow_paths,
+        )
+
+    udev_failures, udev_evidence = (
+        _can_transmit_udev_contract(
+            Path(udev_rule_path),
+            expected_uid=udev_expected_uid,
+        )
+    )
+    if udev_failures:
+        return _check(
+            "capability.vehicle.can.transmit.enforcement",
+            FAIL,
+            (
+                "Deployed physical CAN provisioning does not "
+                "enforce listen-only mode."
+            ),
+            udev_failures=udev_failures,
+            udev=udev_evidence,
+        )
+
+    return _check(
+        "capability.vehicle.can.transmit.enforcement",
+        PASS,
+        (
+            "Physical CAN provisioning is listen-only and CAN "
+            "receive authority is separated from interface-"
+            "administration authority."
+        ),
+        assurance=capability["assurance"],
+        canbusd_can_socket_authority=True,
+        canbusd_net_admin_authority=False,
+        provisioner_can_socket_authority=False,
+        provisioner_net_admin_authority=True,
+        owner_unit_shadows=[],
+        udev=udev_evidence,
+        note=(
+            "Live controller LISTEN-ONLY and fresh challenge-"
+            "bound receive behavior are independently measured "
+            "by the separate CAN trust test."
+        ),
+    )
+
 def _inspect_dashboard_render(static_root: Path) -> list[dict[str, Any]]:
     index = static_root / "index.html"
     bootstrap = static_root / "vendor" / "bootstrap-5.3.8.min.css"
@@ -2317,6 +2673,14 @@ def inspect_system(
     )
     if persistence_check is not None:
         checks.append(persistence_check)
+    can_transmit_check = _inspect_can_transmit_os_enforcement(
+        integrity_source_root,
+        manifest,
+        privileged_runtime_check,
+        production=production,
+    )
+    if can_transmit_check is not None:
+        checks.append(can_transmit_check)
     identity_check = _inspect_vehicle_identity_remote_resolution_enforcement(
         integrity_source_root,
         manifest,

@@ -34,7 +34,7 @@ def current_manifest() -> dict:
         {
             "schema_version": 1,
             "manifest_id": checker.MANIFEST_ID,
-            "policy_generation": 5,
+            "policy_generation": 6,
             "capabilities": {
                 "network.external-egress": {
                     "policy": "declared-purposes-only",
@@ -51,7 +51,7 @@ def current_manifest() -> dict:
                     "purposes": list(checker.KNOWN_PERSISTENCE_PURPOSES),
                 },
                 "vehicle.can.receive": {"policy": "allowed", "assurance": "ci-guarded"},
-                "vehicle.can.transmit": {"policy": "prohibited", "assurance": "ci-guarded"},
+                "vehicle.can.transmit": {"policy": "prohibited", "assurance": "os-enforced"},
                 "vehicle.identity.remote-resolution": {
                     "policy": "prohibited",
                     "assurance": "runtime-guarded",
@@ -81,6 +81,11 @@ UNIT_TEXTS = {
     "system/open-mmi-vehicle-store.service": (
         "StateDirectory=open-mmi/vehicle-data\nProtectSystem=strict\nRestrictAddressFamilies=AF_UNIX\n"
     ),
+    "system/open-mmi-vehicle-can-provision.service": (
+        "ProtectSystem=strict\n"
+        "RestrictAddressFamilies=AF_NETLINK AF_UNIX\n"
+        "CapabilityBoundingSet=CAP_NET_ADMIN CAP_DAC_READ_SEARCH\n"
+    ),
     "system/open-mmi-vehicle-config-coordinator.service": (
         "ProtectSystem=strict\nReadOnlyPaths=/var/lib/open-mmi/vehicle-data\nRestrictAddressFamilies=AF_UNIX\n"
     ),
@@ -90,6 +95,7 @@ UNIT_TEXTS = {
     "user/canbusd.service": (
         "ProtectHome=read-only\nProtectSystem=strict\nReadWritePaths=%t/open-mmi\n"
         "RestrictAddressFamilies=AF_CAN AF_UNIX\n"
+        "CapabilityBoundingSet=\nAmbientCapabilities=\n"
     ),
     "user/open-mmi-owner-config.service": (
         "ProtectHome=read-only\nProtectSystem=strict\n"
@@ -163,6 +169,17 @@ class IndependentTrustCheckerTests(unittest.TestCase):
         manifest = current_manifest()
         write(self.repo / "open_mmi_trust/data/trust-manifest.v1.json", json.dumps(manifest, indent=2) + "\n")
         write(self.repo / "open_mmi_trust/vehicle_identity.py", "VALUE = 'signed-package-file'\n")
+        write(
+            self.repo / "scripts/profile_provision.py",
+            'RULE = "listen-only on"\n'
+            'DENY = "physical CAN interfaces require bitrate and udev listen-only provisioning"\n',
+        )
+        write(
+            self.repo / "ui/vehicle_config_apply.py",
+            'RULE = "listen-only on"\n'
+            'DENY = "Physical CAN activation requires bitrate and udev listen-only provisioning"\n'
+            'LIVE = ("listen-only", "on")\n',
+        )
         for name in checker.SOURCE_RELEASE_FILES:
             write(self.repo / name, f"{name}\n")
         for relative, text in UNIT_TEXTS.items():
@@ -202,6 +219,13 @@ class IndependentTrustCheckerTests(unittest.TestCase):
         (self.target / "opt/open-mmi/venv/bin/python").symlink_to("/usr/bin/python3")
         for relative, text in UNIT_TEXTS.items():
             write(self.target / "etc/systemd" / relative, text)
+        write(
+            self.target / "etc/udev/rules.d/80-canbus.rules",
+            'SUBSYSTEM=="net", KERNEL=="can0", ACTION=="add", '
+            'RUN+="/sbin/ip link set can0 down", '
+            'RUN+="/sbin/ip link set can0 type can bitrate 100000 listen-only on", '
+            'RUN+="/sbin/ip link set can0 up"\n',
+        )
 
         accepted = checker.validate_accepted_state(
             {
@@ -363,6 +387,28 @@ class IndependentTrustCheckerTests(unittest.TestCase):
         path = self.target / "etc/systemd/system/open-mmi-update-coordinator.service"
         path.write_text("[Service]\nExecStart=/bin/true\n", encoding="utf-8")
         self.assert_failed("release.privileged-units")
+
+    def test_can_udev_regression_is_detected(self):
+        path = self.target / "etc/udev/rules.d/80-canbus.rules"
+        source = path.read_text(encoding="utf-8")
+        self.assertIn("listen-only on", source)
+
+        path.write_text(
+            source.replace(" listen-only on", ""),
+            encoding="utf-8",
+        )
+
+        self.assert_failed("capability.static-enforcement")
+
+    def test_can_daemon_capability_regression_is_detected(self):
+        path = self.target / "etc/systemd/user/canbusd.service"
+        text = path.read_text(encoding="utf-8")
+        text = text.replace(
+            "CapabilityBoundingSet=\n",
+            "CapabilityBoundingSet=CAP_NET_ADMIN\n",
+        )
+        path.write_text(text, encoding="utf-8")
+        self.assert_failed("capability.static-enforcement")
 
     def test_wrong_external_signer_is_detected(self):
         code, report = self._run(signer=self.other_primary)

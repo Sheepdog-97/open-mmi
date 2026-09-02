@@ -156,6 +156,7 @@ class VehicleConfigurationApplyOperationsTests(unittest.TestCase):
         self.assertIn("OPEN_MMI_CAN_BUS=comfort", rendered.runtime_dropin.decode())
         self.assertIn("OPEN_MMI_CAN_INTERFACE=can0", rendered.runtime_dropin.decode())
         self.assertIn("bitrate 100000", rendered.udev_rules.decode())
+        self.assertIn("listen-only on", rendered.udev_rules.decode())
 
         changed = json.loads(json.dumps(self.target))
         changed["vehicle"]["revision"] = "sha256:" + "f" * 64
@@ -175,6 +176,23 @@ class VehicleConfigurationApplyOperationsTests(unittest.TestCase):
         self.assertIn("OPEN_MMI_CAN_BUS=infotainment", rendered)
         self.assertIn("OPEN_MMI_CAN_INTERFACE=can1", rendered)
         self.assertNotIn("OPEN_MMI_CAN_BUS=comfort", rendered)
+
+    def test_render_artifacts_rejects_manual_physical_can(self) -> None:
+        profile = json.loads(self.profile_path.read_text(encoding="utf-8"))
+        profile["can_buses"]["comfort"]["provisioning"] = "manual"
+        profile_bytes = json.dumps(profile, sort_keys=True).encode("utf-8")
+        self._write_trusted(self.profile_path, profile_bytes)
+
+        target = json.loads(json.dumps(self.target))
+        target["vehicle"]["revision"] = (
+            "sha256:" + hashlib.sha256(profile_bytes).hexdigest()
+        )
+
+        with self.assertRaisesRegex(
+            apply.ApplyOperationError,
+            "Physical CAN activation requires bitrate and udev listen-only provisioning",
+        ):
+            apply.render_artifacts(target, self.roots)
 
     def test_vcan_qualification_suppresses_hardware_udev_provisioning(self) -> None:
         target = json.loads(json.dumps(self.target))
@@ -582,6 +600,8 @@ class VehicleConfigurationApplyOperationsTests(unittest.TestCase):
                     "can",
                     "bitrate",
                     "100000",
+                    "listen-only",
+                    "on",
                 ),
                 ("/sbin/ip", "link", "set", "dev", "can0", "up"),
             ],
