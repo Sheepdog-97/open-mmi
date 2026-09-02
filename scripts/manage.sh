@@ -1299,6 +1299,253 @@ reload_profile_provisioning() {
 }
 
 # =============================================================================
+# EXPLICIT LOCAL DEPLOYMENT
+# =============================================================================
+
+validate_local_deploy_checkout() {
+    local repository_status
+
+    repository_status=$(
+        sudo -u "$REAL_USER" git -C "$REPO_ROOT" \
+            status --porcelain=v1 --untracked-files=normal
+    ) || {
+        log_error "Could not inspect local deployment checkout"
+        return 1
+    }
+
+    if [ -n "$repository_status" ]; then
+        log_error "Local deployment requires a completely clean Git checkout"
+        log_info "Commit, remove, or stash tracked and untracked changes first"
+        return 1
+    fi
+}
+
+cmd_deploy_local() {
+    local python="$INSTALL_DIR/venv/bin/python"
+    local commit
+    local branch
+    local upstream
+    local version
+    local transaction
+    local stage
+    local rollback_root
+    local candidate_wheel_dir
+    local candidate_wheel
+    local build_root
+    local build_repo
+    local build_wheel_dir
+    local local_wheel
+    local -a local_wheels=()
+
+    [[ $EUID -eq 0 ]] || { log_error "Local deployment requires root"; return 1; }
+
+    if ! is_installed; then
+        log_error "$APP_NAME not installed"
+        log_info "Use './manage.sh install' for the initial installation"
+        return 1
+    fi
+
+    if [ ! -x "$python" ]; then
+        log_error "Installed Python runtime is unavailable: $python"
+        return 1
+    fi
+
+    # Reject any tracked or untracked checkout change before creating build
+    # or root-owned staging state.
+    validate_local_deploy_checkout
+
+    commit=$(
+        sudo -u "$REAL_USER" git -C "$REPO_ROOT" rev-parse HEAD
+    ) || {
+        log_error "Could not identify local deployment commit"
+        return 1
+    }
+
+    [[ "$commit" =~ ^[0-9a-fA-F]{40}$ ]] || {
+        log_error "Local deployment commit is invalid"
+        return 1
+    }
+
+    branch=$(
+        sudo -u "$REAL_USER" git -C "$REPO_ROOT" \
+            rev-parse --abbrev-ref HEAD
+    ) || {
+        log_error "Could not identify local deployment branch"
+        return 1
+    }
+
+    if [[ -z "$branch" || "$branch" == "HEAD" ]]; then
+        log_error "Local deployment requires a named Git branch"
+        return 1
+    fi
+
+    upstream=$(get_repo_upstream)
+    version=$(get_current_version)
+
+    [[ -n "$upstream" && -n "$version" ]] || {
+        log_error "Local deployment metadata is incomplete"
+        return 1
+    }
+
+    transaction="prepare-$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
+    stage="/var/lib/open-mmi/staging/$transaction"
+    rollback_root="/var/lib/open-mmi/rollback/$transaction"
+    candidate_wheel_dir="$rollback_root/candidate-wheel"
+
+    log_warn "Explicit administrator local deployment selected"
+    log_info "Source branch: $branch"
+    log_info "Source commit: $commit"
+    log_info "Source version: $version"
+    log_info "No remote release discovery will be performed"
+
+    # Build candidate code without executing the candidate build backend as
+    # root. The temporary workspace belongs only to the invoking real user.
+    build_root=$(
+        sudo -u "$REAL_USER" \
+            mktemp -d /var/tmp/open-mmi-local-deploy.XXXXXXXX
+    ) || {
+        log_error "Could not create local deployment build workspace"
+        return 1
+    }
+
+    build_repo="$build_root/source"
+    build_wheel_dir="$build_root/wheel"
+
+    if ! sudo -u "$REAL_USER" \
+        git -c protocol.file.allow=always \
+            clone --no-hardlinks --no-checkout -- \
+            "$REPO_ROOT" "$build_repo"; then
+        rm -rf -- "$build_root"
+        log_error "Could not stage local deployment source"
+        return 1
+    fi
+
+    if ! sudo -u "$REAL_USER" \
+        git -C "$build_repo" checkout --detach "$commit"; then
+        rm -rf -- "$build_root"
+        log_error "Could not select local deployment commit"
+        return 1
+    fi
+
+    if [[ $(
+        sudo -u "$REAL_USER" git -C "$build_repo" rev-parse HEAD
+    ) != "$commit" ]]; then
+        rm -rf -- "$build_root"
+        log_error "Local build source does not match selected commit"
+        return 1
+    fi
+
+    sudo -u "$REAL_USER" mkdir -m 0700 "$build_wheel_dir"
+
+    if ! PIP_CONFIG_FILE=/dev/null \
+        PIP_NO_INDEX=1 \
+        PIP_NO_CACHE_DIR=1 \
+        PIP_DISABLE_PIP_VERSION_CHECK=1 \
+        sudo -u "$REAL_USER" \
+            env -u PYTHONPATH "$python" -I -m pip wheel \
+                --no-deps \
+                --no-index \
+                --no-build-isolation \
+                --wheel-dir "$build_wheel_dir" \
+                "$build_repo"; then
+        rm -rf -- "$build_root"
+        log_error "Local deployment wheel build failed"
+        return 1
+    fi
+
+    while IFS= read -r -d '' wheel; do
+        local_wheels+=("$wheel")
+    done < <(
+        find "$build_wheel_dir" \
+            -maxdepth 1 \
+            -type f \
+            -name 'open_mmi-*.whl' \
+            -print0
+    )
+
+    if (( ${#local_wheels[@]} != 1 )); then
+        rm -rf -- "$build_root"
+        log_error "Local deployment did not produce exactly one Open MMI wheel"
+        return 1
+    fi
+
+    local_wheel="${local_wheels[0]}"
+
+    # Run the repository's wheel structure verifier without root authority.
+    if ! sudo -u "$REAL_USER" \
+        env -u PYTHONPATH "$python" -I \
+            "$build_repo/tools/verify_wheel.py" \
+            "$local_wheel"; then
+        rm -rf -- "$build_root"
+        log_error "Local deployment wheel verification failed"
+        return 1
+    fi
+
+    # The prepared deployment engine requires a root-owned stage whose Git
+    # identity is independently pinned to the selected commit.
+    install -d -m 0700 -o root -g root \
+        "$(dirname "$stage")" \
+        "$(dirname "$rollback_root")"
+
+    if ! git -c protocol.file.allow=always \
+        clone --no-hardlinks --no-checkout -- \
+        "$REPO_ROOT" "$stage"; then
+        rm -rf -- "$build_root" "$stage"
+        log_error "Could not create trusted local deployment stage"
+        return 1
+    fi
+
+    if ! git -c safe.directory="$stage" -C "$stage" \
+        checkout --detach "$commit"; then
+        rm -rf -- "$build_root" "$stage"
+        log_error "Could not select trusted staged commit"
+        return 1
+    fi
+
+    if [[ $(git -c safe.directory="$stage" -C "$stage" rev-parse HEAD) != "$commit" ]]; then
+        rm -rf -- "$build_root" "$stage"
+        log_error "Trusted stage does not match selected commit"
+        return 1
+    fi
+
+    [[ ! -L "$stage" && $(stat -c '%u' "$stage") -eq 0 ]] || {
+        rm -rf -- "$build_root" "$stage"
+        log_error "Local deployment stage is untrusted"
+        return 1
+    }
+
+    install -d -m 0700 -o root -g root "$candidate_wheel_dir"
+
+    candidate_wheel="$candidate_wheel_dir/$(basename "$local_wheel")"
+    install -m 0644 -o root -g root \
+        "$local_wheel" \
+        "$candidate_wheel"
+
+    # The user-owned build workspace is no longer needed once the selected
+    # candidate has crossed into the private root-owned transaction.
+    rm -rf -- "$build_root"
+
+    # Reuse the hardened prepared deployment engine for /opt backup, package
+    # replacement, service installation, health checks, and rollback. D1
+    # explicitly withholds permission to mutate the developer repository.
+    OPEN_MMI_PREPARED_STAGE="$stage" \
+    OPEN_MMI_PREPARED_TRANSACTION="$transaction" \
+    OPEN_MMI_PREPARED_COMMIT="$commit" \
+    OPEN_MMI_PREVIOUS_COMMIT="$commit" \
+    OPEN_MMI_PREPARED_VERSION="$version" \
+    OPEN_MMI_PREPARED_WHEEL="$candidate_wheel" \
+    OPEN_MMI_MANAGED_REPOSITORY="$REPO_ROOT" \
+    OPEN_MMI_MANAGED_BRANCH="$branch" \
+    OPEN_MMI_MANAGED_UPSTREAM="$upstream" \
+    OPEN_MMI_PRESERVE_MANAGED_REPOSITORY=1 \
+        cmd_deploy_prepared
+
+    rm -rf -- "$stage" "$rollback_root"
+
+    log_success "Explicit local deployment complete → $version"
+}
+
+# =============================================================================
 # INSTALL
 # =============================================================================
 
@@ -1594,7 +1841,8 @@ cmd_deploy_prepared() {
                 log_error "Previous Python installation could not be verified after restoration"
             fi
         fi
-        if [ -d "${OPEN_MMI_MANAGED_REPOSITORY:-}/.git" ]; then
+        if [[ "${OPEN_MMI_PRESERVE_MANAGED_REPOSITORY:-0}" != "1" ]] && \
+           [ -d "${OPEN_MMI_MANAGED_REPOSITORY:-}/.git" ]; then
             sudo -u "$REAL_USER" git -C "$OPEN_MMI_MANAGED_REPOSITORY" reset --hard "$previous_commit" >/dev/null 2>&1 || true
         fi
         for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT" "$POWERD_UNIT"; do
@@ -1709,7 +1957,11 @@ cmd_deploy_prepared() {
     deployment_stage="repository-object"
     sudo -u "$REAL_USER" git -C "$OPEN_MMI_MANAGED_REPOSITORY" cat-file -e "$commit^{commit}"
     deployment_stage="repository-merge"
-    sudo -u "$REAL_USER" git -C "$OPEN_MMI_MANAGED_REPOSITORY" merge --ff-only "$commit"
+    if [[ "${OPEN_MMI_PRESERVE_MANAGED_REPOSITORY:-0}" != "1" ]]; then
+        sudo -u "$REAL_USER" git -C "$OPEN_MMI_MANAGED_REPOSITORY" merge --ff-only "$commit"
+    else
+        [[ $(sudo -u "$REAL_USER" git -C "$OPEN_MMI_MANAGED_REPOSITORY" rev-parse HEAD) == "$commit" ]]
+    fi
 
     deployment_stage="files"
     log_info "Deploying prepared candidate $version..."
@@ -2185,7 +2437,8 @@ ${BLUE}Usage:${NC}
 
 ${BLUE}Commands:${NC}
   install      Install open-mmi from scratch
-  update       Update to latest version (with automatic backup)
+  update       Update through the trusted coordinator
+  deploy-local Explicitly deploy this clean checkout into /opt/open-mmi
   uninstall    Remove open-mmi (with optional backup)
   
   status       Show installation and daemon status
@@ -2198,6 +2451,7 @@ ${BLUE}Commands:${NC}
 ${BLUE}Examples:${NC}
   sudo ./scripts/manage.sh install
   sudo ./scripts/manage.sh update
+  sudo ./scripts/manage.sh deploy-local
   sudo ./scripts/manage.sh status
   sudo ./scripts/manage.sh logs
   sudo ./scripts/manage.sh config apply-profile seat-leon-1p-pq35 default
@@ -2238,6 +2492,10 @@ main() {
         update)
             check_root
             cmd_update
+            ;;
+        deploy-local)
+            check_root
+            cmd_deploy_local
             ;;
         _deploy-prepared)
             check_root

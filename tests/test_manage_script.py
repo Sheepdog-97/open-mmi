@@ -444,6 +444,282 @@ write_checkout_update_source_metadata
             self.text,
         )
 
+    def test_local_deploy_rejects_untracked_checkout_before_staging(self) -> None:
+        start = self.text.index("cmd_deploy_local() {")
+        end = self.text.index(
+            "# =============================================================================\n# INSTALL",
+            start,
+        )
+        block = self.text[start:end]
+
+        self.assertIn("validate_local_deploy_checkout", block)
+        self.assertLess(
+            block.index("validate_local_deploy_checkout"),
+            block.index("mktemp -d /var/tmp/open-mmi-local-deploy."),
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = root / "repository"
+            fake_bin = root / "bin"
+            repository.mkdir()
+            fake_bin.mkdir()
+
+            completed = subprocess.run(
+                ["git", "init", str(repository)],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+
+            tracked = repository / "tracked.txt"
+            tracked.write_text("tracked\n", encoding="utf-8")
+
+            for command in (
+                ["git", "-C", str(repository), "add", "tracked.txt"],
+                [
+                    "git",
+                    "-C",
+                    str(repository),
+                    "-c",
+                    "user.name=Open MMI Test",
+                    "-c",
+                    "user.email=open-mmi-test@example.invalid",
+                    "commit",
+                    "-m",
+                    "fixture",
+                ],
+            ):
+                completed = subprocess.run(
+                    command,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+
+            untracked = repository / "vehicle-test-notes.txt"
+            untracked.write_text("must not deploy\n", encoding="utf-8")
+
+            fake_sudo = fake_bin / "sudo"
+            fake_sudo.write_text(
+                "#!/bin/sh\n"
+                'if [ "$1" = "-u" ]; then\n'
+                "    shift 2\n"
+                "fi\n"
+                'exec "$@"\n',
+                encoding="utf-8",
+            )
+            fake_sudo.chmod(0o755)
+
+            program = (
+                f"source {shlex.quote(str(MANAGE_SCRIPT))}\n"
+                f"REPO_ROOT={shlex.quote(str(repository))}\n"
+                "validate_local_deploy_checkout\n"
+            )
+
+            environment = dict(**__import__("os").environ)
+            environment["PATH"] = (
+                str(fake_bin) + __import__("os").pathsep + environment["PATH"]
+            )
+
+            dirty = subprocess.run(
+                ["bash", "-c", program],
+                cwd=ROOT,
+                env=environment,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+            self.assertNotEqual(dirty.returncode, 0)
+            self.assertIn(
+                "Local deployment requires a completely clean Git checkout",
+                dirty.stderr,
+            )
+
+            untracked.unlink()
+
+            clean = subprocess.run(
+                ["bash", "-c", program],
+                cwd=ROOT,
+                env=environment,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+            self.assertEqual(clean.returncode, 0, clean.stderr)
+
+    def test_local_deploy_is_explicit_clean_checkout_only_and_offline(self) -> None:
+        start = self.text.index("cmd_deploy_local() {")
+        end = self.text.index(
+            "# =============================================================================\n# INSTALL",
+            start,
+        )
+        block = self.text[start:end]
+
+        # Make shell line continuations/layout irrelevant to the boundary test,
+        # and do not treat explanatory comments as executable authority.
+        executable = "\n".join(
+            line
+            for line in block.splitlines()
+            if not line.lstrip().startswith("#")
+        )
+        compact = " ".join(executable.replace("\\\n", " ").split())
+
+        self.assertIn(
+            '[[ $EUID -eq 0 ]] || { log_error "Local deployment requires root"; return 1; }',
+            compact,
+        )
+        self.assertIn("if ! is_installed; then", compact)
+        self.assertIn("validate_local_deploy_checkout", compact)
+
+        helper_start = self.text.index("validate_local_deploy_checkout() {")
+        helper_end = self.text.index("cmd_deploy_local() {", helper_start)
+        helper_block = self.text[helper_start:helper_end]
+        helper_executable = "\n".join(
+            line
+            for line in helper_block.splitlines()
+            if not line.lstrip().startswith("#")
+        )
+        helper_compact = " ".join(
+            helper_executable.replace("\\\n", " ").split()
+        )
+
+        self.assertIn(
+            'git -C "$REPO_ROOT" status --porcelain=v1 --untracked-files=normal',
+            helper_compact,
+        )
+        self.assertIn(
+            'git -C "$REPO_ROOT" rev-parse HEAD',
+            compact,
+        )
+        self.assertIn(
+            'git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD',
+            compact,
+        )
+        self.assertIn("clone --no-hardlinks --no-checkout", compact)
+        self.assertIn("pip wheel --no-deps", compact)
+        self.assertIn("--no-build-isolation", compact)
+        self.assertIn("PIP_NO_INDEX=1", compact)
+        self.assertIn(
+            'sudo -u "$REAL_USER" env -u PYTHONPATH "$python" -I -m pip wheel',
+            compact,
+        )
+        self.assertIn(
+            'mktemp -d /var/tmp/open-mmi-local-deploy.',
+            compact,
+        )
+        self.assertIn("tools/verify_wheel.py", compact)
+        self.assertIn("cmd_deploy_prepared", compact)
+
+        for forbidden in (
+            "git fetch",
+            "git pull",
+            "ls-remote",
+            "ui.config_cli updates check",
+            "ui.config_cli updates prepare",
+            "ui.config_cli updates install",
+            "apt update",
+            "apt install",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, compact)
+
+    def test_local_deploy_reuses_prepared_transaction_with_exact_checkout_metadata(self) -> None:
+        start = self.text.index("cmd_deploy_local() {")
+        end = self.text.index(
+            "# =============================================================================\n# INSTALL",
+            start,
+        )
+        block = self.text[start:end]
+
+        for required in (
+            'OPEN_MMI_PREPARED_STAGE="$stage"',
+            'OPEN_MMI_PREPARED_TRANSACTION="$transaction"',
+            'OPEN_MMI_PREPARED_COMMIT="$commit"',
+            'OPEN_MMI_PREVIOUS_COMMIT="$commit"',
+            'OPEN_MMI_PREPARED_VERSION="$version"',
+            'OPEN_MMI_PREPARED_WHEEL="$candidate_wheel"',
+            'OPEN_MMI_MANAGED_REPOSITORY="$REPO_ROOT"',
+            'OPEN_MMI_MANAGED_BRANCH="$branch"',
+            'OPEN_MMI_MANAGED_UPSTREAM="$upstream"',
+            'OPEN_MMI_PRESERVE_MANAGED_REPOSITORY=1',
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, block)
+
+        self.assertIn("cmd_deploy_prepared", block)
+        self.assertIn('rm -rf -- "$stage" "$rollback_root"', block)
+
+    def test_local_deploy_cannot_hard_reset_developer_checkout_on_rollback(self) -> None:
+        start = self.text.index("cmd_deploy_prepared() {")
+        end = self.text.index(
+            "# =============================================================================\n# UNINSTALL",
+            start,
+        )
+        block = self.text[start:end]
+
+        self.assertIn(
+            'OPEN_MMI_PRESERVE_MANAGED_REPOSITORY',
+            block,
+        )
+        self.assertIn(
+            '"${OPEN_MMI_PRESERVE_MANAGED_REPOSITORY:-0}" != "1"',
+            block,
+        )
+
+        reset = (
+            'sudo -u "$REAL_USER" git -C "$OPEN_MMI_MANAGED_REPOSITORY" '
+            'reset --hard "$previous_commit"'
+        )
+        self.assertIn(reset, block)
+
+        guard = block.index(
+            '"${OPEN_MMI_PRESERVE_MANAGED_REPOSITORY:-0}" != "1"'
+        )
+        reset_position = block.index(reset)
+        self.assertLess(guard, reset_position)
+
+    def test_local_deploy_is_separate_from_managed_update_command(self) -> None:
+        start = self.text.index("main() {")
+        end = self.text.index(
+            'if [[ "${BASH_SOURCE[0]}" == "$0" ]]',
+            start,
+        )
+        main_block = self.text[start:end]
+
+        expected_dispatch = (
+            "        deploy-local)\n"
+            "            check_root\n"
+            "            cmd_deploy_local\n"
+            "            ;;"
+        )
+        self.assertIn(expected_dispatch, main_block)
+
+        update_start = self.text.index("cmd_update() {")
+        update_end = self.text.index("cmd_deploy_prepared() {", update_start)
+        update_block = self.text[update_start:update_end]
+
+        self.assertNotIn("cmd_deploy_local", update_block)
+        self.assertIn("ui.config_cli updates check", update_block)
+        self.assertIn("ui.config_cli updates prepare", update_block)
+        self.assertIn("ui.config_cli updates install", update_block)
+
+        help_start = self.text.index("show_help() {")
+        help_end = self.text.index(
+            "# =============================================================================\n# MAIN",
+            help_start,
+        )
+        help_block = self.text[help_start:help_end]
+        self.assertIn("deploy-local", help_block)
+
     def test_update_command_has_no_direct_systemctl_or_git_network_authority(self) -> None:
         start = self.text.index("cmd_update() {")
         end = self.text.index("cmd_deploy_prepared() {", start)
