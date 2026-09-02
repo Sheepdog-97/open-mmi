@@ -487,6 +487,8 @@ write_checkout_update_source_metadata
                     "user.name=Open MMI Test",
                     "-c",
                     "user.email=open-mmi-test@example.invalid",
+                    "-c",
+                    "commit.gpgsign=false",
                     "commit",
                     "-m",
                     "fixture",
