@@ -19,6 +19,25 @@ class LauncherConfigTests(unittest.TestCase):
         self.assertEqual(config["web_url"], "http://127.0.0.1:8765")
         self.assertNotIn("start_at_login", config)
 
+    def test_web_url_must_remain_loopback_only(self):
+        config = dict(launcher.DEFAULT_CONFIG)
+        config["web_url"] = "https://example.test/dashboard"
+        with self.assertRaisesRegex(launcher.LauncherError, "loopback"):
+            launcher._validate_config(config)
+
+    def test_launcher_network_scope_denies_external_egress(self):
+        command = launcher._network_sandbox_command(["--status"])
+        self.assertEqual(command[0], "/usr/bin/systemd-run")
+        self.assertIn("--user", command)
+        self.assertIn("--scope", command)
+        self.assertIn("--property=IPAddressDeny=any", command)
+        self.assertIn("--property=IPAddressAllow=localhost", command)
+        self.assertIn(
+            "--property=RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+            command,
+        )
+        self.assertEqual(command[-4:], ["-I", "-m", "ui.launcher", "--status"])
+
     def test_user_config_merges_over_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "launcher.json"

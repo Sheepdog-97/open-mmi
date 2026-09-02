@@ -15,6 +15,22 @@ from ui import update_coordinator
 
 
 class UpdateCoordinatorTests(unittest.TestCase):
+    def test_remote_update_check_runs_inside_coordinator_boundary(self):
+        expected = {"state": "up-to-date", "update_available": False}
+        with patch.object(
+            update_coordinator.update_status, "check_for_updates", return_value=expected
+        ) as check:
+            response = update_coordinator.response_for_request(
+                {"api_version": 1, "action": "check"}, Path("/unused")
+            )
+        self.assertEqual(response, {"ok": True, "status": expected})
+        check.assert_called_once_with()
+        self.assertFalse(
+            update_coordinator.response_for_request(
+                {"api_version": 1, "action": "check", "confirm": True}, Path("/unused")
+            )["ok"]
+        )
+
     def test_successful_install_response_is_flushed_before_coordinator_restart(self):
         request = {"api_version": 1, "action": "install", "confirm": True}
         output = io.BytesIO()

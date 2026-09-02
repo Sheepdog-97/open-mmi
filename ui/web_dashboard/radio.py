@@ -98,12 +98,16 @@ def _radio_station_count(value: Any) -> int:
         return 0
 
 
-def _radio_catalog_json(path: str, params: Dict[str, Any] | None = None) -> Any:
+def _radio_catalog_json(
+    path: str,
+    params: Dict[str, Any] | None = None,
+    config: Dict[str, Any] | None = None,
+) -> Any:
     from urllib.error import HTTPError, URLError
     from urllib.parse import urlencode
     from urllib.request import Request, urlopen
 
-    config = _radio_config()
+    config = dict(config or _radio_config())
     if not config["url"]:
         raise RuntimeError("Radio Browser URL is not configured")
     suffix = ""
@@ -185,6 +189,7 @@ def _radio_search_payload(
     media_filter: str = "popular",
     country_code: str = "",
     language: str = "",
+    config: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     selected_filter = _radio_media_filter(media_filter)
     order, _label = RADIO_FILTERS[selected_filter]
@@ -210,7 +215,11 @@ def _radio_search_payload(
         params["language"] = selected_language
         params["languageExact"] = "false"
     try:
-        data = _radio_catalog_json("/json/stations/search", params)
+        data = (
+            _radio_catalog_json("/json/stations/search", params)
+            if config is None
+            else _radio_catalog_json("/json/stations/search", params, config)
+        )
         stations = data if isinstance(data, list) else []
         items = []
         for station in stations:
@@ -240,15 +249,19 @@ def _radio_search_payload(
         }
 
 
-def _radio_filter_options_payload() -> Dict[str, Any]:
+def _radio_filter_options_payload(config: Dict[str, Any] | None = None) -> Dict[str, Any]:
     params = {
         "hidebroken": "true",
         "order": "stationcount",
         "reverse": "true",
         "limit": str(RADIO_FILTER_OPTION_LIMIT),
     }
-    countries_raw = _radio_catalog_json("/json/countrycodes", params)
-    languages_raw = _radio_catalog_json("/json/languages", params)
+    if config is None:
+        countries_raw = _radio_catalog_json("/json/countrycodes", params)
+        languages_raw = _radio_catalog_json("/json/languages", params)
+    else:
+        countries_raw = _radio_catalog_json("/json/countrycodes", params, config)
+        languages_raw = _radio_catalog_json("/json/languages", params, config)
 
     countries = []
     for entry in countries_raw if isinstance(countries_raw, list) else []:
@@ -284,8 +297,8 @@ def _radio_filter_options_payload() -> Dict[str, Any]:
     }
 
 
-def _radio_status_payload() -> Dict[str, Any]:
-    config = _radio_config()
+def _radio_status_payload(config: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    config = dict(config or _radio_config())
     return {
         "configured": bool(config["url"]),
         "source": "radio",
@@ -300,11 +313,18 @@ def _radio_status_payload() -> Dict[str, Any]:
     }
 
 
-def _radio_station_by_uuid(station_id: str) -> Dict[str, Any]:
+def _radio_station_by_uuid(
+    station_id: str, config: Dict[str, Any] | None = None
+) -> Dict[str, Any]:
     from urllib.parse import quote
 
     safe_id = _safe_radio_station_id(station_id)
-    data = _radio_catalog_json(f"/json/stations/byuuid/{quote(safe_id, safe='')}")
+    path = f"/json/stations/byuuid/{quote(safe_id, safe='')}"
+    data = (
+        _radio_catalog_json(path)
+        if config is None
+        else _radio_catalog_json(path, config=config)
+    )
     stations = data if isinstance(data, list) else []
     for station in stations:
         if (
@@ -436,32 +456,48 @@ def _radio_connection(target: Dict[str, Any], address: tuple[Any, ...], timeout:
     return connection_type(target["hostname"], target["port"], timeout=timeout)
 
 
-def _radio_stream_url(station_id: str) -> str:
+def _radio_stream_url(
+    station_id: str, config: Dict[str, Any] | None = None
+) -> str:
     from urllib.parse import quote
 
     safe_id = _safe_radio_station_id(station_id)
-    station = _radio_station_by_uuid(safe_id)
+    supplied_config = config
+    config = dict(config or _radio_config())
+    station = (
+        _radio_station_by_uuid(safe_id)
+        if supplied_config is None
+        else _radio_station_by_uuid(safe_id, config)
+    )
     stream_url = str(station.get("url_resolved") or station.get("url") or "").strip()
     if not stream_url:
         raise LookupError("Radio station has no stream URL")
-    config = _radio_config()
     validated = _radio_validate_stream_url(
         stream_url, allow_private=config["allow_private_streams"]
     )
     # Best effort: Radio Browser asks clients to count each station click.
     try:
-        _radio_catalog_json(f"/json/url/{quote(safe_id, safe='')}")
+        if supplied_config is None:
+            _radio_catalog_json(f"/json/url/{quote(safe_id, safe='')}")
+        else:
+            _radio_catalog_json(
+                f"/json/url/{quote(safe_id, safe='')}", config=config
+            )
     except Exception:
         pass
     return validated
 
 
-def _radio_open_stream(url: str, range_header: str | None = None):
+def _radio_open_stream(
+    url: str,
+    range_header: str | None = None,
+    config: Dict[str, Any] | None = None,
+):
     import http.client
     from urllib.error import HTTPError, URLError
     from urllib.parse import urljoin
 
-    config = _radio_config()
+    config = dict(config or _radio_config())
     headers = {
         "Accept": "audio/*,application/ogg,application/octet-stream;q=0.8,*/*;q=0.2",
         "User-Agent": config["user_agent"],
@@ -517,13 +553,18 @@ def _radio_open_stream(url: str, range_header: str | None = None):
     raise RuntimeError("Radio stream redirect handling failed")
 
 
-def _radio_proxy_audio(handler: Any, station_id: str) -> None:
+def _radio_proxy_audio(
+    handler: Any, station_id: str, config: Dict[str, Any] | None = None
+) -> None:
     from urllib.error import HTTPError, URLError
 
     started = False
     try:
-        stream_url = _radio_stream_url(station_id)
-        with _radio_open_stream(stream_url, handler.headers.get("Range")) as response:
+        config = dict(config or _radio_config())
+        stream_url = _radio_stream_url(station_id, config)
+        with _radio_open_stream(
+            stream_url, handler.headers.get("Range"), config
+        ) as response:
             content_type = str(
                 response.headers.get("Content-Type") or "application/octet-stream"
             ).strip()

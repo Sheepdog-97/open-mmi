@@ -37,12 +37,11 @@ def scope(*signals: str, purpose: str = "owner-diagnostics") -> dict[str, object
 
 class TelemetryGuardTests(unittest.TestCase):
 
-    def test_generation_two_does_not_expand_telemetry_egress_or_persistence(self):
+    def test_generation_three_does_not_expand_telemetry_egress_or_persistence(self):
         manifest = load_manifest()
         self.assertEqual(
             set(manifest["capabilities"]["network.external-egress"]["purposes"]),
             {
-                "dashboard.configured-ui",
                 "media.internet-radio",
                 "media.jellyfin",
                 "updates.release-fetch",

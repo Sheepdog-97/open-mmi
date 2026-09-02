@@ -557,8 +557,10 @@ def _pick_jellyfin_session(
 
     return None
 
-def _jellyfin_status_payload(demo_mode: bool = False) -> Dict[str, Any]:
-    config = _jellyfin_config()
+def _jellyfin_status_payload(
+    demo_mode: bool = False, config: Dict[str, Any] | None = None
+) -> Dict[str, Any]:
+    config = dict(config or _jellyfin_config())
     if not config["configured"]:
         if demo_mode:
             return _jellyfin_demo_status()
@@ -659,8 +661,9 @@ def _jellyfin_search_payload(
     limit: int = 24,
     media_filter: str = "recent",
     demo_mode: bool = False,
+    config: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    config = _jellyfin_config()
+    config = dict(config or _jellyfin_config())
     if not config["configured"]:
         if demo_mode:
             payload = _jellyfin_demo_tracks()
@@ -726,11 +729,13 @@ def _jellyfin_search_payload(
             "error": str(exc),
         }
 
-def _jellyfin_proxy_audio(handler: Any, item_id: str) -> None:
+def _jellyfin_proxy_audio(
+    handler: Any, item_id: str, config: Dict[str, Any] | None = None
+) -> None:
     from urllib.error import HTTPError, URLError
     from urllib.parse import quote, urlencode
 
-    config = _jellyfin_config()
+    config = dict(config or _jellyfin_config())
     if not config["configured"]:
         handler.send_error(404, "Jellyfin is not configured")
         return
@@ -795,11 +800,13 @@ def _jellyfin_proxy_audio(handler: Any, item_id: str) -> None:
     except (URLError, TimeoutError) as exc:
         handler.send_error(502, str(exc))
 
-def _jellyfin_proxy_image(handler: Any, item_id: str) -> None:
+def _jellyfin_proxy_image(
+    handler: Any, item_id: str, config: Dict[str, Any] | None = None
+) -> None:
     from urllib.error import HTTPError, URLError
     from urllib.parse import quote
 
-    config = _jellyfin_config()
+    config = dict(config or _jellyfin_config())
     if not config["configured"]:
         handler.send_error(404, "Jellyfin is not configured")
         return

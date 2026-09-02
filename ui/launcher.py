@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import ipaddress
 import json
 import math
 import os
@@ -30,6 +31,8 @@ BROWSER_STATE_FILE = "browser.json"
 BROWSER_LOCK_FILE = "browser.lock"
 AUTOSTART_ENTRY_NAME = "open-mmi.desktop"
 AUTOSTART_LAUNCHER_COMMAND = "/usr/local/bin/open-mmi-launcher"
+SYSTEMD_RUN = "/usr/bin/systemd-run"
+NETWORK_SANDBOX_MARKER = "OPEN_MMI_LAUNCHER_NETWORK_SANDBOXED"
 LEGACY_CONFIG_KEYS = {"start_at_login"}
 DEFAULT_CONFIG: dict[str, Any] = {
     "default_ui": "web",
@@ -93,6 +96,16 @@ def _validate_config(config: MutableMapping[str, Any]) -> None:
     parsed = urlparse(str(config["web_url"]))
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise LauncherError("web_url must be an absolute http:// or https:// URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise LauncherError("web_url must not contain embedded credentials")
+    hostname = parsed.hostname or ""
+    if hostname.lower() != "localhost":
+        try:
+            address = ipaddress.ip_address(hostname)
+        except ValueError as exc:
+            raise LauncherError("web_url must target the local loopback interface") from exc
+        if not address.is_loopback:
+            raise LauncherError("web_url must target the local loopback interface")
 
     for key in ("startup_timeout_seconds", "health_poll_interval_seconds"):
         try:
@@ -1036,6 +1049,35 @@ def status_payload(config: Mapping[str, Any], config_path: Path) -> dict[str, An
     }
 
 
+def _network_sandbox_command(argv: Sequence[str]) -> list[str]:
+    return [
+        SYSTEMD_RUN,
+        "--user",
+        "--scope",
+        "--quiet",
+        "--collect",
+        "--property=IPAddressDeny=any",
+        "--property=IPAddressAllow=localhost",
+        "--property=RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+        sys.executable,
+        "-I",
+        "-m",
+        "ui.launcher",
+        *argv,
+    ]
+
+
+def _reexec_in_network_sandbox(argv: Sequence[str]) -> int:
+    environment = os.environ.copy()
+    environment[NETWORK_SANDBOX_MARKER] = "1"
+    result = subprocess.run(
+        _network_sandbox_command(argv),
+        check=False,
+        env=environment,
+    )
+    return int(result.returncode)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Launch an Open MMI interface")
     parser.add_argument("ui", nargs="?", choices=("web", "tui"), help="override the configured interface")
@@ -1065,6 +1107,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    if argv is None and os.environ.get(NETWORK_SANDBOX_MARKER) != "1":
+        return _reexec_in_network_sandbox(sys.argv[1:])
+
     parser = build_parser()
     args = parser.parse_args(argv)
     config_path = args.config or default_config_path()

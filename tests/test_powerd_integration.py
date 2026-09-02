@@ -31,12 +31,12 @@ class PowerdIntegrationTests(unittest.TestCase):
 
     def test_all_deployment_paths_copy_and_install_powerd(self) -> None:
         self.assertIn('cp -r "$REPO_ROOT/powerd" "$INSTALL_DIR/"', self.manage)
-        self.assertIn('sudo cp -r "$REPO_ROOT/powerd" "$INSTALL_DIR/"', self.manage)
+        self.assertNotIn('sudo cp -r "$REPO_ROOT/powerd" "$INSTALL_DIR/"', self.manage)
         self.assertIn(
             "for item in canbusd vehicles bindings actions powerd ui scripts packaging systemd; do",
             self.manage,
         )
-        self.assertGreaterEqual(self.manage.count("install_power_manager"), 4)
+        self.assertGreaterEqual(self.manage.count("install_power_manager"), 3)
 
     def test_service_is_disabled_by_default_and_policy_controls_enablement(self) -> None:
         start = self.manage.index("install_power_manager() {")
@@ -102,7 +102,15 @@ class PowerdIntegrationTests(unittest.TestCase):
             self.unit,
         )
         self.assertIn(
+            'cp -r "$REPO_ROOT/packaging" "$INSTALL_DIR/"',
+            self.manage,
+        )
+        self.assertNotIn(
             'sudo cp -r "$REPO_ROOT/packaging" "$INSTALL_DIR/"',
+            self.manage,
+        )
+        self.assertIn(
+            "for item in canbusd vehicles bindings actions powerd ui scripts packaging systemd; do",
             self.manage,
         )
         self.assertIn(

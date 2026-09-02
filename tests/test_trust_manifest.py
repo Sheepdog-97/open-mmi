@@ -24,7 +24,7 @@ class TrustManifestTests(unittest.TestCase):
         manifest = load_manifest()
         self.assertEqual(manifest["schema_version"], 1)
         self.assertEqual(manifest["manifest_id"], "org.open-mmi.trust-manifest")
-        self.assertEqual(manifest["policy_generation"], 2)
+        self.assertEqual(manifest["policy_generation"], 3)
         self.assertEqual(set(manifest["capabilities"]), set(CAPABILITY_POLICIES))
         self.assertEqual(
             manifest["capabilities"]["vehicle.can.transmit"],
@@ -33,6 +33,18 @@ class TrustManifestTests(unittest.TestCase):
         self.assertEqual(
             manifest["capabilities"]["telemetry.collection"],
             {"policy": "local-owner-opt-in", "assurance": "runtime-guarded"},
+        )
+        self.assertEqual(
+            manifest["capabilities"]["network.external-egress"],
+            {
+                "policy": "declared-purposes-only",
+                "assurance": "os-enforced",
+                "purposes": [
+                    "media.internet-radio",
+                    "media.jellyfin",
+                    "updates.release-fetch",
+                ],
+            },
         )
 
     def test_manifest_digest_is_deterministic(self):

@@ -1,13 +1,12 @@
 {
   "schema_version": 1,
   "manifest_id": "org.open-mmi.trust-manifest",
-  "policy_generation": 2,
+  "policy_generation": 3,
   "capabilities": {
     "network.external-egress": {
       "policy": "declared-purposes-only",
-      "assurance": "declared",
+      "assurance": "os-enforced",
       "purposes": [
-        "dashboard.configured-ui",
         "media.internet-radio",
         "media.jellyfin",
         "updates.release-fetch"

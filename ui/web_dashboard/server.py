@@ -261,6 +261,16 @@ def demo_status(scenario: str, started_at: float) -> Dict[str, Any]:
 
 
 
+
+try:
+    from ui import egress_client
+except ModuleNotFoundError as exc:  # pragma: no cover - direct script fallback
+    if exc.name != "ui":
+        raise
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from ui import egress_client
+
 # Jellyfin media provider. Keep the fallback so
 # ``python ui/web_dashboard/server.py`` continues to work when executed
 # directly rather than as a package module.
@@ -414,70 +424,24 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if system_settings_backend._handle_get(self, parsed.path):
             return
 
-        if parsed.path == "/api/jellyfin/status":
-            self._send_json(jellyfin_backend._jellyfin_status_payload(self.demo_mode))
-            return
-
-        if parsed.path == "/api/jellyfin/search":
-            query = parse_qs(parsed.query or "")
-            q = query.get("q", [""])[0]
-            media_filter = query.get("filter", ["recent"])[0]
-            try:
-                limit = int(query.get("limit", ["24"])[0])
-            except (TypeError, ValueError):
-                limit = 24
-            self._send_json(
-                jellyfin_backend._jellyfin_search_payload(q, limit, media_filter, self.demo_mode)
+        if parsed.path.startswith("/api/jellyfin/"):
+            egress_client.proxy_media(
+                self,
+                source="jellyfin",
+                path=parsed.path,
+                query=parsed.query or "",
+                demo_mode=self.demo_mode,
             )
             return
 
-        if parsed.path.startswith("/api/jellyfin/stream/"):
-            from urllib.parse import unquote
-            item_id = unquote(parsed.path.rsplit("/", 1)[-1])
-            jellyfin_backend._jellyfin_proxy_audio(self, item_id)
-            return
-
-        if parsed.path.startswith("/api/jellyfin/image/"):
-            from urllib.parse import unquote
-
-            item_id = unquote(parsed.path.rsplit("/", 1)[-1])
-            jellyfin_backend._jellyfin_proxy_image(self, item_id)
-            return
-
-        if parsed.path == "/api/radio/status":
-            self._send_json(radio_backend._radio_status_payload())
-            return
-        if parsed.path == "/api/radio/options":
-            try:
-                self._send_json(radio_backend._radio_filter_options_payload())
-            except Exception as exc:
-                self._send_json({"configured": True, "source": "radio", "error": str(exc)}, 502)
-            return
-        if parsed.path == "/api/radio/search":
-            query = parse_qs(parsed.query or "")
-            q = query.get("q", [""])[0]
-            media_filter = query.get("filter", ["popular"])[0]
-            country_code = query.get("country", [""])[0]
-            language = query.get("language", [""])[0]
-            try:
-                limit = int(query.get("limit", ["60"])[0])
-            except (TypeError, ValueError):
-                limit = 60
-            self._send_json(
-                radio_backend._radio_search_payload(
-                    q,
-                    limit,
-                    media_filter,
-                    country_code=country_code,
-                    language=language,
-                )
+        if parsed.path.startswith("/api/radio/"):
+            egress_client.proxy_media(
+                self,
+                source="radio",
+                path=parsed.path,
+                query=parsed.query or "",
+                demo_mode=False,
             )
-            return
-        if parsed.path.startswith("/api/radio/stream/"):
-            from urllib.parse import unquote
-
-            station_id = unquote(parsed.path.rsplit("/", 1)[-1])
-            radio_backend._radio_proxy_audio(self, station_id)
             return
 
 

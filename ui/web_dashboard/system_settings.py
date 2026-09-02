@@ -16,34 +16,26 @@ from typing import Any, Dict, Mapping
 from urllib.parse import urlparse
 
 try:
-    from ui import launcher, update_coordinator, update_readiness
+    from ui import egress_client, launcher, update_coordinator, update_readiness
     from ui import vehicle_catalogue, vehicle_config_coordinator, vehicle_setup
     from ui.configuration import (
         ConfigurationError,
         client_is_loopback,
-        jellyfin_environment_status,
-        jellyfin_values_from_payload,
-        read_environment_file,
         restart_dashboard,
-        write_environment_file,
     )
-    from ui.web_dashboard import jellyfin, service_reminder, trip_a, trip_b, trip_distance, update_status
+    from ui.web_dashboard import service_reminder, trip_a, trip_b, trip_distance, update_status
 except ModuleNotFoundError as exc:  # pragma: no cover - direct script fallback
     if exc.name != "ui":
         raise
     sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]))
-    from ui import launcher, update_coordinator, update_readiness
+    from ui import egress_client, launcher, update_coordinator, update_readiness
     from ui import vehicle_catalogue, vehicle_config_coordinator, vehicle_setup
     from ui.configuration import (
         ConfigurationError,
         client_is_loopback,
-        jellyfin_environment_status,
-        jellyfin_values_from_payload,
-        read_environment_file,
         restart_dashboard,
-        write_environment_file,
     )
-    from ui.web_dashboard import jellyfin, service_reminder, trip_a, trip_b, trip_distance, update_status
+    from ui.web_dashboard import service_reminder, trip_a, trip_b, trip_distance, update_status
 
 SYSTEM_MAX_BODY_BYTES = 16 * 1024
 SYSTEM_CUSTOM_EDIT_MAX_BODY_BYTES = vehicle_setup.MAX_PROFILE_BYTES * 6 + SYSTEM_MAX_BODY_BYTES
@@ -126,7 +118,7 @@ def _settings_status() -> Dict[str, Any]:
     return {
         "local_only": True,
         "launcher": _launcher_status(),
-        "jellyfin": jellyfin_environment_status(),
+        "jellyfin": egress_client.jellyfin_status(),
     }
 
 
@@ -159,29 +151,24 @@ def _update_launcher(payload: Mapping[str, Any]) -> Dict[str, Any]:
     return {"ok": True, "launcher": _launcher_status()}
 
 
+def _jellyfin_authority_change_requires_cli() -> ConfigurationError:
+    return ConfigurationError(
+        "Jellyfin network authority is root-owned; use sudo open-mmi-config jellyfin setup or clear"
+    )
+
+
 def _test_jellyfin(payload: Mapping[str, Any]) -> Dict[str, Any]:
-    existing = read_environment_file()
-    values = jellyfin_values_from_payload(payload, existing)
-    config = jellyfin._jellyfin_config_from_mapping(values)
-    return {"ok": True, "test": jellyfin._jellyfin_test_connection(config)}
+    del payload
+    raise _jellyfin_authority_change_requires_cli()
 
 
 def _save_jellyfin(payload: Mapping[str, Any]) -> Dict[str, Any]:
-    existing = read_environment_file()
-    values = jellyfin_values_from_payload(payload, existing)
-    config = jellyfin._jellyfin_config_from_mapping(values)
-    test_result = jellyfin._jellyfin_test_connection(config)
-    write_environment_file(values)
-    return {
-        "ok": True,
-        "test": test_result,
-        "jellyfin": jellyfin_environment_status(values),
-    }
+    del payload
+    raise _jellyfin_authority_change_requires_cli()
 
 
 def _clear_jellyfin() -> Dict[str, Any]:
-    write_environment_file({})
-    return {"ok": True, "jellyfin": jellyfin_environment_status({})}
+    raise _jellyfin_authority_change_requires_cli()
 
 
 def _restart_after_response(delay: float = 0.25) -> None:
@@ -306,7 +293,7 @@ def _handle_post(handler: Any, path: str) -> bool:
             payload = _json_body(handler)
             if payload not in ({}, {"confirm": True}):
                 raise ValueError("Invalid update check request")
-            result = update_status.check_for_updates()
+            result = update_coordinator.client_check()
         elif path == "/api/system/update-prepare":
             payload = _json_body(handler)
             if payload != {"confirm": True}:

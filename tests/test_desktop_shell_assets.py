@@ -128,7 +128,9 @@ class DesktopShellAssetTests(unittest.TestCase):
         self.assertIn("PYTHONUNBUFFERED=1", environment)
         self.assertIn("OPEN_MMI_WEB_HOST=127.0.0.1", environment)
         self.assertIn("OPEN_MMI_WEB_PORT=8765", environment)
-        self.assertEqual(_single(sections, "Service", "EnvironmentFile"), "-%h/.config/open-mmi/dashboard.env")
+        self.assertEqual(_values(sections, "Service", "EnvironmentFile"), [])
+        self.assertEqual(_single(sections, "Service", "IPAddressDeny"), "any")
+        self.assertEqual(_single(sections, "Service", "IPAddressAllow"), "localhost")
 
 
 if __name__ == "__main__":

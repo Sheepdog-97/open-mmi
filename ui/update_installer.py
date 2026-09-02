@@ -94,7 +94,9 @@ def _deployment_environment(
         "HOME": "/var/lib/open-mmi/installer-home",
         "USER": "root",
         "LOGNAME": "root",
-        "PIP_CACHE_DIR": "/var/lib/open-mmi/pip-cache",
+        "PIP_CONFIG_FILE": "/dev/null",
+        "PIP_NO_INDEX": "1",
+        "PIP_DISABLE_PIP_VERSION_CHECK": "1",
     })
     if candidate_wheel is not None:
         environment["OPEN_MMI_PREPARED_WHEEL"] = str(candidate_wheel)
@@ -105,36 +107,18 @@ def _prepare_candidate_wheel(
     stage: Path,
     rollback_root: Path,
     transaction_id: str,
+    candidate_commit: str,
     inventory: Sequence[Mapping[str, Any]],
 ) -> Path:
     wheel_dir = rollback_root / transaction_id / "candidate-wheel"
     try:
-        wheel_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-        os.chmod(wheel_dir, 0o700)
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "wheel", "--no-deps", "--wheel-dir", str(wheel_dir), str(stage)],
-            env={**os.environ, "PIP_DISABLE_PIP_VERSION_CHECK": "1", "PYTHONPATH": ""},
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, check=False, timeout=WHEEL_BUILD_TIMEOUT_SECONDS,
+        return release_integrity.build_trusted_wheel_from_git_inventory(
+            stage, candidate_commit, inventory, wheel_dir
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise InstallerError("Prepared candidate wheel could not be built by the trusted installer") from exc
-    if result.returncode != 0:
-        raise InstallerError("Prepared candidate wheel could not be built by the trusted installer")
-    wheels = sorted(wheel_dir.glob("open_mmi-*.whl"))
-    if len(wheels) != 1:
-        raise InstallerError("Prepared candidate wheel artifact is ambiguous")
-    wheel = wheels[0]
-    try:
-        metadata = wheel.lstat()
-        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1 or metadata.st_mode & 0o022:
-            raise InstallerError("Prepared candidate wheel artifact is untrusted")
-        release_integrity.verify_wheel_against_inventory(wheel, inventory)
-    except (OSError, release_integrity.ReleaseIntegrityError) as exc:
-        if isinstance(exc, InstallerError):
-            raise
-        raise InstallerError("Prepared candidate wheel does not match trusted Git-object inventory") from exc
-    return wheel
+    except release_integrity.ReleaseIntegrityError as exc:
+        raise InstallerError(
+            "Prepared candidate wheel could not be constructed from trusted Git-object inventory"
+        ) from exc
 
 
 def _run_deployment(command: Sequence[str], environment: Mapping[str, str]) -> subprocess.CompletedProcess[str]:
@@ -300,7 +284,8 @@ def install_prepared(
         if command is None:
             try:
                 candidate_wheel = _prepare_candidate_wheel(
-                    stage, rollback_root, transaction_id, expected_release["inventory"]
+                    stage, rollback_root, transaction_id,
+                    expected_release["candidate_commit"], expected_release["inventory"]
                 )
             except InstallerError as exc:
                 state.update({

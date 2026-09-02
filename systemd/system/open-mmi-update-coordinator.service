@@ -20,8 +20,10 @@ StateDirectoryMode=0755
 UMask=0027
 NoNewPrivileges=true
 PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 ProtectHome=read-only
 ProtectSystem=strict
+ReadOnlyPaths=/var/lib/open-mmi/network-egress
 ReadWritePaths=/var/lib/open-mmi /run/open-mmi
 
 [Install]

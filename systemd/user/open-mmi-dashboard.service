@@ -9,7 +9,14 @@ WorkingDirectory=/opt/open-mmi
 Environment="PYTHONUNBUFFERED=1"
 Environment="OPEN_MMI_WEB_HOST=127.0.0.1"
 Environment="OPEN_MMI_WEB_PORT=8765"
-EnvironmentFile=-%h/.config/open-mmi/dashboard.env
+IPAddressDeny=any
+IPAddressAllow=localhost
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+NoNewPrivileges=true
+PrivateDevices=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
 ExecStart=/opt/open-mmi/venv/bin/python -m ui.web_dashboard.server
 Restart=on-failure
 RestartSec=2

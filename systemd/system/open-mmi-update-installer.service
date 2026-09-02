@@ -9,6 +9,13 @@ Environment=OPEN_MMI_PREPARED_DEPLOYMENT=1
 ExecStart=/opt/open-mmi/venv/bin/python -I -m ui.update_installer
 UMask=0027
 PrivateTmp=true
+
+# Deployment is deliberately offline. Loopback remains available only for the
+# post-install dashboard health check.
+IPAddressDeny=any
+IPAddressAllow=localhost
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 ProtectHome=false
 ProtectSystem=strict
+ReadOnlyPaths=/var/lib/open-mmi/network-egress
 ReadWritePaths=/opt /var/lib/open-mmi /run/open-mmi /etc/open-mmi /etc/systemd/system /etc/udev/rules.d /usr/lib/tmpfiles.d /usr/local/bin /home

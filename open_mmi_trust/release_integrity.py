@@ -12,7 +12,10 @@ and the old-trusted update installer.
 
 from __future__ import annotations
 
+import base64
+import csv
 import hashlib
+import io
 import json
 import os
 import re
@@ -58,9 +61,15 @@ SOURCE_RELEASE_FILES = ("LICENSE", "README.md", "pyproject.toml")
 INVENTORY_ROOTS = (*PACKAGE_RUNTIME_ROOTS, "scripts", "packaging", "systemd")
 DEFAULT_INSTALL_ROOT = Path("/opt/open-mmi")
 DEFAULT_SYSTEMD_UNIT_ROOT = Path("/etc/systemd/system")
+DEFAULT_SYSTEMD_USER_UNIT_ROOT = Path("/etc/systemd/user")
 PRIVILEGED_SYSTEM_UNITS = (
     "open-mmi-update-coordinator.service",
     "open-mmi-update-installer.service",
+    "open-mmi-media-egress.service",
+)
+PRIVILEGED_USER_UNITS = (
+    "canbusd.service",
+    "open-mmi-dashboard.service",
 )
 _PYTHON_LIB_RE = re.compile(r"^python[0-9]+\.[0-9]+$")
 PACKAGE_SOURCE_ONLY_PATHS = {"ui/web_dashboard/README.md"}
@@ -866,6 +875,10 @@ def _verify_privileged_ownership(
 def _verify_privileged_units(
     entries: Sequence[Mapping[str, Any]],
     unit_root: Path,
+    *,
+    units: Sequence[str] = PRIVILEGED_SYSTEM_UNITS,
+    inventory_prefix: str = "systemd/system",
+    production_root: Path = DEFAULT_SYSTEMD_UNIT_ROOT,
 ) -> dict[str, Any]:
     inventory = {
         str(entry["path"]): entry for entry in validate_inventory(list(entries))
@@ -873,7 +886,7 @@ def _verify_privileged_units(
     missing: list[str] = []
     modified: list[str] = []
     unsafe: list[str] = []
-    production = _same_root(Path(unit_root), DEFAULT_SYSTEMD_UNIT_ROOT)
+    production = _same_root(Path(unit_root), production_root)
     if production:
         try:
             root_metadata = Path(unit_root).lstat()
@@ -889,8 +902,8 @@ def _verify_privileged_units(
         ):
             raise ReleaseIntegrityError("privileged systemd unit root is untrusted")
 
-    for unit in PRIVILEGED_SYSTEM_UNITS:
-        relative = f"systemd/system/{unit}"
+    for unit in units:
+        relative = f"{inventory_prefix}/{unit}"
         expected = inventory.get(relative)
         if expected is None:
             raise ReleaseIntegrityError(
@@ -929,7 +942,7 @@ def _verify_privileged_units(
     unsafe = sorted(set(unsafe))
     return {
         "matches": not (missing or modified or unsafe),
-        "files_expected": len(PRIVILEGED_SYSTEM_UNITS),
+        "files_expected": len(units),
         "unit_root": str(unit_root),
         "missing": missing,
         "modified": modified,
@@ -945,6 +958,7 @@ def verify_privileged_runtime_inventory(
     install_root: Path = DEFAULT_INSTALL_ROOT,
     package_root: Path | None = None,
     systemd_unit_root: Path = DEFAULT_SYSTEMD_UNIT_ROOT,
+    systemd_user_unit_root: Path | None = None,
 ) -> dict[str, Any]:
     """Verify the bytes actually used by privileged update execution."""
 
@@ -955,6 +969,14 @@ def verify_privileged_runtime_inventory(
         if package_root is not None
         else production_package_root(source_root)
     )
+    user_unit_root = (
+        DEFAULT_SYSTEMD_USER_UNIT_ROOT
+        if systemd_user_unit_root is None
+        and _same_root(Path(systemd_unit_root), DEFAULT_SYSTEMD_UNIT_ROOT)
+        else Path(systemd_unit_root)
+        if systemd_user_unit_root is None
+        else Path(systemd_user_unit_root)
+    )
     runtime = verify_runtime_inventory(
         inventory=inventory,
         trust_manifest_digest=trust_manifest_digest,
@@ -963,24 +985,41 @@ def verify_privileged_runtime_inventory(
         package_root=packages,
     )
     units = _verify_privileged_units(inventory, Path(systemd_unit_root))
+    user_units = _verify_privileged_units(
+        inventory,
+        user_unit_root,
+        units=PRIVILEGED_USER_UNITS,
+        inventory_prefix="systemd/user",
+        production_root=DEFAULT_SYSTEMD_USER_UNIT_ROOT,
+    )
     ownership = _verify_privileged_ownership(entries, source_root, packages)
 
     missing = list(runtime["missing"]) + [
         f"systemd:{item}" for item in units["missing"]
+    ] + [
+        f"systemd-user:{item}" for item in user_units["missing"]
     ]
     modified = list(runtime["modified"]) + [
         f"systemd:{item}" for item in units["modified"]
+    ] + [
+        f"systemd-user:{item}" for item in user_units["modified"]
     ]
     unsafe = list(runtime["unsafe"]) + [
         f"systemd:{item}" for item in units["unsafe"]
+    ] + [
+        f"systemd-user:{item}" for item in user_units["unsafe"]
     ] + [
         f"ownership:{item}" for item in ownership["unsafe"]
     ]
     return {
         "matches": bool(
-            runtime["matches"] and units["matches"] and ownership["matches"]
+            runtime["matches"] and units["matches"] and user_units["matches"] and ownership["matches"]
         ),
-        "files_expected": int(runtime["files_expected"]) + int(units["files_expected"]),
+        "files_expected": (
+            int(runtime["files_expected"])
+            + int(units["files_expected"])
+            + int(user_units["files_expected"])
+        ),
         "inventory_files": runtime["inventory_files"],
         "inventory_digest": runtime["inventory_digest"],
         "candidate_commit": candidate_commit,
@@ -988,12 +1027,14 @@ def verify_privileged_runtime_inventory(
         "source_root": str(source_root),
         "package_root": str(packages),
         "systemd_unit_root": str(systemd_unit_root),
+        "systemd_user_unit_root": str(user_unit_root),
         "missing": sorted(set(missing)),
         "modified": sorted(set(modified)),
         "extra": list(runtime["extra"]),
         "unsafe": sorted(set(unsafe)),
         "runtime": runtime,
         "privileged_units": units,
+        "privileged_user_units": user_units,
         "privileged_ownership": ownership,
     }
 
@@ -1003,6 +1044,7 @@ def verify_privileged_installed_runtime(
     install_root: Path = DEFAULT_INSTALL_ROOT,
     package_root: Path | None = None,
     systemd_unit_root: Path = DEFAULT_SYSTEMD_UNIT_ROOT,
+    systemd_user_unit_root: Path | None = None,
 ) -> dict[str, Any]:
     normalized = validate_integrity_state(state)
     return verify_privileged_runtime_inventory(
@@ -1012,6 +1054,7 @@ def verify_privileged_installed_runtime(
         install_root=install_root,
         package_root=package_root,
         systemd_unit_root=systemd_unit_root,
+        systemd_user_unit_root=systemd_user_unit_root,
     )
 
 
@@ -1069,6 +1112,146 @@ def require_current_integrity(
     if not verification["matches"]:
         raise ReleaseIntegrityError("installed Open MMI runtime bytes do not match recorded integrity state")
     return state
+
+
+TRUSTED_WHEEL_DISTRIBUTION = "open-mmi"
+TRUSTED_WHEEL_VERSION = "0.1.0a1"
+TRUSTED_WHEEL_TAG = "py3-none-any"
+TRUSTED_WHEEL_ENTRY_POINTS = (
+    ("open-mmi-canbusd", "canbusd.core:main"),
+    ("open-mmi-config", "ui.config_cli:main"),
+    ("open-mmi-dashboard", "ui.web_dashboard.server:main"),
+    ("open-mmi-launcher", "ui.launcher:main"),
+    ("open-mmi-powerd", "powerd.cli:main"),
+    ("open-mmi-status", "ui.dashboard.status_cli:main"),
+    ("open-mmi-telemetry", "open_mmi_telemetry.cli:main"),
+    ("open-mmi-trust-inspect", "open_mmi_trust.inspector_cli:main"),
+    ("open-mmi-trust-integrity", "open_mmi_trust.release_integrity_cli:main"),
+    ("open-mmi-trust-provenance", "open_mmi_trust.release_provenance_cli:main"),
+    ("open-mmi-trust-lineage", "open_mmi_trust.lineage_cli:main"),
+    ("open-mmi-trust-state", "open_mmi_trust.accepted_state_cli:main"),
+    ("open-mmi-trust-transition", "open_mmi_trust.transition_gate_cli:main"),
+    ("open-mmi-update-coordinator", "ui.update_coordinator:main"),
+    ("open-mmi-update-installer", "ui.update_installer:main"),
+    ("open-mmi-vehicle-config-coordinator", "ui.vehicle_config_coordinator:main"),
+)
+
+
+def _wheel_record_digest(data: bytes) -> str:
+    encoded = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode("ascii")
+    return f"sha256={encoded}"
+
+
+def _trusted_wheel_member(name: str, data: bytes) -> tuple[zipfile.ZipInfo, bytes]:
+    info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+    info.compress_type = zipfile.ZIP_DEFLATED
+    info.create_system = 3
+    info.external_attr = 0o100644 << 16
+    return info, data
+
+
+def build_trusted_wheel_from_git_inventory(
+    repository: Path,
+    commit: str,
+    inventory: Sequence[Mapping[str, Any]],
+    output_dir: Path,
+) -> Path:
+    """Construct the Open MMI wheel without importing or executing candidate code.
+
+    The build algorithm and package metadata are supplied by the already-installed
+    trusted release. Candidate Git objects provide only the byte payload that was
+    already bound into the trusted runtime inventory.
+    """
+
+    commit = str(commit).lower()
+    if not _COMMIT_RE.fullmatch(commit):
+        raise ReleaseIntegrityError("candidate commit is invalid")
+    entries = validate_inventory(list(inventory))
+    package_entries = [entry for entry in entries if _is_package_runtime_path(entry["path"])]
+    if not package_entries:
+        raise ReleaseIntegrityError("candidate package runtime inventory is empty")
+
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        metadata = output_dir.lstat()
+    except OSError as exc:
+        raise ReleaseIntegrityError("trusted wheel output directory is unavailable") from exc
+    if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode) or metadata.st_mode & 0o022:
+        raise ReleaseIntegrityError("trusted wheel output directory is unsafe")
+
+    normalized = TRUSTED_WHEEL_DISTRIBUTION.replace("-", "_")
+    dist_info = f"{normalized}-{TRUSTED_WHEEL_VERSION}.dist-info"
+    wheel_name = f"{normalized}-{TRUSTED_WHEEL_VERSION}-{TRUSTED_WHEEL_TAG}.whl"
+    wheel_path = output_dir / wheel_name
+    if wheel_path.exists():
+        raise ReleaseIntegrityError("trusted wheel output already exists")
+
+    members: list[tuple[str, bytes]] = []
+    for entry in package_entries:
+        path = str(entry["path"])
+        result = _git(repository, "show", f"{commit}:{path}")
+        if result.returncode != 0 or not isinstance(result.stdout, bytes):
+            raise ReleaseIntegrityError(f"candidate package object could not be read: {path}")
+        data = result.stdout
+        if len(data) != entry["size"] or "sha256:" + hashlib.sha256(data).hexdigest() != entry["sha256"]:
+            raise ReleaseIntegrityError(f"candidate package object does not match trusted inventory: {path}")
+        members.append((path, data))
+
+    metadata_body = (
+        "Metadata-Version: 2.1\n"
+        "Name: open-mmi\n"
+        f"Version: {TRUSTED_WHEEL_VERSION}\n"
+        "Summary: Open vehicle MMI integration framework for Linux\n"
+        "License: GPL-3.0-only\n"
+        "Requires-Python: >=3.9\n"
+        "Requires-Dist: python-can>=4.3,<5\n"
+        "Requires-Dist: evdev>=1.6,<2\n"
+        "\n"
+    ).encode("utf-8")
+    wheel_body = (
+        "Wheel-Version: 1.0\n"
+        "Generator: open-mmi-trusted-wheel-builder-v1\n"
+        "Root-Is-Purelib: true\n"
+        f"Tag: {TRUSTED_WHEEL_TAG}\n"
+        "\n"
+    ).encode("utf-8")
+    entry_points_body = (
+        "[console_scripts]\n"
+        + "".join(f"{name} = {target}\n" for name, target in TRUSTED_WHEEL_ENTRY_POINTS)
+    ).encode("utf-8")
+    members.extend((
+        (f"{dist_info}/METADATA", metadata_body),
+        (f"{dist_info}/WHEEL", wheel_body),
+        (f"{dist_info}/entry_points.txt", entry_points_body),
+    ))
+
+    record_rows: list[tuple[str, str, str]] = [
+        (name, _wheel_record_digest(data), str(len(data))) for name, data in members
+    ]
+    record_name = f"{dist_info}/RECORD"
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer, lineterminator="\n")
+    for row in record_rows:
+        writer.writerow(row)
+    writer.writerow((record_name, "", ""))
+    record_body = buffer.getvalue().encode("utf-8")
+    members.append((record_name, record_body))
+
+    try:
+        with zipfile.ZipFile(wheel_path, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+            for name, data in sorted(members, key=lambda item: item[0]):
+                info, payload = _trusted_wheel_member(name, data)
+                archive.writestr(info, payload)
+        os.chmod(wheel_path, 0o600)
+    except (OSError, RuntimeError, zipfile.BadZipFile) as exc:
+        try:
+            wheel_path.unlink()
+        except OSError:
+            pass
+        raise ReleaseIntegrityError("trusted candidate wheel could not be constructed") from exc
+
+    verify_wheel_against_inventory(wheel_path, entries)
+    return wheel_path
 
 
 def verify_wheel_against_inventory(

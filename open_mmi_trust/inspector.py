@@ -1358,6 +1358,209 @@ def _inspect_dashboard_render(static_root: Path) -> list[dict[str, Any]]:
     return checks
 
 
+
+def _network_egress_unit_contract(root: Path) -> tuple[list[str], dict[str, Any]]:
+    contracts = {
+        "systemd/system/open-mmi-update-installer.service": (
+            "IPAddressDeny=any",
+            "IPAddressAllow=localhost",
+            "ReadOnlyPaths=/var/lib/open-mmi/network-egress",
+        ),
+        "systemd/system/open-mmi-update-coordinator.service": (
+            "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+            "ReadOnlyPaths=/var/lib/open-mmi/network-egress",
+            "ExecStart=/opt/open-mmi/venv/bin/python -I -m ui.update_coordinator serve",
+        ),
+        "systemd/system/open-mmi-media-egress.service": (
+            "DynamicUser=yes",
+            "ProtectSystem=strict",
+            "ProtectHome=yes",
+            "CapabilityBoundingSet=",
+            "LoadCredential=media-config:/var/lib/open-mmi/network-egress/media.v1.json",
+            "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+        ),
+        "systemd/user/open-mmi-dashboard.service": (
+            "IPAddressDeny=any",
+            "IPAddressAllow=localhost",
+            "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+        ),
+        "systemd/user/canbusd.service": (
+            "RestrictAddressFamilies=AF_CAN AF_UNIX",
+        ),
+    }
+    failures: list[str] = []
+    evidence: dict[str, Any] = {}
+    for relative, required in contracts.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            failures.append(f"{relative}:unreadable:{type(exc).__name__}")
+            continue
+        missing = [line for line in required if line not in text]
+        if relative.endswith("canbusd.service") and ("AF_INET" in text or "AF_INET6" in text):
+            missing.append("must-not-authorize-AF_INET")
+        if relative.endswith("open-mmi-dashboard.service") and "EnvironmentFile=" in text:
+            missing.append("must-not-load-owner-network-secrets")
+        if missing:
+            failures.extend(f"{relative}:{item}" for item in missing)
+        evidence[relative] = {"required_contract": list(required), "matches": not missing}
+    return failures, evidence
+
+
+def _network_egress_source_contract(root: Path) -> list[str]:
+    required_fragments = {
+        "ui/launcher.py": (
+            "web_url must target the local loopback interface",
+            "--property=IPAddressDeny=any",
+            "--property=IPAddressAllow=localhost",
+            '"ui.launcher"',
+        ),
+        "ui/media_egress.py": (
+            "RADIO_BROWSER_DEFAULT_URL",
+            "read_credential_config",
+            '"/v1/jellyfin/test-candidate"',
+            "_require_root_peer",
+        ),
+        "ui/egress_client.py": (
+            '"/v1/media/proxy"',
+            '"/v1/jellyfin/test-candidate"',
+        ),
+        "ui/update_coordinator.py": ("updates.release-fetch",),
+    }
+    failures: list[str] = []
+    for relative, required in required_fragments.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            failures.append(f"{relative}:unreadable:{type(exc).__name__}")
+            continue
+        for fragment in required:
+            if fragment not in text:
+                failures.append(f"{relative}:missing:{fragment}")
+    return failures
+
+
+def _network_egress_user_shadow_paths() -> list[str]:
+    home = Path.home()
+    runtime = os.getenv("XDG_RUNTIME_DIR", "").strip()
+    bases = [home / ".config" / "systemd" / "user", home / ".local" / "share" / "systemd" / "user"]
+    if runtime:
+        bases.extend(
+            [
+                Path(runtime) / "systemd" / "user",
+                Path(runtime) / "systemd" / "user.control",
+            ]
+        )
+    protected = ("canbusd.service", "open-mmi-dashboard.service")
+    forbidden_directives = (
+        "ExecStart=",
+        "IPAddressDeny=",
+        "IPAddressAllow=",
+        "RestrictAddressFamilies=",
+        "NoNewPrivileges=",
+        "PrivateDevices=",
+        "RestrictNamespaces=",
+    )
+    offenders: list[str] = []
+    for base in bases:
+        for unit in protected:
+            full = base / unit
+            if full.exists() or full.is_symlink():
+                offenders.append(str(full))
+            dropin = base / f"{unit}.d"
+            if not dropin.is_dir():
+                continue
+            for path in sorted(dropin.glob("*.conf")):
+                try:
+                    text = path.read_text(encoding="utf-8")
+                except (OSError, UnicodeError):
+                    offenders.append(str(path) + ":unreadable")
+                    continue
+                for raw in text.splitlines():
+                    line = raw.strip()
+                    if any(line.startswith(prefix) for prefix in forbidden_directives):
+                        offenders.append(f"{path}:{line}")
+    return sorted(set(offenders))
+
+
+def _inspect_network_egress_enforcement(
+    root: Path,
+    manifest: Mapping[str, Any] | None,
+    privileged_runtime_check: Mapping[str, Any] | None,
+    *,
+    production: bool,
+) -> dict[str, Any] | None:
+    if manifest is None:
+        return None
+    capability = manifest["capabilities"]["network.external-egress"]
+    if capability["assurance"] == "declared":
+        return None
+    expected_purposes = ["media.internet-radio", "media.jellyfin", "updates.release-fetch"]
+    if (
+        capability["policy"] != "declared-purposes-only"
+        or capability["assurance"] != "os-enforced"
+        or capability.get("purposes") != expected_purposes
+    ):
+        return _check(
+            "capability.network.external-egress.enforcement",
+            FAIL,
+            "Network egress manifest semantics do not match the enforced purpose boundary.",
+            capability=capability,
+            expected_purposes=expected_purposes,
+        )
+
+    unit_failures, unit_evidence = _network_egress_unit_contract(root)
+    source_failures = _network_egress_source_contract(root)
+    if unit_failures or source_failures:
+        return _check(
+            "capability.network.external-egress.enforcement",
+            FAIL if production else UNVERIFIED,
+            (
+                "Installed source does not reproduce the declared network egress enforcement contract."
+                if production
+                else "Network egress enforcement cannot be reproduced from this non-production fixture."
+            ),
+            unit_failures=unit_failures,
+            source_failures=source_failures,
+            units=unit_evidence,
+        )
+    if not production:
+        return _check(
+            "capability.network.external-egress.enforcement",
+            UNVERIFIED,
+            "Network egress enforcement source is present, but effective production unit ownership/runtime state was not inspected.",
+            purposes=expected_purposes,
+            assurance=capability["assurance"],
+        )
+    if privileged_runtime_check is None or privileged_runtime_check.get("status") != PASS:
+        return _check(
+            "capability.network.external-egress.enforcement",
+            UNVERIFIED,
+            "Network policy source is present, but root-owned deployed unit integrity is not currently proven.",
+            purposes=expected_purposes,
+            privileged_runtime_status=(privileged_runtime_check or {}).get("status"),
+        )
+    shadow_paths = _network_egress_user_shadow_paths()
+    if shadow_paths:
+        return _check(
+            "capability.network.external-egress.enforcement",
+            FAIL,
+            "Owner-writable user-unit state can shadow or weaken a root-owned Open MMI network sandbox.",
+            shadow_paths=shadow_paths,
+        )
+    return _check(
+        "capability.network.external-egress.enforcement",
+        PASS,
+        "External network authority is confined to the declared updater and media actors by root-owned OS service boundaries.",
+        purposes=expected_purposes,
+        assurance=capability["assurance"],
+        root_owned_units=True,
+        owner_unit_shadows=[],
+        launcher_ui_target="loopback-only",
+    )
+
 def _declared_assurance_checks(manifest: Mapping[str, Any] | None) -> list[dict[str, Any]]:
     if manifest is None:
         return []
@@ -1421,17 +1624,24 @@ def inspect_system(
     integrity_check, integrity_state = _inspect_release_integrity(
         Path(integrity_path), integrity_source_root, integrity_package_root
     )
+    production = install_root is None and package_root is None
+    privileged_runtime_check = (
+        _inspect_privileged_runtime_integrity(integrity_state)
+        if production
+        else None
+    )
+    network_check = _inspect_network_egress_enforcement(
+        root, manifest, privileged_runtime_check, production=production
+    )
+    if network_check is not None:
+        checks.append(network_check)
     provenance_check = _inspect_release_provenance(
         Path(provenance_path), integrity_state, integrity_source_root
     )
     checks.extend(
         [
             integrity_check,
-            *(
-                [_inspect_privileged_runtime_integrity(integrity_state)]
-                if install_root is None and package_root is None
-                else []
-            ),
+            *([privileged_runtime_check] if privileged_runtime_check is not None else []),
             provenance_check,
             _inspect_transition_lineage(Path(lineage_path), Path(accepted_state_path)),
             _inspect_updater_transition_gate_source(root),

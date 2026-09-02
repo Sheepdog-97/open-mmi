@@ -514,7 +514,7 @@ class TrustInvariantTests(unittest.TestCase):
         manifest = load_manifest()
         self.assertEqual(
             manifest["capabilities"]["network.external-egress"]["assurance"],
-            "declared",
+            "os-enforced",
         )
         self.assertEqual(
             manifest["capabilities"]["telemetry.collection"]["policy"],

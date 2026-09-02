@@ -308,7 +308,7 @@ class ManageScriptLifecycleTests(unittest.TestCase):
             self.assertFalse((root / "bindings").exists())
             self.assertFalse((root / ".open-mmi-provenance").exists())
 
-    def test_install_and_update_paths_harden_only_the_custom_catalogue(self) -> None:
+    def test_update_delegates_while_custom_catalogue_hardening_stays_in_trusted_paths(self) -> None:
         coordinator_start = self.text.index("install_vehicle_config_coordinator() {")
         coordinator_end = self.text.index("remove_login_autostart() {", coordinator_start)
         coordinator_block = self.text[coordinator_start:coordinator_end]
@@ -317,10 +317,10 @@ class ManageScriptLifecycleTests(unittest.TestCase):
         update_start = self.text.index("cmd_update() {")
         update_end = self.text.index("cmd_deploy_prepared() {", update_start)
         update_block = self.text[update_start:update_end]
-        self.assertLess(
-            update_block.index("harden_custom_catalogue_permissions"),
-            update_block.index("Already up to date"),
-        )
+        self.assertNotIn("harden_custom_catalogue_permissions", update_block)
+        self.assertIn("ui.config_cli updates check", update_block)
+        self.assertIn("ui.config_cli updates prepare", update_block)
+        self.assertIn("ui.config_cli updates install", update_block)
 
         provisioning_start = self.text.index("apply_profile_provisioning() {")
         provisioning_end = self.text.index("reload_profile_provisioning() {", provisioning_start)
@@ -424,73 +424,30 @@ write_checkout_update_source_metadata
             self.assertEqual(descriptor["installed_version"], "v1-foundation-alpha-80-gb")
 
     def test_service_units_use_single_command_source_and_destination(self) -> None:
-        install_canbusd = (
-            'install -m 0644 -o "$REAL_USER" -g "$REAL_USER" '
-            '"$REPO_ROOT/systemd/user/canbusd.service" '
-            '"$user_systemd_dir/canbusd.service"'
-        )
-        install_dashboard = (
-            'install -m 0644 -o "$REAL_USER" -g "$REAL_USER" '
-            '"$REPO_ROOT/systemd/user/open-mmi-dashboard.service" '
-            '"$user_systemd_dir/open-mmi-dashboard.service"'
-        )
-        self.assertGreaterEqual(self.text.count(install_canbusd), 2)
-        self.assertGreaterEqual(self.text.count(install_dashboard), 2)
+        self.assertIn('SYSTEMD_USER_UNIT_ROOT="/etc/systemd/user"', self.text)
+        self.assertIn('"$REPO_ROOT/systemd/user/canbusd.service"', self.text)
+        self.assertIn('"$SYSTEMD_USER_UNIT_ROOT/canbusd.service"', self.text)
+        self.assertIn('"$REPO_ROOT/systemd/user/open-mmi-dashboard.service"', self.text)
+        self.assertIn('"$SYSTEMD_USER_UNIT_ROOT/open-mmi-dashboard.service"', self.text)
         self.assertNotIn(
-            'cp "$REPO_ROOT/systemd/user/canbusd.service" \\\n',
+            'install -m 0644 -o "$REAL_USER" -g "$REAL_USER" "$REPO_ROOT/systemd/user/canbusd.service"',
             self.text,
         )
         self.assertNotIn(
-            'cp "$REPO_ROOT/systemd/user/open-mmi-dashboard.service" \\\n',
+            'install -m 0644 -o "$REAL_USER" -g "$REAL_USER" "$REPO_ROOT/systemd/user/open-mmi-dashboard.service"',
             self.text,
         )
 
-    def test_update_systemctl_commands_are_complete_single_lines(self) -> None:
+    def test_update_command_has_no_direct_systemctl_or_git_network_authority(self) -> None:
         start = self.text.index("cmd_update() {")
         end = self.text.index("cmd_deploy_prepared() {", start)
         update_block = self.text[start:end]
-        commands = [
-            line.strip()
-            for line in update_block.splitlines()
-            if line.strip().startswith('sudo -u "$REAL_USER"')
-            and "systemctl --user" in line
-        ]
-
-        self.assertEqual(len(commands), 2)
-        for command in commands:
-            with self.subTest(command=command):
-                self.assertFalse(command.endswith("\\"))
-
-                result = subprocess.run(
-                    [
-                        "bash",
-                        "-c",
-                        f'''\
-REAL_USER=pitto
-REAL_HOME=/home/pitto
-XDG_RUNTIME_DIR=/run/user/1000
-sudo() {{ printf '%s\\0' "$@"; }}
-{command}
-''',
-                    ],
-                    cwd=ROOT,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    check=False,
-                )
-                self.assertEqual(
-                    result.returncode,
-                    0,
-                    result.stderr.decode("utf-8", errors="replace"),
-                )
-                arguments = [
-                    value.decode("utf-8")
-                    for value in result.stdout.split(b"\0")
-                    if value
-                ]
-                self.assertIn("systemctl", arguments)
-                systemctl_index = arguments.index("systemctl")
-                self.assertEqual(arguments[systemctl_index + 1], "--user")
+        self.assertNotIn("systemctl", update_block)
+        self.assertNotIn('sudo -u "$REAL_USER" git', update_block)
+        self.assertNotIn("git -C", update_block)
+        self.assertIn("ui.config_cli updates check", update_block)
+        self.assertIn("ui.config_cli updates prepare", update_block)
+        self.assertIn("ui.config_cli updates install", update_block)
 
     def test_update_manages_both_service_units(self) -> None:
         self.assertIn(
@@ -519,72 +476,87 @@ sudo() {{ printf '%s\\0' "$@"; }}
         self.assertIn("remove_login_autostart", self.text)
         self.assertNotIn("configure_dashboard_autostart", self.text)
 
-    def test_desktop_entry_is_managed_by_install_update_and_uninstall(self) -> None:
+    def test_desktop_entry_is_managed_by_install_prepared_deployment_and_uninstall(self) -> None:
         install_start = self.text.index("cmd_install() {")
         update_start = self.text.index("cmd_update() {")
+        deploy_start = self.text.index("cmd_deploy_prepared() {")
         uninstall_start = self.text.index("cmd_uninstall() {")
         status_start = self.text.index("cmd_status() {")
 
         install_block = self.text[install_start:update_start]
-        update_block = self.text[update_start:uninstall_start]
+        update_block = self.text[update_start:deploy_start]
+        deploy_block = self.text[deploy_start:uninstall_start]
         uninstall_block = self.text[uninstall_start:status_start]
 
         self.assertIn("install_desktop_entry", install_block)
-        self.assertIn("install_desktop_entry", update_block)
+        self.assertNotIn("install_desktop_entry", update_block)
+        self.assertIn("install_desktop_entry", deploy_block)
         self.assertIn("remove_desktop_entry", uninstall_block)
         self.assertIn("install_desktop_icons", self.text)
         self.assertIn("remove_desktop_icons", self.text)
         self.assertIn('cp -r "$REPO_ROOT/packaging" "$INSTALL_DIR/"', install_block)
-        self.assertIn('sudo cp -r "$REPO_ROOT/packaging" "$INSTALL_DIR/"', update_block)
+        self.assertIn(
+            'for item in canbusd vehicles bindings actions powerd ui scripts packaging systemd; do',
+            deploy_block,
+        )
+        self.assertIn('cp -a -- "$resolved_stage/$item" "$INSTALL_DIR/"', deploy_block)
 
     def test_package_and_command_links_are_managed_by_lifecycle(self) -> None:
         install_start = self.text.index("cmd_install() {")
         update_start = self.text.index("cmd_update() {")
+        deploy_start = self.text.index("cmd_deploy_prepared() {")
         uninstall_start = self.text.index("cmd_uninstall() {")
         status_start = self.text.index("cmd_status() {")
 
         install_block = self.text[install_start:update_start]
-        update_block = self.text[update_start:uninstall_start]
+        update_block = self.text[update_start:deploy_start]
+        deploy_block = self.text[deploy_start:uninstall_start]
         uninstall_block = self.text[uninstall_start:status_start]
 
         self.assertIn("install_open_mmi_package", install_block)
         self.assertIn("install_command_links", install_block)
-        self.assertIn("install_open_mmi_package", update_block)
-        self.assertIn("install_command_links", update_block)
+        self.assertNotIn("install_open_mmi_package", update_block)
+        self.assertNotIn("install_command_links", update_block)
+        self.assertIn("install_open_mmi_package", deploy_block)
+        self.assertIn("install_command_links", deploy_block)
         self.assertIn("remove_command_links", uninstall_block)
         self.assertIn('local pip_arguments=(install --upgrade --force-reinstall)', self.text)
         self.assertIn('local package_source="${1:-$INSTALL_DIR}"', self.text)
-        self.assertIn('( umask 0022; env -u PYTHONPATH "$python" -m pip', self.text)
+        self.assertIn('pip_arguments+=(--no-index --no-deps --no-cache-dir)', self.text)
+        self.assertIn('PIP_CONFIG_FILE=/dev/null PIP_NO_INDEX=1 PIP_DISABLE_PIP_VERSION_CHECK=1', self.text)
         self.assertIn('sudo -u "$REAL_USER" env -u PYTHONPATH "$python" -I', self.text)
         self.assertIn('cp "$REPO_ROOT/README.md" "$INSTALL_DIR/"', install_block)
         self.assertIn('cp "$REPO_ROOT/LICENSE" "$INSTALL_DIR/"', install_block)
-        self.assertIn('sudo cp "$REPO_ROOT/README.md" "$INSTALL_DIR/"', update_block)
-        self.assertIn('sudo cp "$REPO_ROOT/LICENSE" "$INSTALL_DIR/"', update_block)
+        self.assertIn('for item in pyproject.toml README.md LICENSE; do', deploy_block)
+        self.assertIn('cp -a -- "$resolved_stage/$item" "$INSTALL_DIR/"', deploy_block)
 
-    def test_install_and_update_share_packaging_tools_upgrade(self) -> None:
+    def test_installed_update_does_not_upgrade_packaging_tools(self) -> None:
         self.assertIn("upgrade_python_packaging_tools()", self.text)
         install_start = self.text.index("cmd_install() {")
         update_start = self.text.index("cmd_update() {")
         deploy_start = self.text.index("cmd_deploy_prepared() {")
         install_block = self.text[install_start:update_start]
         update_block = self.text[update_start:deploy_start]
+        deploy_block = self.text[deploy_start:self.text.index("# UNINSTALL", deploy_start)]
         self.assertIn(
             'upgrade_python_packaging_tools "$INSTALL_DIR/venv/bin/python"',
             install_block,
         )
+        self.assertNotIn("upgrade_python_packaging_tools", update_block)
+        self.assertNotIn("upgrade_python_packaging_tools", deploy_block)
         self.assertIn(
-            'upgrade_python_packaging_tools "$INSTALL_DIR/venv/bin/python"',
-            update_block,
+            'record_python_packaging_tool_version "$INSTALL_DIR/venv/bin/python" "$rollback_root"',
+            deploy_block,
         )
         self.assertIn('pip install --upgrade pip', self.text)
         self.assertIn('pip-version-before', self.text)
-        self.assertIn('pip-version-after', self.text)
+        self.assertNotIn('pip-version-after', deploy_block)
 
     def test_installed_maintained_catalogue_is_root_owned_and_world_readable(self) -> None:
         self.assertIn("configure_maintained_catalogue_permissions()", self.text)
         self.assertEqual(
             self.text.count("    configure_maintained_catalogue_permissions\n"),
-            3,
+            2,
         )
         self.assertIn('for catalogue_root in "$INSTALL_DIR/vehicles" "$INSTALL_DIR/bindings"', self.text)
         self.assertIn('-exec chown root:root {} +', self.text)
@@ -648,6 +620,19 @@ sudo() {{ printf '%s\\0' "$@"; }}
             self.text,
         )
 
+
+    def test_media_egress_service_is_managed_as_root_owned_system_unit(self) -> None:
+        self.assertIn('MEDIA_EGRESS_UNIT="open-mmi-media-egress.service"', self.text)
+        self.assertIn('MEDIA_EGRESS_GROUP="open-mmi"', self.text)
+        self.assertIn('install_media_egress_service() {', self.text)
+        self.assertIn('"$REPO_ROOT/systemd/system/$MEDIA_EGRESS_UNIT"', self.text)
+        self.assertIn('"/etc/systemd/system/$MEDIA_EGRESS_UNIT"', self.text)
+        self.assertIn('systemctl enable "$MEDIA_EGRESS_UNIT"', self.text)
+        self.assertIn('systemctl restart "$MEDIA_EGRESS_UNIT"', self.text)
+        self.assertIn('systemctl disable --now "$MEDIA_EGRESS_UNIT"', self.text)
+        rollback_loop = 'for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$MEDIA_EGRESS_UNIT"'
+        self.assertGreaterEqual(self.text.count(rollback_loop), 2)
+
     def test_uninstall_handles_absent_units_quietly(self) -> None:
         self.assertIn(
             "for service in canbusd.service open-mmi-dashboard.service; do",
@@ -676,7 +661,7 @@ sudo() {{ printf '%s\\0' "$@"; }}
         self.assertIn('Prepared deployment failed at stage: $deployment_stage', block)
         self.assertIn('deployment_stage="packaging-tools"', block)
         self.assertIn(
-            'upgrade_python_packaging_tools "$INSTALL_DIR/venv/bin/python" "$rollback_root"',
+            'record_python_packaging_tool_version "$INSTALL_DIR/venv/bin/python" "$rollback_root"',
             block,
         )
         self.assertLess(
@@ -792,6 +777,9 @@ sleep() {{ :; }}
         self.assertNotIn("ReadWritePaths=/opt/open-mmi ", unit)
         self.assertNotIn("%i", unit)
         self.assertIn("ProtectSystem=strict", unit)
+        self.assertIn("IPAddressDeny=any", unit)
+        self.assertIn("IPAddressAllow=localhost", unit)
+        self.assertIn("RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6", unit)
 
         coordinator = (
             ROOT / "systemd/system/open-mmi-update-coordinator.service"
@@ -804,6 +792,7 @@ sleep() {{ :; }}
             "ExecStart=/opt/open-mmi/venv/bin/open-mmi-update-coordinator serve\n",
             coordinator,
         )
+        self.assertIn("RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6", coordinator)
 
     def test_vehicle_configuration_coordinator_is_publicly_read_only_and_hardened(self) -> None:
         unit = (ROOT / "systemd/system/open-mmi-vehicle-config-coordinator.service").read_text(encoding="utf-8")
@@ -907,12 +896,14 @@ sleep() {{ :; }}
         self.assertIn("Log out and back in", block)
 
 
-    def test_install_and_update_record_managed_update_source_metadata(self) -> None:
+    def test_install_and_prepared_deployment_record_managed_update_source_metadata(self) -> None:
         install_start = self.text.index("cmd_install() {")
         update_start = self.text.index("cmd_update() {")
+        deploy_start = self.text.index("cmd_deploy_prepared() {")
         uninstall_start = self.text.index("cmd_uninstall() {")
         install_block = self.text[install_start:update_start]
-        update_block = self.text[update_start:uninstall_start]
+        update_block = self.text[update_start:deploy_start]
+        deploy_block = self.text[deploy_start:uninstall_start]
         metadata_start = self.text.index("write_update_source_metadata() {")
         metadata_end = self.text.index("copy_if_missing() {", metadata_start)
         metadata_block = self.text[metadata_start:metadata_end]
@@ -930,15 +921,16 @@ sleep() {{ :; }}
         self.assertIn('os.replace(temporary_name, path)', metadata_block)
         self.assertIn('atomic_json(metadata_path, payload, 0o644)', metadata_block)
         self.assertIn("write_checkout_update_source_metadata", install_block)
-        self.assertIn("write_checkout_update_source_metadata", update_block)
+        self.assertNotIn("write_checkout_update_source_metadata", update_block)
+        self.assertIn("write_update_source_metadata", deploy_block)
         self.assertGreater(install_block.index('get_current_version > "$VERSION_FILE"'), 0)
         self.assertGreater(
             install_block.index("write_checkout_update_source_metadata"),
             install_block.index('get_current_version > "$VERSION_FILE"'),
         )
         self.assertGreater(
-            update_block.index("write_checkout_update_source_metadata"),
-            update_block.index("echo '$new_version' > '$VERSION_FILE'"),
+            deploy_block.index("write_update_source_metadata"),
+            deploy_block.index("printf '%s\\n' \"$version\" > \"$VERSION_FILE\""),
         )
 
     def test_uninstall_removes_root_owned_update_policy(self) -> None:

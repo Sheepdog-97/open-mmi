@@ -564,6 +564,10 @@ def _prepare_candidate(
         write_state(state, state_path)
         try:
             target_version, candidate_commit, release_tag = _candidate(source, channel)
+            # The coordinator is the only trusted update actor with external
+            # release-fetch authority. Populate the managed checkout's object
+            # database now so the later privileged installer can remain offline.
+            update_status._fetch_remote_candidate(source, candidate_commit)
             state.update({
                 "state": "downloading", "stage": "downloading", "updated_at": _timestamp(),
                 "target_version": target_version, "candidate_commit": candidate_commit,
@@ -630,18 +634,20 @@ def response_for_request(
     if not isinstance(payload, dict):
         return {"ok": False, "error": "Invalid coordinator request schema"}
     action = payload.get("action")
-    expected = {"api_version", "action"} if action == "status" else {"api_version", "action", "confirm"}
+    expected = {"api_version", "action"} if action in {"status", "check"} else {"api_version", "action", "confirm"}
     if set(payload) != expected:
         return {"ok": False, "error": "Invalid coordinator request schema"}
     if payload.get("api_version") != API_VERSION:
         return {"ok": False, "error": "Unsupported coordinator API version"}
-    if action not in {"status", "prepare", "install"}:
+    if action not in {"status", "check", "prepare", "install"}:
         return {"ok": False, "error": "Coordinator action is not enabled"}
     if action in {"prepare", "install"} and payload.get("confirm") is not True:
         return {"ok": False, "error": f"Candidate {action} requires confirmation"}
     try:
         if action == "status":
             state = read_state(state_path)
+        elif action == "check":
+            return {"ok": True, "status": update_status.check_for_updates()}
         elif action == "prepare":
             state = _prepare_candidate(state_path, lock_path, staging_root)
         else:
@@ -751,6 +757,16 @@ class CoordinatorServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServ
 
 def client_status(socket_path: Path = DEFAULT_SOCKET) -> Dict[str, Any]:
     return _client_request({"api_version": API_VERSION, "action": "status"}, socket_path)
+
+
+def client_check(socket_path: Path = DEFAULT_SOCKET) -> Dict[str, Any]:
+    response = _client_request(
+        {"api_version": API_VERSION, "action": "check"}, socket_path, timeout=45.0
+    )
+    status = response.get("status")
+    if not isinstance(status, dict):
+        raise CoordinatorError("Coordinator returned an invalid update status")
+    return status
 
 
 def client_prepare(socket_path: Path = DEFAULT_SOCKET) -> Dict[str, Any]:

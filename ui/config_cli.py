@@ -6,6 +6,7 @@ import argparse
 import getpass
 import json
 import os
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -17,7 +18,9 @@ from canbusd import event_registry as vehicle_events
 from canbusd import status_registry as vehicle_statuses
 
 from ui import (
+    egress_client,
     launcher,
+    media_egress_config,
     update_coordinator,
     update_readiness,
     vehicle_config_coordinator,
@@ -30,12 +33,8 @@ from ui import (
 from ui.configuration import (
     ConfigurationError,
     JELLYFIN_ENV_KEYS,
-    dashboard_env_path,
-    jellyfin_environment_status,
     jellyfin_values_from_payload,
-    read_environment_file,
     restart_dashboard,
-    write_environment_file,
 )
 from ui.web_dashboard import jellyfin, update_status
 
@@ -44,14 +43,34 @@ def _print(payload: Mapping[str, Any]) -> None:
     print(json.dumps(dict(payload), indent=2, sort_keys=True))
 
 
-def _jellyfin_test(values: Mapping[str, str]) -> dict[str, Any]:
+def _jellyfin_test_candidate(values: Mapping[str, str]) -> dict[str, Any]:
     config = jellyfin._jellyfin_config_from_mapping(values)
-    return jellyfin._jellyfin_test_connection(config)
+    return egress_client.test_jellyfin_candidate(config)
+
+
+def _require_root_media_authority() -> None:
+    if os.geteuid() != 0:
+        raise ConfigurationError(
+            "Jellyfin network authority changes require sudo open-mmi-config"
+        )
+
+
+def _restart_media_egress() -> None:
+    result = subprocess.run(
+        ["systemctl", "restart", "open-mmi-media-egress.service"],
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "systemctl failed").strip()
+        raise ConfigurationError(f"could not restart media egress service: {detail}")
 
 
 def _setup_jellyfin() -> dict[str, str]:
-    existing = read_environment_file()
-    current = jellyfin_environment_status(existing)
+    existing = dict(media_egress_config.read_config()["jellyfin"])
+    current = media_egress_config.jellyfin_status(existing)
     url = input(f"Jellyfin URL [{current.get('url') or ''}]: ").strip() or str(current.get("url") or "")
     default_mode = current.get("auth_mode") or "username"
     mode = input(f"Authentication mode (username/token) [{default_mode}]: ").strip().lower() or str(default_mode)
@@ -370,7 +389,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if args.command == "status":
                 _print(update_status.status_payload())
             elif args.command == "check":
-                _print(update_status.check_for_updates())
+                _print(update_coordinator.client_check())
             elif args.command == "readiness":
                 _print(update_readiness.readiness_payload(update_status.status_payload()))
             elif args.command == "coordinator":
@@ -579,29 +598,35 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return 0
 
         if args.command == "status":
-            _print(jellyfin_environment_status())
+            _print(egress_client.jellyfin_status())
             return 0
         if args.command == "clear":
-            write_environment_file({})
-            _print({"ok": True, "configured": False, "path": str(dashboard_env_path())})
+            _require_root_media_authority()
+            media_egress_config.write_jellyfin({})
+            _restart_media_egress()
+            _print({"ok": True, **media_egress_config.jellyfin_status({})})
             return 0
         if args.command == "setup":
+            _require_root_media_authority()
             values = _setup_jellyfin()
-            result = _jellyfin_test(values)
-            write_environment_file(values)
-            _print({"ok": True, "test": result, **jellyfin_environment_status(values)})
+            result = _jellyfin_test_candidate(values)
+            media_egress_config.write_jellyfin(values)
+            _restart_media_egress()
+            _print({"ok": True, "test": result, **media_egress_config.jellyfin_status(values)})
             return 0
         if args.command == "import-env":
+            _require_root_media_authority()
             values = {key: os.environ.get(key, "") for key in JELLYFIN_ENV_KEYS}
+            values = {key: value for key, value in values.items() if value}
             payload = jellyfin._jellyfin_config_from_mapping(values)
             if not payload.get("configured"):
                 raise ConfigurationError("current environment does not contain complete Jellyfin credentials")
-            _jellyfin_test(values)
-            write_environment_file({key: value for key, value in values.items() if value})
-            _print({"ok": True, **jellyfin_environment_status(values)})
+            result = _jellyfin_test_candidate(values)
+            media_egress_config.write_jellyfin(values)
+            _restart_media_egress()
+            _print({"ok": True, "test": result, **media_egress_config.jellyfin_status(values)})
             return 0
-        values = read_environment_file()
-        result = _jellyfin_test(values)
+        result = egress_client.test_jellyfin()
         _print({"ok": True, **result})
         return 0
     except (ConfigurationError, launcher.LauncherError, update_coordinator.CoordinatorError, vehicle_config_coordinator.CoordinatorError, update_status.UpdateStatusError, vehicle_actions.VehicleActionRegistryError, vehicle_events.VehicleEventRegistryError, profile_catalogue.VehicleProfileCatalogueError, profile_replay.VehicleProfileReplayError, vehicle_statuses.VehicleStatusRegistryError, vehicle_capture_analysis.VehicleCaptureAnalysisError, vehicle_profile_conformance.VehicleProfileConformanceError, vehicle_profile_qualification.VehicleProfileQualificationError, vehicle_profile_scaffold.VehicleProfileScaffoldError, vehicle_setup.VehicleSetupError, RuntimeError, ValueError) as exc:

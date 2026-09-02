@@ -1,0 +1,38 @@
+[Unit]
+Description=Open MMI Purpose-Scoped Media Network Egress
+Documentation=https://github.com/open-mmi/open-mmi
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/opt/open-mmi/venv/bin/python -I -m ui.media_egress serve
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=open-mmi-media-egress
+RuntimeDirectoryMode=0750
+LoadCredential=media-config:/var/lib/open-mmi/network-egress/media.v1.json
+SupplementaryGroups=open-mmi
+DynamicUser=yes
+UMask=0077
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

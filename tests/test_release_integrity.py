@@ -56,6 +56,19 @@ class ReleaseIntegrityTests(unittest.TestCase):
             "[Service]\nExecStart=/opt/open-mmi/venv/bin/python -I -m ui.update_installer\n",
             encoding="utf-8",
         )
+        (repo / "systemd" / "system" / "open-mmi-media-egress.service").write_text(
+            "[Service]\nExecStart=/opt/open-mmi/venv/bin/python -I -m ui.media_egress serve\n",
+            encoding="utf-8",
+        )
+        (repo / "systemd" / "user").mkdir(parents=True)
+        (repo / "systemd" / "user" / "canbusd.service").write_text(
+            "[Service]\nExecStart=/opt/open-mmi/venv/bin/python -I -m canbusd.core\n",
+            encoding="utf-8",
+        )
+        (repo / "systemd" / "user" / "open-mmi-dashboard.service").write_text(
+            "[Service]\nExecStart=/opt/open-mmi/venv/bin/python -I -m ui.web_dashboard.server\n",
+            encoding="utf-8",
+        )
         (repo / "ui" / "web_dashboard").mkdir(parents=True)
         (repo / "ui" / "web_dashboard" / "README.md").write_text("managed dashboard source\n", encoding="utf-8")
         (repo / "README.md").write_text("Open MMI test release\n", encoding="utf-8")
@@ -104,6 +117,33 @@ class ReleaseIntegrityTests(unittest.TestCase):
             path=path,
         )
         return expected, state, path
+
+
+    def test_trusted_wheel_builder_uses_git_objects_and_is_deterministic(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo, commit = self.repository(root)
+            expected = expected_release_from_git(repo, commit)
+            # A candidate-controlled worktree change must not influence the wheel.
+            (repo / "open_mmi_trust" / "__init__.py").write_text(
+                "raise RuntimeError('candidate backend executed')\n", encoding="utf-8"
+            )
+            first = release_integrity.build_trusted_wheel_from_git_inventory(
+                repo, commit, expected["inventory"], root / "wheel-one"
+            )
+            second = release_integrity.build_trusted_wheel_from_git_inventory(
+                repo, commit, expected["inventory"], root / "wheel-two"
+            )
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            self.assertTrue(verify_wheel_against_inventory(first, expected["inventory"])["matches"])
+            with zipfile.ZipFile(first) as archive:
+                self.assertEqual(
+                    archive.read("open_mmi_trust/__init__.py"), b"VALUE = 1\n"
+                )
+                wheel_metadata = archive.read(
+                    "open_mmi-0.1.0a1.dist-info/WHEEL"
+                ).decode("utf-8")
+                self.assertIn("Generator: open-mmi-trusted-wheel-builder-v1", wheel_metadata)
 
     def test_inventory_is_derived_from_commit_object_not_worktree(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -253,6 +293,10 @@ class ReleaseIntegrityTests(unittest.TestCase):
                 (unit_root / unit).write_bytes(
                     (repo / "systemd" / "system" / unit).read_bytes()
                 )
+            for unit in release_integrity.PRIVILEGED_USER_UNITS:
+                (unit_root / unit).write_bytes(
+                    (repo / "systemd" / "user" / unit).read_bytes()
+                )
 
             exact = verify_privileged_installed_runtime(
                 state, source_root, package_root, unit_root
@@ -296,6 +340,10 @@ class ReleaseIntegrityTests(unittest.TestCase):
             for unit in release_integrity.PRIVILEGED_SYSTEM_UNITS:
                 (unit_root / unit).write_bytes(
                     (repo / "systemd" / "system" / unit).read_bytes()
+                )
+            for unit in release_integrity.PRIVILEGED_USER_UNITS:
+                (unit_root / unit).write_bytes(
+                    (repo / "systemd" / "user" / unit).read_bytes()
                 )
 
             # The temp root is deliberately owned by the test user. Treating it as

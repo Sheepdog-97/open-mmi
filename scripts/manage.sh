@@ -15,6 +15,11 @@ UPDATE_POLICY_FILE="/etc/open-mmi/update-policy.json"
 UPDATE_COORDINATOR_GROUP="open-mmi-update"
 UPDATE_COORDINATOR_UNIT="open-mmi-update-coordinator.service"
 UPDATE_INSTALLER_UNIT="open-mmi-update-installer.service"
+MEDIA_EGRESS_UNIT="open-mmi-media-egress.service"
+MEDIA_EGRESS_GROUP="open-mmi"
+MEDIA_EGRESS_CONFIG_DIR="/var/lib/open-mmi/network-egress"
+MEDIA_EGRESS_CONFIG="$MEDIA_EGRESS_CONFIG_DIR/media.v1.json"
+SYSTEMD_USER_UNIT_ROOT="/etc/systemd/user"
 VEHICLE_CONFIG_COORDINATOR_GROUP="open-mmi-config"
 VEHICLE_CONFIG_COORDINATOR_UNIT="open-mmi-vehicle-config-coordinator.service"
 VEHICLE_CAN_PROVISION_UNIT="open-mmi-vehicle-can-provision.service"
@@ -471,6 +476,24 @@ upgrade_python_packaging_tools() {
     fi
 }
 
+record_python_packaging_tool_version() {
+    local python="${1:-$INSTALL_DIR/venv/bin/python}"
+    local result_dir="${2:-}"
+    local version
+
+    version=$(env -u PYTHONPATH "$python" -m pip --version 2>/dev/null | awk 'NR == 1 {print $2}')
+    if [ -z "$version" ]; then
+        log_error "Could not determine installed pip version"
+        return 1
+    fi
+    if [ -n "$result_dir" ]; then
+        printf '%s\n' "$version" > "$result_dir/pip-version-before"
+        printf '%s\n' "$version" > "$result_dir/pip-version-after"
+        chmod 0600 "$result_dir/pip-version-before" "$result_dir/pip-version-after"
+    fi
+    log_success "Python packaging tool fixed for offline deployment (pip $version)"
+}
+
 install_open_mmi_package() {
     local python="$INSTALL_DIR/venv/bin/python"
     local package_source="${1:-$INSTALL_DIR}"
@@ -482,10 +505,12 @@ install_open_mmi_package() {
 
     log_info "Installing Open MMI package and console commands..."
     local pip_arguments=(install --upgrade --force-reinstall)
+    local pip_environment=(env -u PYTHONPATH)
     if [[ "$package_source" == *.whl ]]; then
-        pip_arguments+=(--no-deps)
+        pip_arguments+=(--no-index --no-deps --no-cache-dir)
+        pip_environment+=(PIP_CONFIG_FILE=/dev/null PIP_NO_INDEX=1 PIP_DISABLE_PIP_VERSION_CHECK=1)
     fi
-    if ! ( umask 0022; env -u PYTHONPATH "$python" -m pip "${pip_arguments[@]}" "$package_source" ); then
+    if ! ( umask 0022; "${pip_environment[@]}" "$python" -m pip "${pip_arguments[@]}" "$package_source" ); then
         log_error "Failed to install Open MMI package"
         return 1
     fi
@@ -802,6 +827,55 @@ install_update_coordinator() {
     if [ "$authorization_added" = true ]; then
         log_warn "Log out and back in before using update actions without sudo."
     fi
+}
+
+install_media_egress_service() {
+    local authorization_added=false
+    if ! getent group "$MEDIA_EGRESS_GROUP" >/dev/null 2>&1; then
+        groupadd --system "$MEDIA_EGRESS_GROUP"
+    fi
+    if ! id -nG "$REAL_USER" | tr ' ' '\n' | grep -Fqx "$MEDIA_EGRESS_GROUP"; then
+        usermod -aG "$MEDIA_EGRESS_GROUP" "$REAL_USER"
+        authorization_added=true
+    fi
+    install -d -m 0755 -o root -g root /etc/systemd/system
+    install -d -m 0700 -o root -g root "$MEDIA_EGRESS_CONFIG_DIR"
+    if [ ! -e "$MEDIA_EGRESS_CONFIG" ]; then
+        printf '%s\n' \
+            '{"config_id":"org.open-mmi.media-egress-config","jellyfin":{},"schema_version":1}' \
+            > "$MEDIA_EGRESS_CONFIG"
+        chown root:root "$MEDIA_EGRESS_CONFIG"
+        chmod 0600 "$MEDIA_EGRESS_CONFIG"
+    fi
+    install -m 0644 -o root -g root \
+        "$REPO_ROOT/systemd/system/$MEDIA_EGRESS_UNIT" \
+        "/etc/systemd/system/$MEDIA_EGRESS_UNIT"
+    systemctl daemon-reload
+    systemctl enable "$MEDIA_EGRESS_UNIT"
+    if [ "${OPEN_MMI_PREPARED_DEPLOYMENT:-0}" != 1 ]; then
+        systemctl restart "$MEDIA_EGRESS_UNIT"
+    fi
+    if [ "$authorization_added" = true ]; then
+        log_warn "Log out and back in before using media network integrations."
+    fi
+}
+
+install_trusted_user_services() {
+    install -d -m 0755 -o root -g root "$SYSTEMD_USER_UNIT_ROOT"
+    install -m 0644 -o root -g root \
+        "$REPO_ROOT/systemd/user/canbusd.service" \
+        "$SYSTEMD_USER_UNIT_ROOT/canbusd.service"
+    install -m 0644 -o root -g root \
+        "$REPO_ROOT/systemd/user/open-mmi-dashboard.service" \
+        "$SYSTEMD_USER_UNIT_ROOT/open-mmi-dashboard.service"
+
+    # These were historically installed as owner-writable full units.  Remove
+    # the managed copies so they cannot shadow the root-owned policy units.
+    rm -f \
+        "$REAL_HOME/.config/systemd/user/canbusd.service" \
+        "$REAL_HOME/.config/systemd/user/open-mmi-dashboard.service"
+    install -d -m 0755 -o "$REAL_USER" -g "$REAL_USER" \
+        "$REAL_HOME/.config/systemd/user"
 }
 
 install_open_mmi_transaction_locks() {
@@ -1269,6 +1343,7 @@ cmd_install() {
         return 1
     fi
     install_update_coordinator
+    install_media_egress_service
     install_vehicle_config_coordinator
     install_power_manager
     
@@ -1278,10 +1353,7 @@ cmd_install() {
     
     # Install systemd service
     log_info "Installing systemd user service..."
-    local user_systemd_dir="$REAL_HOME/.config/systemd/user"
-    install -d -m 0755 -o "$REAL_USER" -g "$REAL_USER" "$user_systemd_dir"
-    install -m 0644 -o "$REAL_USER" -g "$REAL_USER" "$REPO_ROOT/systemd/user/canbusd.service" "$user_systemd_dir/canbusd.service"
-    install -m 0644 -o "$REAL_USER" -g "$REAL_USER" "$REPO_ROOT/systemd/user/open-mmi-dashboard.service" "$user_systemd_dir/open-mmi-dashboard.service"
+    install_trusted_user_services
     install_desktop_entry
     export XDG_RUNTIME_DIR="/run/user/$USER_ID"
     mkdir -p "$REAL_HOME/.config/systemd/user/default.target.wants"
@@ -1331,134 +1403,27 @@ cmd_install() {
 # =============================================================================
 
 cmd_update() {
-    log_info "Updating $APP_NAME..."
+    log_info "Updating $APP_NAME through the trusted coordinator..."
 
     if ! is_installed; then
         log_error "$APP_NAME not installed"
         return 1
     fi
 
-    harden_install_root_ownership
-    harden_custom_catalogue_permissions
-
-    local old_version
-    old_version=$(get_installed_version)
-
-    # =========================================================
-    # PHASE 1: SAFE GIT UPDATE (RUN AS REAL USER, NOT ROOT)
-    # =========================================================
-    log_info "Syncing repository (user-level)..."
-
-    local branch
-    local upstream
-    branch=$(get_repo_branch)
-    upstream=$(get_repo_upstream)
-
-    log_info "Repo branch: $branch"
-    log_info "Repo upstream: $upstream"
-
-    sudo -u "$REAL_USER" git -C "$REPO_ROOT" fetch origin
-
-    # Detect local changes as the real user so SSH keys and Git config work.
-    if ! sudo -u "$REAL_USER" git -C "$REPO_ROOT" diff --quiet ||        ! sudo -u "$REAL_USER" git -C "$REPO_ROOT" diff --cached --quiet; then
-        log_warn "Local changes detected:"
-        sudo -u "$REAL_USER" git -C "$REPO_ROOT" status -s
-
-        if ! confirm "Continue and overwrite local changes?"; then
-            log_info "Update cancelled"
-            return 1
-        fi
-
-        sudo -u "$REAL_USER" git -C "$REPO_ROOT" reset --hard "$upstream"
-    else
-        sudo -u "$REAL_USER" git -C "$REPO_ROOT" merge --ff-only "$upstream" || log_warn "No fast-forward update applied"
-    fi
-
-    # =========================================================
-    # FIX OWNERSHIP SAFETY NET (ONLY IF NEEDED)
-    # =========================================================
-    if [ "$(stat -c '%U' "$REPO_ROOT")" = "root" ]; then
-        log_warn "Repo owned by root — fixing permissions..."
-        sudo chown -R "$REAL_USER:$REAL_USER" "$REPO_ROOT"
-    fi
-
-    local new_version
-    new_version=$(get_current_version)
-
-    log_info "Repo version: $new_version"
-    log_info "Installed version: $old_version"
-
-    # If nothing changed, exit early
-    if [ "$old_version" = "$new_version" ]; then
-        log_success "Already up to date"
-        return 0
-    fi
-
-    # =========================================================
-    # PHASE 2: SYSTEM DEPLOY (SUDO REQUIRED)
-    # =========================================================
-    log_info "Deploying to system..."
-
-    if ! upgrade_python_packaging_tools "$INSTALL_DIR/venv/bin/python"; then
+    local python="$INSTALL_DIR/venv/bin/python"
+    if [ ! -x "$python" ]; then
+        log_error "Installed Python runtime is unavailable: $python"
         return 1
     fi
 
-    sudo rm -rf         "$INSTALL_DIR/canbusd"         "$INSTALL_DIR/vehicles"         "$INSTALL_DIR/bindings"         "$INSTALL_DIR/actions"         "$INSTALL_DIR/powerd"         "$INSTALL_DIR/ui"         "$INSTALL_DIR/scripts"         "$INSTALL_DIR/packaging"
-
-    sudo cp -r "$REPO_ROOT/canbusd" "$INSTALL_DIR/"
-    sudo cp -r "$REPO_ROOT/vehicles" "$INSTALL_DIR/"
-    sudo cp -r "$REPO_ROOT/bindings" "$INSTALL_DIR/"
-    sudo cp -r "$REPO_ROOT/actions" "$INSTALL_DIR/"
-    sudo cp -r "$REPO_ROOT/powerd" "$INSTALL_DIR/"
-
-    if [ -d "$REPO_ROOT/ui" ]; then
-        sudo cp -r "$REPO_ROOT/ui" "$INSTALL_DIR/"
-    fi
-
-    sudo cp -r "$REPO_ROOT/scripts" "$INSTALL_DIR/"
-    sudo cp -r "$REPO_ROOT/packaging" "$INSTALL_DIR/"
-    sudo cp "$REPO_ROOT/pyproject.toml" "$INSTALL_DIR/"
-    sudo cp "$REPO_ROOT/README.md" "$INSTALL_DIR/"
-    sudo cp "$REPO_ROOT/LICENSE" "$INSTALL_DIR/"
-
-    configure_maintained_catalogue_permissions
-
-    if ! install_open_mmi_package; then
-        return 1
-    fi
-    if ! install_command_links; then
-        return 1
-    fi
-    install_update_coordinator
-    install_vehicle_config_coordinator
-    install_power_manager
-
-    local user_systemd_dir="$REAL_HOME/.config/systemd/user"
-    sudo install -d -m 0755 -o "$REAL_USER" -g "$REAL_USER" "$user_systemd_dir"
-    sudo install -m 0644 -o "$REAL_USER" -g "$REAL_USER" "$REPO_ROOT/systemd/user/canbusd.service" "$user_systemd_dir/canbusd.service"
-    sudo install -m 0644 -o "$REAL_USER" -g "$REAL_USER" "$REPO_ROOT/systemd/user/open-mmi-dashboard.service" "$user_systemd_dir/open-mmi-dashboard.service"
-    install_desktop_entry
-
-    export XDG_RUNTIME_DIR="/run/user/$USER_ID"
-
-    sudo -u "$REAL_USER" env HOME="$REAL_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" systemctl --user daemon-reload
-    configure_update_service_defaults
-
-    # Version and managed source metadata writes need root because /opt is root-owned.
-    sudo bash -c "echo '$new_version' > '$VERSION_FILE'"
-    write_checkout_update_source_metadata
-
-    # Restart services
-    sudo -u "$REAL_USER" env HOME="$REAL_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" systemctl --user restart canbusd.service open-mmi-dashboard.service
-
-    log_success "Update complete → $new_version"
-
-    log_info "Fixing repository ownership..."
-    sudo chown -R "$REAL_USER:$REAL_USER" "$REPO_ROOT"
+    # External release discovery/fetch authority belongs only to the root-owned
+    # update coordinator.  The management shell never performs git fetch/pull
+    # or package-index access during an installed-system update.
+    env -u PYTHONPATH "$python" -I -m ui.config_cli updates check
+    env -u PYTHONPATH "$python" -I -m ui.config_cli updates prepare
+    env -u PYTHONPATH "$python" -I -m ui.config_cli updates install
 }
 
-# Fixed internal entry point used only by the root-owned one-shot update
-# installer. All values are derived by that service from trusted state.
 cmd_deploy_prepared() {
     local stage="${OPEN_MMI_PREPARED_STAGE:-}"
     local transaction="${OPEN_MMI_PREPARED_TRANSACTION:-}"
@@ -1516,14 +1481,27 @@ cmd_deploy_prepared() {
     install -d -m 0700 -o root -g root \
         "$rollback_root/system-units" \
         "$rollback_root/system-files" \
-        "$rollback_root/user-units"
-    for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT" "$POWERD_UNIT"; do
+        "$rollback_root/user-units" \
+        "$rollback_root/trusted-user-units"
+    for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT" "$POWERD_UNIT"; do
         if [ -e "/etc/systemd/system/$unit" ]; then
             cp -a -- "/etc/systemd/system/$unit" "$rollback_root/system-units/$unit"
         else
             : > "$rollback_root/system-units/$unit.absent"
         fi
     done
+    for unit in canbusd.service open-mmi-dashboard.service; do
+        if [ -e "$SYSTEMD_USER_UNIT_ROOT/$unit" ]; then
+            cp -a -- "$SYSTEMD_USER_UNIT_ROOT/$unit" "$rollback_root/trusted-user-units/$unit"
+        else
+            : > "$rollback_root/trusted-user-units/$unit.absent"
+        fi
+    done
+    if [ -e "$MEDIA_EGRESS_CONFIG" ]; then
+        cp -a -- "$MEDIA_EGRESS_CONFIG" "$rollback_root/system-files/media-egress-config.json"
+    else
+        : > "$rollback_root/system-files/media-egress-config.json.absent"
+    fi
     if [ -e "$VEHICLE_CONFIG_COORDINATOR_ENV" ]; then
         cp -a -- "$VEHICLE_CONFIG_COORDINATOR_ENV" \
             "$rollback_root/system-files/vehicle-config-coordinator.env"
@@ -1583,13 +1561,28 @@ cmd_deploy_prepared() {
         if [ -d "${OPEN_MMI_MANAGED_REPOSITORY:-}/.git" ]; then
             sudo -u "$REAL_USER" git -C "$OPEN_MMI_MANAGED_REPOSITORY" reset --hard "$previous_commit" >/dev/null 2>&1 || true
         fi
-        for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT" "$POWERD_UNIT"; do
+        for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT" "$POWERD_UNIT"; do
             if [ -e "$rollback_root/system-units/$unit" ]; then
                 cp -a -- "$rollback_root/system-units/$unit" "/etc/systemd/system/$unit"
             elif [ -e "$rollback_root/system-units/$unit.absent" ]; then
                 rm -f -- "/etc/systemd/system/$unit"
             fi
         done
+        install -d -m 0755 -o root -g root "$SYSTEMD_USER_UNIT_ROOT"
+        for unit in canbusd.service open-mmi-dashboard.service; do
+            if [ -e "$rollback_root/trusted-user-units/$unit" ]; then
+                cp -a -- "$rollback_root/trusted-user-units/$unit" "$SYSTEMD_USER_UNIT_ROOT/$unit"
+            elif [ -e "$rollback_root/trusted-user-units/$unit.absent" ]; then
+                rm -f -- "$SYSTEMD_USER_UNIT_ROOT/$unit"
+            fi
+        done
+        if [ -e "$rollback_root/system-files/media-egress-config.json" ]; then
+            install -d -m 0700 -o root -g root "$MEDIA_EGRESS_CONFIG_DIR"
+            cp -a -- "$rollback_root/system-files/media-egress-config.json" "$MEDIA_EGRESS_CONFIG"
+        elif [ -e "$rollback_root/system-files/media-egress-config.json.absent" ]; then
+            rm -f -- "$MEDIA_EGRESS_CONFIG"
+            rmdir "$MEDIA_EGRESS_CONFIG_DIR" >/dev/null 2>&1 || true
+        fi
         if [ -e "$rollback_root/system-files/vehicle-config-coordinator.env" ]; then
             install -d -m 0755 -o root -g root "$(dirname "$VEHICLE_CONFIG_COORDINATOR_ENV")"
             cp -a -- "$rollback_root/system-files/vehicle-config-coordinator.env" \
@@ -1640,6 +1633,11 @@ cmd_deploy_prepared() {
             fi
         done
         systemctl daemon-reload >/dev/null 2>&1 || true
+        if [ -e "/etc/systemd/system/$MEDIA_EGRESS_UNIT" ]; then
+            systemctl restart "$MEDIA_EGRESS_UNIT" >/dev/null 2>&1 || true
+        else
+            systemctl stop "$MEDIA_EGRESS_UNIT" >/dev/null 2>&1 || true
+        fi
         if [ -e "/etc/systemd/system/$VEHICLE_CONFIG_COORDINATOR_UNIT" ]; then
             systemctl restart "$VEHICLE_CONFIG_COORDINATOR_UNIT" >/dev/null 2>&1 || true
         else
@@ -1655,7 +1653,7 @@ cmd_deploy_prepared() {
     trap rollback_prepared_deployment ERR
 
     deployment_stage="packaging-tools"
-    upgrade_python_packaging_tools "$INSTALL_DIR/venv/bin/python" "$rollback_root"
+    record_python_packaging_tool_version "$INSTALL_DIR/venv/bin/python" "$rollback_root"
 
     deployment_stage="package-artifact"
     # The already-installed trusted installer built and byte-verified this exact
@@ -1667,8 +1665,8 @@ cmd_deploy_prepared() {
     deployment_stage="repository-clean"
     sudo -u "$REAL_USER" git -C "$OPEN_MMI_MANAGED_REPOSITORY" diff --quiet
     sudo -u "$REAL_USER" git -C "$OPEN_MMI_MANAGED_REPOSITORY" diff --cached --quiet
-    deployment_stage="repository-fetch"
-    sudo -u "$REAL_USER" git -C "$OPEN_MMI_MANAGED_REPOSITORY" fetch -- "${OPEN_MMI_MANAGED_UPSTREAM%%/*}"
+    deployment_stage="repository-object"
+    sudo -u "$REAL_USER" git -C "$OPEN_MMI_MANAGED_REPOSITORY" cat-file -e "$commit^{commit}"
     deployment_stage="repository-merge"
     sudo -u "$REAL_USER" git -C "$OPEN_MMI_MANAGED_REPOSITORY" merge --ff-only "$commit"
 
@@ -1695,16 +1693,14 @@ cmd_deploy_prepared() {
     install_command_links
     deployment_stage="system-services"
     install_update_coordinator
+    install_media_egress_service
     deployment_stage="vehicle-config-coordinator"
     install_vehicle_config_coordinator
     deployment_stage="power-manager"
     install_power_manager
 
     deployment_stage="user-services"
-    local user_systemd_dir="$REAL_HOME/.config/systemd/user"
-    install -d -m 0755 -o "$REAL_USER" -g "$REAL_USER" "$user_systemd_dir"
-    install -m 0644 -o "$REAL_USER" -g "$REAL_USER" "$REPO_ROOT/systemd/user/canbusd.service" "$user_systemd_dir/canbusd.service"
-    install -m 0644 -o "$REAL_USER" -g "$REAL_USER" "$REPO_ROOT/systemd/user/open-mmi-dashboard.service" "$user_systemd_dir/open-mmi-dashboard.service"
+    install_trusted_user_services
     install_desktop_entry
 
     printf '%s\n' "$version" > "$VERSION_FILE"
@@ -1781,6 +1777,7 @@ cmd_uninstall() {
         sudo -u "$REAL_USER" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" systemctl --user disable --now "$service" >/dev/null 2>&1 || true
     done
     systemctl disable --now "$UPDATE_COORDINATOR_UNIT" >/dev/null 2>&1 || true
+    systemctl disable --now "$MEDIA_EGRESS_UNIT" >/dev/null 2>&1 || true
     systemctl disable --now "$VEHICLE_CONFIG_COORDINATOR_UNIT" >/dev/null 2>&1 || true
     systemctl disable --now "$POWERD_UNIT" >/dev/null 2>&1 || true
     systemctl stop "$VEHICLE_CAN_PROVISION_UNIT" >/dev/null 2>&1 || true
@@ -1788,6 +1785,9 @@ cmd_uninstall() {
     rm -f \
         "/etc/systemd/system/$UPDATE_COORDINATOR_UNIT" \
         "/etc/systemd/system/$UPDATE_INSTALLER_UNIT" \
+        "/etc/systemd/system/$MEDIA_EGRESS_UNIT" \
+        "$SYSTEMD_USER_UNIT_ROOT/canbusd.service" \
+        "$SYSTEMD_USER_UNIT_ROOT/open-mmi-dashboard.service" \
         "/etc/systemd/system/$VEHICLE_CONFIG_COORDINATOR_UNIT" \
         "/etc/systemd/system/$VEHICLE_CAN_PROVISION_UNIT" \
         "/etc/systemd/system/$POWERD_UNIT" \
@@ -1974,7 +1974,7 @@ cmd_config() {
             ;;
         edit-service|edit)
             log_info "Editing systemd service override"
-            if [ ! -f "$REAL_HOME/.config/systemd/user/canbusd.service" ]; then
+            if [ ! -f "$SYSTEMD_USER_UNIT_ROOT/canbusd.service" ]; then
                 log_error "Service not installed yet"
                 return 1
             fi
@@ -2004,7 +2004,7 @@ cmd_config() {
             ;;
         edit-can)
             log_info "Editing CAN runtime override"
-            if [ ! -f "$REAL_HOME/.config/systemd/user/canbusd.service" ]; then
+            if [ ! -f "$SYSTEMD_USER_UNIT_ROOT/canbusd.service" ]; then
                 log_error "Service not installed yet"
                 return 1
             fi
@@ -2055,7 +2055,7 @@ EOF
             ;;
         show)
             log_info "Current service configuration:"
-            systemctl --user cat canbusd.service 2>/dev/null || cat "$REAL_HOME/.config/systemd/user/canbusd.service"
+            systemctl --user cat canbusd.service 2>/dev/null || cat "$SYSTEMD_USER_UNIT_ROOT/canbusd.service"
             ;;
         paths)
             log_info "Configuration paths"
@@ -2162,7 +2162,7 @@ ${BLUE}Examples:${NC}
 
 ${BLUE}Installation Details:${NC}
   Install directory: $INSTALL_DIR
-  Service location:  ~/.config/systemd/user/canbusd.service
+  Service location:  /etc/systemd/user/canbusd.service
   Backups:          $BACKUP_DIR
 
 ${BLUE}Troubleshooting:${NC}

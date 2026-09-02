@@ -863,7 +863,7 @@ class SystemConfigurationTests(unittest.TestCase):
         }
         handler.rfile = io.BytesIO(body)
         checked = {"api_version": 1, "read_only": True, "update": {"state": "up-to-date"}}
-        with patch.object(system_settings.update_status, "check_for_updates", return_value=checked) as check:
+        with patch.object(system_settings.update_coordinator, "client_check", return_value=checked) as check:
             self.assertTrue(system_settings._handle_post(handler, "/api/system/update-check"))
         check.assert_called_once_with()
         self.assertEqual(handler.sent, (checked, 200))
@@ -987,15 +987,19 @@ class SystemConfigurationTests(unittest.TestCase):
             "OPEN_MMI_JELLYFIN_PASSWORD": "never-print-this",
         }
         output = io.StringIO()
-        with patch.object(config_cli, "_setup_jellyfin", return_value=values), patch.object(
-            config_cli, "_jellyfin_test", return_value={"connected": True}
-        ), patch.object(config_cli, "write_environment_file") as write, patch.object(
-            config_cli, "jellyfin_environment_status", return_value={
+        with patch.object(config_cli, "_require_root_media_authority"), patch.object(
+            config_cli, "_setup_jellyfin", return_value=values
+        ), patch.object(
+            config_cli, "_jellyfin_test_candidate", return_value={"connected": True}
+        ), patch.object(
+            config_cli.media_egress_config, "write_jellyfin", return_value={}
+        ) as write, patch.object(
+            config_cli.media_egress_config, "jellyfin_status", return_value={
                 "configured": True,
                 "password_configured": True,
                 "token_configured": False,
             }
-        ), contextlib.redirect_stdout(output):
+        ), patch.object(config_cli, "_restart_media_egress"), contextlib.redirect_stdout(output):
             result = config_cli.main(["jellyfin", "setup"])
         self.assertEqual(result, 0)
         write.assert_called_once_with(values)
@@ -1026,7 +1030,7 @@ class SystemConfigurationTests(unittest.TestCase):
 
         output = io.StringIO()
         checked = {"channel": "nightly", "update": {"state": "up-to-date"}}
-        with patch.object(config_cli.update_status, "check_for_updates", return_value=checked) as check, contextlib.redirect_stdout(output):
+        with patch.object(config_cli.update_coordinator, "client_check", return_value=checked) as check, contextlib.redirect_stdout(output):
             result = config_cli.main(["updates", "check"])
         self.assertEqual(result, 0)
         check.assert_called_once_with()

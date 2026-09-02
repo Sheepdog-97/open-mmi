@@ -36,12 +36,14 @@ class DashboardModuleBoundaryTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_server_routes_delegate_to_radio_provider(self):
+    def test_server_routes_radio_through_egress_broker(self):
         source = inspect.getsource(server.DashboardHandler.do_GET)
-        self.assertIn("radio_backend._radio_status_payload()", source)
-        self.assertIn("radio_backend._radio_filter_options_payload()", source)
-        self.assertIn("radio_backend._radio_search_payload(", source)
-        self.assertIn("radio_backend._radio_proxy_audio(self, station_id)", source)
+        self.assertIn('parsed.path.startswith("/api/radio/")', source)
+        self.assertIn("egress_client.proxy_media(", source)
+        self.assertIn('source="radio"', source)
+        self.assertNotIn("config=radio_backend._radio_config()", source)
+        self.assertNotIn("config=", source[source.index('source="radio"'):source.index('source="radio"') + 180])
+        self.assertNotIn("radio_backend._radio_proxy_audio", source)
 
     def test_jellyfin_provider_does_not_depend_on_dashboard_handler(self):
         self.assertFalse(hasattr(jellyfin, "DashboardHandler"))
@@ -64,12 +66,15 @@ class DashboardModuleBoundaryTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_server_routes_delegate_to_jellyfin_provider(self):
+    def test_server_routes_jellyfin_through_egress_broker(self):
         source = inspect.getsource(server.DashboardHandler.do_GET)
-        self.assertIn("jellyfin_backend._jellyfin_status_payload(self.demo_mode)", source)
-        self.assertIn("jellyfin_backend._jellyfin_search_payload(", source)
-        self.assertIn("jellyfin_backend._jellyfin_proxy_audio(self, item_id)", source)
-        self.assertIn("jellyfin_backend._jellyfin_proxy_image(self, item_id)", source)
+        self.assertIn('parsed.path.startswith("/api/jellyfin/")', source)
+        self.assertIn("egress_client.proxy_media(", source)
+        self.assertIn('source="jellyfin"', source)
+        self.assertNotIn("config=jellyfin_backend._jellyfin_config()", source)
+        self.assertNotIn("config=", source[source.index('source="jellyfin"'):source.index('source="jellyfin"') + 180])
+        self.assertNotIn("jellyfin_backend._jellyfin_proxy_audio", source)
+        self.assertNotIn("jellyfin_backend._jellyfin_proxy_image", source)
 
     def test_usb_provider_does_not_depend_on_dashboard_handler(self):
         self.assertFalse(hasattr(usb, "DashboardHandler"))
