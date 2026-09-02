@@ -611,7 +611,7 @@ write_checkout_update_source_metadata
         self.assertIn("--no-build-isolation", compact)
         self.assertIn("PIP_NO_INDEX=1", compact)
         self.assertIn(
-            'sudo -u "$REAL_USER" env -u PYTHONPATH "$python" -I -m pip wheel',
+            'sudo -u "$REAL_USER" env -u PYTHONPATH "$build_python" -I -m pip wheel',
             compact,
         )
         self.assertIn(
@@ -633,6 +633,82 @@ write_checkout_update_source_metadata
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, compact)
+
+    def test_local_deploy_uses_repo_build_environment_without_user_hardcoding(self) -> None:
+        start = self.text.index("cmd_deploy_local() {")
+        end = self.text.index(
+            "# =============================================================================\n# INSTALL",
+            start,
+        )
+        block = self.text[start:end]
+        executable = "\n".join(
+            line
+            for line in block.splitlines()
+            if not line.lstrip().startswith("#")
+        )
+        compact = " ".join(
+            executable.replace("\\\n", " ").split()
+        )
+
+        self.assertIn(
+            'local runtime_python="$INSTALL_DIR/venv/bin/python"',
+            compact,
+        )
+        self.assertIn(
+            'local build_python="$REPO_ROOT/.venv/bin/python"',
+            compact,
+        )
+        self.assertNotRegex(
+            compact,
+            r'local build_python="/home/[^"]+',
+        )
+
+        self.assertIn(
+            'validate_local_deploy_build_environment "$build_python"',
+            compact,
+        )
+        self.assertLess(
+            block.index(
+                'validate_local_deploy_build_environment "$build_python"'
+            ),
+            block.index("mktemp -d /var/tmp/open-mmi-local-deploy."),
+        )
+
+        self.assertIn(
+            'sudo -u "$REAL_USER" env -u PYTHONPATH "$build_python" -I -m pip wheel',
+            compact,
+        )
+        self.assertNotIn(
+            'env -u PYTHONPATH "$runtime_python" -I -m pip wheel',
+            compact,
+        )
+
+        helper_start = self.text.index(
+            "validate_local_deploy_build_environment() {"
+        )
+        helper_end = self.text.index(
+            "cmd_deploy_local() {",
+            helper_start,
+        )
+        helper = self.text[helper_start:helper_end]
+        helper_executable = "\n".join(
+            line
+            for line in helper.splitlines()
+            if not line.lstrip().startswith("#")
+        )
+        helper_compact = " ".join(
+            helper_executable.replace("\\\n", " ").split()
+        )
+
+        self.assertIn('sudo -u "$REAL_USER"', helper_compact)
+        self.assertIn(
+            'env -u PYTHONPATH "$build_python" -I -',
+            helper_compact,
+        )
+        self.assertIn("import setuptools.build_meta", helper)
+        self.assertIn('version("setuptools")', helper)
+        self.assertIn("major < 77", helper)
+        self.assertIn("setuptools>=77", helper)
 
     def test_local_deploy_reuses_prepared_transaction_with_exact_checkout_metadata(self) -> None:
         start = self.text.index("cmd_deploy_local() {")

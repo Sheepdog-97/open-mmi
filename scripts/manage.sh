@@ -1320,8 +1320,63 @@ validate_local_deploy_checkout() {
     fi
 }
 
+validate_local_deploy_build_environment() {
+    local build_python="$1"
+
+    if [ ! -x "$build_python" ]; then
+        log_error "Local deployment build Python is unavailable: $build_python"
+        log_info "Create the repository .venv and provision setuptools>=77 first"
+        return 1
+    fi
+
+    if ! sudo -u "$REAL_USER" \
+        env -u PYTHONPATH "$build_python" -I - <<'PY_LOCAL_BUILD_ENV'
+import re
+import sys
+from importlib.metadata import version
+
+try:
+    import pip  # noqa: F401
+    import setuptools.build_meta  # noqa: F401
+    setuptools_version = version("setuptools")
+except Exception as exc:
+    print(f"local build environment unavailable: {exc}", file=sys.stderr)
+    raise SystemExit(1)
+
+match = re.match(
+    r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?(.*)$",
+    setuptools_version,
+)
+if match is None:
+    print(
+        f"unsupported setuptools version: {setuptools_version}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
+major = int(match.group(1))
+suffix = match.group(4).lower()
+prerelease = bool(
+    re.match(r"^(?:a|b|rc)\d*|^\.dev\d*", suffix)
+)
+
+if major < 77 or (major == 77 and prerelease):
+    print(
+        f"setuptools>=77 required, found {setuptools_version}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+PY_LOCAL_BUILD_ENV
+    then
+        log_error "Local deployment build environment is not ready"
+        log_info "Provision $REPO_ROOT/.venv with setuptools>=77 first"
+        return 1
+    fi
+}
+
 cmd_deploy_local() {
-    local python="$INSTALL_DIR/venv/bin/python"
+    local runtime_python="$INSTALL_DIR/venv/bin/python"
+    local build_python="$REPO_ROOT/.venv/bin/python"
     local commit
     local branch
     local upstream
@@ -1345,14 +1400,19 @@ cmd_deploy_local() {
         return 1
     fi
 
-    if [ ! -x "$python" ]; then
-        log_error "Installed Python runtime is unavailable: $python"
+    if [ ! -x "$runtime_python" ]; then
+        log_error "Installed Python runtime is unavailable: $runtime_python"
         return 1
     fi
 
     # Reject any tracked or untracked checkout change before creating build
     # or root-owned staging state.
     validate_local_deploy_checkout
+
+    # Candidate code is built with the repository-local developer environment,
+    # never with the installed production runtime. Validate it before creating
+    # temporary build or root-owned staging state.
+    validate_local_deploy_build_environment "$build_python"
 
     commit=$(
         sudo -u "$REAL_USER" git -C "$REPO_ROOT" rev-parse HEAD
@@ -1442,7 +1502,7 @@ cmd_deploy_local() {
         PIP_NO_CACHE_DIR=1 \
         PIP_DISABLE_PIP_VERSION_CHECK=1 \
         sudo -u "$REAL_USER" \
-            env -u PYTHONPATH "$python" -I -m pip wheel \
+            env -u PYTHONPATH "$build_python" -I -m pip wheel \
                 --no-deps \
                 --no-index \
                 --no-build-isolation \
@@ -1473,7 +1533,7 @@ cmd_deploy_local() {
 
     # Run the repository's wheel structure verifier without root authority.
     if ! sudo -u "$REAL_USER" \
-        env -u PYTHONPATH "$python" -I \
+        env -u PYTHONPATH "$build_python" -I \
             "$build_repo/tools/verify_wheel.py" \
             "$local_wheel"; then
         rm -rf -- "$build_root"
