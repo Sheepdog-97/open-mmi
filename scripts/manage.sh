@@ -1598,6 +1598,7 @@ cmd_deploy_local() {
     OPEN_MMI_MANAGED_BRANCH="$branch" \
     OPEN_MMI_MANAGED_UPSTREAM="$upstream" \
     OPEN_MMI_PREPARED_DEPLOYMENT=1 \
+    OPEN_MMI_RESTART_UPDATE_COORDINATOR=1 \
     OPEN_MMI_PRESERVE_MANAGED_REPOSITORY=1 \
         cmd_deploy_prepared
 
@@ -1745,6 +1746,24 @@ cmd_install() {
 # =============================================================================
 # UPDATE
 # =============================================================================
+
+activate_prepared_system_services() {
+    # These independent actors are deliberately not restarted by their install
+    # helpers while a prepared transaction is still mutating system state.
+    # Activate them only after installed files and provenance are committed,
+    # while the prepared rollback trap is still armed.
+    systemctl restart "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"
+    systemctl is-active --quiet "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"
+
+    # A managed update is being synchronously awaited by the running update
+    # coordinator, so its installer must not kill that coordinator mid-request.
+    # Explicit local deployment has no such parent request and opts into the
+    # coordinator handoff once installed provenance is complete.
+    if [[ "${OPEN_MMI_RESTART_UPDATE_COORDINATOR:-0}" == "1" ]]; then
+        systemctl restart "$UPDATE_COORDINATOR_UNIT"
+        systemctl is-active --quiet "$UPDATE_COORDINATOR_UNIT"
+    fi
+}
 
 cmd_update() {
     log_info "Updating $APP_NAME through the trusted coordinator..."
@@ -2065,6 +2084,9 @@ cmd_deploy_prepared() {
     configure_update_service_defaults
     sudo -u "$REAL_USER" env HOME="$REAL_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
         systemctl --user restart canbusd.service "$OWNER_CONFIG_UNIT" open-mmi-dashboard.service
+
+    deployment_stage="system-service-handoff"
+    activate_prepared_system_services
 
     deployment_stage="service-health"
     sudo -u "$REAL_USER" env HOME="$REAL_HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \

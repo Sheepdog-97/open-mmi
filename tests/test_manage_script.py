@@ -729,6 +729,7 @@ write_checkout_update_source_metadata
             'OPEN_MMI_MANAGED_BRANCH="$branch"',
             'OPEN_MMI_MANAGED_UPSTREAM="$upstream"',
             'OPEN_MMI_PREPARED_DEPLOYMENT=1',
+            'OPEN_MMI_RESTART_UPDATE_COORDINATOR=1',
             'OPEN_MMI_PRESERVE_MANAGED_REPOSITORY=1',
         ):
             with self.subTest(required=required):
@@ -1069,6 +1070,74 @@ prepared_scope
                 marker.read_text(encoding="utf-8"),
                 "rollback\n",
             )
+
+    def test_prepared_system_service_handoff_is_explicit_and_scoped(self) -> None:
+        helper_start = self.text.index(
+            "activate_prepared_system_services() {"
+        )
+        helper_end = self.text.index(
+            "cmd_update() {",
+            helper_start,
+        )
+        helper = self.text[helper_start:helper_end]
+        helper_compact = " ".join(
+            line.strip()
+            for line in helper.splitlines()
+            if not line.lstrip().startswith("#")
+        )
+
+        self.assertIn(
+            'systemctl restart "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"',
+            helper_compact,
+        )
+        self.assertIn(
+            'systemctl is-active --quiet "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"',
+            helper_compact,
+        )
+        self.assertIn(
+            '"${OPEN_MMI_RESTART_UPDATE_COORDINATOR:-0}" == "1"',
+            helper_compact,
+        )
+        self.assertIn(
+            'systemctl restart "$UPDATE_COORDINATOR_UNIT"',
+            helper_compact,
+        )
+        self.assertIn(
+            'systemctl is-active --quiet "$UPDATE_COORDINATOR_UNIT"',
+            helper_compact,
+        )
+
+        deploy_start = self.text.index("cmd_deploy_prepared() {")
+        deploy_end = self.text.index("# UNINSTALL", deploy_start)
+        deploy = self.text[deploy_start:deploy_end]
+
+        self.assertIn(
+            'deployment_stage="system-service-handoff"',
+            deploy,
+        )
+        self.assertIn(
+            "activate_prepared_system_services",
+            deploy,
+        )
+        self.assertLess(
+            deploy.index('deployment_stage="system-service-handoff"'),
+            deploy.index('deployment_stage="service-health"'),
+        )
+        self.assertLess(
+            deploy.index("activate_prepared_system_services"),
+            deploy.rindex("trap - ERR"),
+        )
+
+        local_start = self.text.index("cmd_deploy_local() {")
+        local_end = self.text.index(
+            "# =============================================================================\n# INSTALL",
+            local_start,
+        )
+        local = self.text[local_start:local_end]
+        self.assertIn(
+            "OPEN_MMI_RESTART_UPDATE_COORDINATOR=1",
+            local,
+        )
 
     def test_prepared_deployment_is_fixed_root_only_and_rolls_back_on_error(self) -> None:
         start = self.text.index("cmd_deploy_prepared() {")
