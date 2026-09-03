@@ -24,6 +24,7 @@ from open_mmi_trust.inspector import (
     _inspect_can_transmit_os_enforcement,
     _inspect_release_provenance,
     _network_egress_source_contract,
+    _inspect_privileged_update_handoff_source,
     _inspect_updater_transition_gate_source,
 )
 from open_mmi_trust.inspector_cli import render_text
@@ -517,6 +518,165 @@ class TrustInspectorTests(unittest.TestCase):
         check = next(check for check in report["checks"] if check["id"] == "dashboard.render-egress")
         self.assertEqual(check["status"], FAIL)
         self.assertEqual(check["evidence"]["remote_dependencies"], ["https://example.invalid/tracker.js"])
+
+    def test_real_privileged_update_handoff_is_explicit(self):
+        check = _inspect_privileged_update_handoff_source(ROOT)
+        self.assertEqual(check["status"], PASS)
+        self.assertEqual(check["evidence"]["user"], ["root"])
+        self.assertEqual(
+            check["evidence"]["exec_start"],
+            ["/opt/open-mmi/venv/bin/python -I -m ui.update_installer"],
+        )
+
+    def test_privileged_update_handoff_rejects_non_root_user(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = (
+                root
+                / "systemd"
+                / "system"
+                / "open-mmi-update-installer.service"
+            )
+            target.parent.mkdir(parents=True)
+
+            source = (
+                ROOT
+                / "systemd"
+                / "system"
+                / "open-mmi-update-installer.service"
+            ).read_text(encoding="utf-8")
+
+            target.write_text(
+                source.replace("User=root", "User=open-mmi"),
+                encoding="utf-8",
+            )
+            check = _inspect_privileged_update_handoff_source(root)
+
+        self.assertEqual(check["status"], FAIL)
+
+    def test_privileged_update_handoff_rejects_extra_root_command(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = (
+                root
+                / "systemd"
+                / "system"
+                / "open-mmi-update-installer.service"
+            )
+            target.parent.mkdir(parents=True)
+
+            source = (
+                ROOT
+                / "systemd"
+                / "system"
+                / "open-mmi-update-installer.service"
+            ).read_text(encoding="utf-8")
+
+            target.write_text(
+                source.replace(
+                    "User=root\n",
+                    "User=root\nExecStartPre=/bin/true\n",
+                ),
+                encoding="utf-8",
+            )
+            check = _inspect_privileged_update_handoff_source(root)
+
+        self.assertEqual(check["status"], FAIL)
+        self.assertIn(
+            "ExecStartPre",
+            check["evidence"]["extra_exec_surfaces"],
+        )
+
+    def test_privileged_update_handoff_rejects_changed_entrypoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = (
+                root
+                / "systemd"
+                / "system"
+                / "open-mmi-update-installer.service"
+            )
+            target.parent.mkdir(parents=True)
+
+            source = (
+                ROOT
+                / "systemd"
+                / "system"
+                / "open-mmi-update-installer.service"
+            ).read_text(encoding="utf-8")
+
+            target.write_text(
+                source.replace(
+                    "ExecStart=/opt/open-mmi/venv/bin/python -I -m ui.update_installer",
+                    "ExecStart=/opt/open-mmi/venv/bin/python -m ui.update_installer",
+                ),
+                encoding="utf-8",
+            )
+            check = _inspect_privileged_update_handoff_source(root)
+
+        self.assertEqual(check["status"], FAIL)
+
+    def test_privileged_update_handoff_rejects_environment_injection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = (
+                root
+                / "systemd"
+                / "system"
+                / "open-mmi-update-installer.service"
+            )
+            target.parent.mkdir(parents=True)
+
+            source = (
+                ROOT
+                / "systemd"
+                / "system"
+                / "open-mmi-update-installer.service"
+            ).read_text(encoding="utf-8")
+
+            target.write_text(
+                source.replace(
+                    "Environment=OPEN_MMI_PREPARED_DEPLOYMENT=1",
+                    "Environment=OPEN_MMI_PREPARED_DEPLOYMENT=1 LD_PRELOAD=/tmp/inject.so",
+                ),
+                encoding="utf-8",
+            )
+            check = _inspect_privileged_update_handoff_source(root)
+
+        self.assertEqual(check["status"], FAIL)
+
+    def test_privileged_update_handoff_rejects_executable_namespace_remap(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = (
+                root
+                / "systemd"
+                / "system"
+                / "open-mmi-update-installer.service"
+            )
+            target.parent.mkdir(parents=True)
+
+            source = (
+                ROOT
+                / "systemd"
+                / "system"
+                / "open-mmi-update-installer.service"
+            ).read_text(encoding="utf-8")
+
+            target.write_text(
+                source.replace(
+                    "User=root\n",
+                    "User=root\nBindPaths=/tmp/fake-opt:/opt\n",
+                ),
+                encoding="utf-8",
+            )
+            check = _inspect_privileged_update_handoff_source(root)
+
+        self.assertEqual(check["status"], FAIL)
+        self.assertIn(
+            "BindPaths",
+            check["evidence"]["namespace_overrides"],
+        )
 
     def test_real_updater_source_reproduces_preinstallation_transition_gate(self):
         check = _inspect_updater_transition_gate_source(ROOT)

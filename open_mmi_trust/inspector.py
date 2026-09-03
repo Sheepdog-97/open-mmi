@@ -1051,6 +1051,158 @@ def _inspect_provenance_root_mutation_source(root: Path) -> dict[str, Any]:
         note="Release Provenance v1 has no signer-rotation or candidate-controlled root-replacement primitive.",
     )
 
+def _inspect_privileged_update_handoff_source(root: Path) -> dict[str, Any]:
+    relative = Path("systemd/system/open-mmi-update-installer.service")
+    unit = root / relative
+    if not unit.is_file():
+        return _check(
+            "updater.privileged-handoff-source",
+            UNVERIFIED,
+            "Privileged update service source is not available for inspection.",
+            path=relative.as_posix(),
+        )
+
+    try:
+        source = unit.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        return _check(
+            "updater.privileged-handoff-source",
+            FAIL,
+            "Privileged update service source could not be inspected reproducibly.",
+            path=relative.as_posix(),
+            error=f"{type(exc).__name__}: {exc}",
+        )
+
+    directives: dict[str, list[str]] = {}
+    section = ""
+    for raw_line in source.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line
+            continue
+        if section != "[Service]" or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        directives.setdefault(key.strip(), []).append(value.strip())
+
+    expected_exec = "/opt/open-mmi/venv/bin/python -I -m ui.update_installer"
+    failures: list[str] = []
+
+    expected = {
+        "Type": "oneshot",
+        "User": "root",
+        "ExecStart": expected_exec,
+    }
+    for key, value in expected.items():
+        actual = directives.get(key, [])
+        if actual != [value]:
+            failures.append(
+                f"{key}:expected-exactly:{value}:actual:{actual!r}"
+            )
+
+    forbidden_exec = (
+        "ExecCondition",
+        "ExecStartPre",
+        "ExecStartPost",
+        "ExecReload",
+        "ExecStop",
+        "ExecStopPost",
+    )
+    extra_exec = {
+        key: directives[key]
+        for key in forbidden_exec
+        if key in directives
+    }
+    if extra_exec:
+        failures.append(
+            f"unexpected-privileged-exec-surfaces:{extra_exec!r}"
+        )
+
+    dynamic_user = directives.get("DynamicUser", [])
+    if any(
+        value.lower() in {"1", "yes", "true", "on"}
+        for value in dynamic_user
+    ):
+        failures.append(
+            f"DynamicUser:must-not-enable:{dynamic_user!r}"
+        )
+
+    expected_environment = ["OPEN_MMI_PREPARED_DEPLOYMENT=1"]
+    environment = directives.get("Environment", [])
+    if environment != expected_environment:
+        failures.append(
+            f"Environment:expected-exactly:{expected_environment!r}:"
+            f"actual:{environment!r}"
+        )
+
+    forbidden_environment = (
+        "EnvironmentFile",
+        "PassEnvironment",
+    )
+    environment_overrides = {
+        key: directives[key]
+        for key in forbidden_environment
+        if key in directives
+    }
+    if environment_overrides:
+        failures.append(
+            f"unexpected-environment-surfaces:{environment_overrides!r}"
+        )
+
+    forbidden_namespace = (
+        "RootDirectory",
+        "RootImage",
+        "BindPaths",
+        "BindReadOnlyPaths",
+        "TemporaryFileSystem",
+        "MountImages",
+    )
+    namespace_overrides = {
+        key: directives[key]
+        for key in forbidden_namespace
+        if key in directives
+    }
+    if namespace_overrides:
+        failures.append(
+            f"unexpected-executable-namespace-surfaces:{namespace_overrides!r}"
+        )
+
+    evidence = {
+        "path": relative.as_posix(),
+        "user": directives.get("User", []),
+        "exec_start": directives.get("ExecStart", []),
+        "environment": environment,
+        "extra_exec_surfaces": extra_exec,
+        "environment_overrides": environment_overrides,
+        "namespace_overrides": namespace_overrides,
+    }
+
+    if failures:
+        return _check(
+            "updater.privileged-handoff-source",
+            FAIL,
+            "Privileged update service does not preserve the reviewed explicit-root installer handoff.",
+            **evidence,
+            failures=failures,
+        )
+
+    return _check(
+        "updater.privileged-handoff-source",
+        PASS,
+        "Privileged update service explicitly runs the reviewed isolated-Python installer entry point as root with no additional service execution hooks.",
+        **evidence,
+        note=(
+            "This reproduces the privileged service entry-point contract. "
+            "Deployed unit byte identity is reported separately by "
+            "release.privileged-runtime-integrity, and candidate-controlled "
+            "deployment after trust acceptance is reported by "
+            "updater.preinstallation-trust-gate."
+        ),
+    )
+
+
 def _inspect_updater_transition_gate_source(root: Path) -> dict[str, Any]:
     installer = root / "ui" / "update_installer.py"
     coordinator = root / "ui" / "update_coordinator.py"
@@ -2704,6 +2856,7 @@ def inspect_system(
             *([privileged_runtime_check] if privileged_runtime_check is not None else []),
             provenance_check,
             _inspect_transition_lineage(Path(lineage_path), Path(accepted_state_path)),
+            _inspect_privileged_update_handoff_source(integrity_source_root),
             _inspect_updater_transition_gate_source(root),
         ]
     )
