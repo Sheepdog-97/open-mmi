@@ -2682,7 +2682,7 @@ def inspect_system(
     if can_transmit_check is not None:
         checks.append(can_transmit_check)
     identity_check = _inspect_vehicle_identity_remote_resolution_enforcement(
-        integrity_source_root,
+        integrity_package_root,
         manifest,
         network_check,
         production=production,

@@ -158,6 +158,40 @@ class TrustInspectorTests(unittest.TestCase):
         )
         return integrity_path
 
+    def test_vehicle_identity_enforcement_uses_package_runtime_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_root = root / "source"
+            package_root = root / "package"
+            source_root.mkdir()
+            package_root.mkdir()
+
+            authorization, accepted_state, expected = self.fixture(source_root)
+
+            with mock.patch(
+                "open_mmi_trust.inspector.BOOTSTRAP_SHA384_BASE64",
+                expected,
+            ), mock.patch(
+                "open_mmi_trust.inspector."
+                "_inspect_vehicle_identity_remote_resolution_enforcement",
+                return_value=None,
+            ) as identity:
+                inspect_system(
+                    manifest_path=MANIFEST,
+                    authorization_path=authorization,
+                    accepted_state_path=accepted_state,
+                    lineage_path=accepted_state.parent / "transition-lineage.v1.d",
+                    integrity_path=(
+                        accepted_state.parent
+                        / "installed-release-integrity.v1.json"
+                    ),
+                    install_root=source_root,
+                    package_root=package_root,
+                )
+
+        identity.assert_called_once()
+        self.assertEqual(identity.call_args.args[0], package_root)
+
     def test_can_os_enforcement_accepts_hardened_contract(self):
         manifest = json.loads(
             MANIFEST.read_text(encoding="utf-8")
