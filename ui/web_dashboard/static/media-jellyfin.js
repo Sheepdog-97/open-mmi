@@ -26,6 +26,25 @@
       : `${m}:${String(s).padStart(2, "0")}`;
   }
 
+
+  const JELLYFIN_BLOCKING_PROVIDER_STATES = new Set([
+    "connecting",
+    "reconnecting",
+    "authentication-error",
+    "configuration-missing",
+    "server-error",
+  ]);
+
+  function jellyfinProviderBlocksControls(
+    providerStatus,
+    sourceId = "jellyfin",
+  ) {
+    return sourceId === "jellyfin"
+      && JELLYFIN_BLOCKING_PROVIDER_STATES.has(
+        String(providerStatus || ""),
+      );
+  }
+
   function installController(options = {}) {
     const window = options.window || root;
     const document = options.document || window?.document;
@@ -375,8 +394,16 @@
     }
 
     function ommiMediaSyncLiveControls() {
-      const unavailable = ["connecting", "reconnecting", "authentication-error", "configuration-missing", "server-error"]
-        .includes(openMmiMedia.providerStatus);
+      let sourceId = "jellyfin";
+      try {
+        const active = window.openMmiMediaSources?.activeSourceId?.();
+        if (typeof active === "string" && active) sourceId = active;
+      } catch (_) {}
+
+      const unavailable = jellyfinProviderBlocksControls(
+        openMmiMedia.providerStatus,
+        sourceId,
+      );
       document.querySelectorAll("#ommiMediaSearchBtn, #ommiMediaFilter, [data-open-mmi-track]").forEach((control) => {
         control.disabled = Boolean(openMmiMedia.loading || unavailable);
         control.setAttribute("aria-disabled", String(control.disabled));
@@ -1296,5 +1323,10 @@
     return controller;
   }
 
-  return { escapeHtml, formatTime, installController };
+  return {
+    escapeHtml,
+    formatTime,
+    jellyfinProviderBlocksControls,
+    installController,
+  };
 });

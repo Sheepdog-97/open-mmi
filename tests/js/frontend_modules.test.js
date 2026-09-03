@@ -612,6 +612,42 @@ test("USB controller formats unresolved durations and builds scoped browse URLs"
 const jellyfinMedia = require("../../ui/web_dashboard/static/media-jellyfin.js");
 const bluetoothMedia = require("../../ui/web_dashboard/static/media-bluetooth.js");
 
+test("Jellyfin provider availability only gates Jellyfin controls", () => {
+  const blocking = [
+    "connecting",
+    "reconnecting",
+    "authentication-error",
+    "configuration-missing",
+    "server-error",
+  ];
+
+  for (const status of blocking) {
+    assert.equal(
+      jellyfinMedia.jellyfinProviderBlocksControls(status, "jellyfin"),
+      true,
+    );
+
+    for (const source of ["radio", "usb", "bluetooth"]) {
+      assert.equal(
+        jellyfinMedia.jellyfinProviderBlocksControls(status, source),
+        false,
+        `${status} must not disable ${source} controls`,
+      );
+    }
+  }
+
+  assert.equal(
+    jellyfinMedia.jellyfinProviderBlocksControls("ready", "jellyfin"),
+    false,
+  );
+  assert.equal(
+    jellyfinMedia.jellyfinProviderBlocksControls(
+      "configuration-missing",
+    ),
+    true,
+  );
+});
+
 test("Jellyfin player helpers escape labels and format durations", () => {
   assert.equal(jellyfinMedia.escapeHtml('<Track & "Artist">'), "&lt;Track &amp; &quot;Artist&quot;&gt;");
   assert.equal(jellyfinMedia.formatTime(65), "1:05");
