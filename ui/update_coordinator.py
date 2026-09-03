@@ -46,6 +46,7 @@ ACTIVE_STATES = {"preparing", "downloading", "validating", "installing", "restar
 TERMINAL_STATES = {"idle", "prepared", "complete", "failed"}
 ALLOWED_STATES = ACTIVE_STATES | TERMINAL_STATES
 MAX_REQUEST_BYTES = 4096
+RELEASE_FETCH_PURPOSE = "updates.release-fetch"
 _VERSION_RE = re.compile(r"^[A-Za-z0-9._+:-]{1,128}$")
 _TRANSACTION_RE = re.compile(r"^prepare-[0-9a-f]{32}$")
 
@@ -56,6 +57,21 @@ class CoordinatorError(RuntimeError):
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _release_fetch_check() -> Dict[str, Any]:
+    """Run the fixed remote update check for the declared release-fetch purpose."""
+
+    return update_status.check_for_updates()
+
+
+def _release_fetch_candidate(
+    source: Mapping[str, str],
+    candidate_commit: str,
+) -> None:
+    """Fetch one coordinator-selected candidate for the release-fetch purpose."""
+
+    update_status._fetch_remote_candidate(source, candidate_commit)
 
 
 def initial_state() -> Dict[str, Any]:
@@ -567,7 +583,7 @@ def _prepare_candidate(
             # The coordinator is the only trusted update actor with external
             # release-fetch authority. Populate the managed checkout's object
             # database now so the later privileged installer can remain offline.
-            update_status._fetch_remote_candidate(source, candidate_commit)
+            _release_fetch_candidate(source, candidate_commit)
             state.update({
                 "state": "downloading", "stage": "downloading", "updated_at": _timestamp(),
                 "target_version": target_version, "candidate_commit": candidate_commit,
@@ -647,7 +663,7 @@ def response_for_request(
         if action == "status":
             state = read_state(state_path)
         elif action == "check":
-            return {"ok": True, "status": update_status.check_for_updates()}
+            return {"ok": True, "status": _release_fetch_check()}
         elif action == "prepare":
             state = _prepare_candidate(state_path, lock_path, staging_root)
         else:

@@ -23,6 +23,7 @@ from open_mmi_trust.inspector import (
     inspect_system,
     _inspect_can_transmit_os_enforcement,
     _inspect_release_provenance,
+    _network_egress_source_contract,
     _inspect_updater_transition_gate_source,
 )
 from open_mmi_trust.inspector_cli import render_text
@@ -191,6 +192,15 @@ class TrustInspectorTests(unittest.TestCase):
 
         identity.assert_called_once()
         self.assertEqual(identity.call_args.args[0], package_root)
+
+    def test_network_egress_contract_binds_release_fetch_to_coordinator(self):
+        failures = _network_egress_source_contract(ROOT)
+        coordinator_failures = [
+            failure
+            for failure in failures
+            if failure.startswith("ui/update_coordinator.py:")
+        ]
+        self.assertEqual(coordinator_failures, [])
 
     def test_can_os_enforcement_accepts_hardened_contract(self):
         manifest = json.loads(

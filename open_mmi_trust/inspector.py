@@ -1789,7 +1789,13 @@ def _network_egress_source_contract(root: Path) -> list[str]:
             '"/v1/media/proxy"',
             '"/v1/jellyfin/test-candidate"',
         ),
-        "ui/update_coordinator.py": ("updates.release-fetch",),
+        "ui/update_coordinator.py": (
+            'RELEASE_FETCH_PURPOSE = "updates.release-fetch"',
+            "def _release_fetch_check()",
+            "return update_status.check_for_updates()",
+            "def _release_fetch_candidate(",
+            "update_status._fetch_remote_candidate(source, candidate_commit)",
+        ),
     }
     failures: list[str] = []
     for relative, required in required_fragments.items():

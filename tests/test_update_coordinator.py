@@ -15,6 +15,36 @@ from ui import update_coordinator
 
 
 class UpdateCoordinatorTests(unittest.TestCase):
+    def test_release_fetch_purpose_binds_fixed_network_paths(self):
+        self.assertEqual(
+            update_coordinator.RELEASE_FETCH_PURPOSE,
+            "updates.release-fetch",
+        )
+
+        expected = {"state": "up-to-date"}
+        with patch.object(
+            update_coordinator.update_status,
+            "check_for_updates",
+            return_value=expected,
+        ) as check:
+            self.assertEqual(
+                update_coordinator._release_fetch_check(),
+                expected,
+            )
+        check.assert_called_once_with()
+
+        source = {"repository_path": "/managed/source"}
+        candidate = "a" * 40
+        with patch.object(
+            update_coordinator.update_status,
+            "_fetch_remote_candidate",
+        ) as fetch:
+            update_coordinator._release_fetch_candidate(
+                source,
+                candidate,
+            )
+        fetch.assert_called_once_with(source, candidate)
+
     def test_remote_update_check_runs_inside_coordinator_boundary(self):
         expected = {"state": "up-to-date", "update_available": False}
         with patch.object(
