@@ -438,6 +438,14 @@ async function loadDashboard(page, options = {}) {
     preparation_enabled: true,
     execution_enabled: true,
     installation_enabled: true,
+    trust_transition: {
+      state: "not-applicable",
+      relation: null,
+      changes: [],
+      allowed: false,
+      acknowledgement_required: false,
+      acknowledged: false,
+    },
     state: {
       state: "idle", stage: "idle", target_version: "", candidate_commit: "",
       transaction_id: null, error: "",
@@ -712,6 +720,14 @@ async function loadDashboard(page, options = {}) {
         window.__openMmiUpdatePrepareRequests += 1;
         window.__openMmiUpdateCoordinatorFixture = {
           ...window.__openMmiUpdateCoordinatorFixture,
+          trust_transition: {
+            state: "ready",
+            relation: "equal",
+            changes: [],
+            allowed: true,
+            acknowledgement_required: false,
+            acknowledged: false,
+          },
           state: {
             ...window.__openMmiUpdateCoordinatorFixture.state,
             state: "prepared",
