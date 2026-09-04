@@ -276,7 +276,68 @@ class TransactionLock(AbstractContextManager["TransactionLock"]):
             self.handle = None
 
 
-def _public_response(state: Mapping[str, Any]) -> Dict[str, Any]:
+def _public_trust_transition(
+    state: Mapping[str, Any],
+    *,
+    state_path: Path = DEFAULT_STATE_FILE,
+    staging_root: Path = DEFAULT_STAGING_ROOT,
+) -> Dict[str, Any]:
+    """Return sanitized read-only trust-transition status for one prepared candidate."""
+
+    if state.get("state") != "prepared" or state.get("stage") != "prepared":
+        return {
+            "state": "not-applicable",
+            "relation": None,
+            "changes": [],
+            "allowed": False,
+            "acknowledgement_required": False,
+            "acknowledged": False,
+        }
+
+    try:
+        stage = trusted_prepared_stage(state, staging_root)
+        transition = transition_gate.evaluate_prepared_candidate(
+            stage,
+            transaction_id=state["transaction_id"],
+            candidate_commit=state["candidate_commit"],
+            accepted_state_path=_trust_artifact_path(
+                state_path, DEFAULT_ACCEPTED_STATE_PATH
+            ),
+            authorization_path=_trust_artifact_path(
+                state_path,
+                transition_gate.DEFAULT_TRANSITION_AUTHORIZATION_PATH,
+            ),
+            lineage_path=_trust_artifact_path(
+                state_path,
+                transition_gate.DEFAULT_TRANSITION_LINEAGE_DIR,
+            ),
+        )
+    except (CoordinatorError, transition_gate.TransitionGateError):
+        return {
+            "state": "unavailable",
+            "relation": None,
+            "changes": [],
+            "allowed": False,
+            "acknowledgement_required": False,
+            "acknowledged": False,
+        }
+
+    return {
+        "state": "ready",
+        "relation": transition.relation,
+        "changes": [dict(change) for change in transition.changes],
+        "allowed": transition.allowed,
+        "acknowledgement_required": transition.acknowledgement_required,
+        "acknowledged": transition.acknowledged,
+    }
+
+
+def _public_response(
+    state: Mapping[str, Any],
+    *,
+    state_path: Path = DEFAULT_STATE_FILE,
+    staging_root: Path = DEFAULT_STAGING_ROOT,
+) -> Dict[str, Any]:
     policy, _ = update_policy.read_policy()
     installation_enabled = bool(policy and policy.get("channel") == "nightly")
     return {
@@ -286,6 +347,11 @@ def _public_response(state: Mapping[str, Any]) -> Dict[str, Any]:
         "execution_enabled": installation_enabled,
         "installation_enabled": installation_enabled,
         "state": dict(state),
+        "trust_transition": _public_trust_transition(
+            state,
+            state_path=state_path,
+            staging_root=staging_root,
+        ),
     }
 
 
@@ -704,7 +770,11 @@ def response_for_request(
                 raise CoordinatorError(state.get("error") or "Prepared installation failed")
     except CoordinatorError as exc:
         return {"ok": False, "error": str(exc)}
-    return _public_response(state)
+    return _public_response(
+        state,
+        state_path=state_path,
+        staging_root=staging_root,
+    )
 
 
 class _Handler(socketserver.StreamRequestHandler):

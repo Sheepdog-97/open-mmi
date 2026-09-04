@@ -172,6 +172,103 @@
       return summary;
     }
 
+    function trustTransitionReviewRequired() {
+      const transition = updateCoordinatorSnapshot?.trust_transition || {};
+      return transition.state === "ready"
+        && transition.relation === "expansion"
+        && transition.acknowledgement_required === true
+        && transition.acknowledged !== true;
+    }
+
+    function trustTransitionInstallAllowed() {
+      const transition = updateCoordinatorSnapshot?.trust_transition || {};
+      return transition.state === "ready"
+        && transition.allowed === true;
+    }
+
+    function trustTransitionChangeText(change) {
+      const capability = String(change?.capability || "Trust boundary");
+      const kind = String(change?.kind || "change");
+      const accepted = String(change?.accepted ?? "");
+      const candidate = String(change?.candidate ?? "");
+      const purposes = Array.isArray(change?.purposes)
+        ? change.purposes.map(String).filter(Boolean)
+        : [];
+
+      if (kind === "policy-expansion") {
+        return `${capability}: policy ${accepted} → ${candidate}`;
+      }
+      if (kind === "policy-narrowing") {
+        return `${capability}: policy ${accepted} → ${candidate}`;
+      }
+      if (kind === "purposes-added") {
+        return `${capability}: adds ${purposes.length === 1 ? "purpose" : "purposes"} ${purposes.join(", ")}`;
+      }
+      if (kind === "purposes-removed") {
+        return `${capability}: removes ${purposes.length === 1 ? "purpose" : "purposes"} ${purposes.join(", ")}`;
+      }
+      if (kind === "assurance-weakened" || kind === "assurance-strengthened") {
+        return `${capability}: assurance ${accepted} → ${candidate}`;
+      }
+      if (kind === "generation-regression") {
+        return `Trust policy generation: ${accepted} → ${candidate}`;
+      }
+      return `${capability}: ${kind.replaceAll("-", " ")}`;
+    }
+
+    function trustTransitionGuidance() {
+      const transition = updateCoordinatorSnapshot?.trust_transition || {};
+
+      if (transition.state === "unavailable") {
+        return `
+          <div class="openmmi-config-message warning openmmi-update-trust-review"
+               data-testid="system-update-trust-review">
+            <strong>Trust review unavailable</strong>
+            <p>Open MMI could not verify the prepared update's trust transition. Installation remains blocked.</p>
+            <p>Inspect the prepared transition locally:</p>
+            <code data-testid="system-update-trust-status-command">sudo open-mmi-trust-transition status</code>
+          </div>
+        `;
+      }
+
+      const changes = Array.isArray(transition.changes)
+        ? transition.changes.filter((change) => change && typeof change === "object")
+        : [];
+      const changesHtml = changes.length
+        ? `<ul>${changes.map((change) => `<li>${escapeHtml(trustTransitionChangeText(change))}</li>`).join("")}</ul>`
+        : "";
+
+      if (trustTransitionReviewRequired()) {
+        return `
+          <div class="openmmi-config-message warning openmmi-update-trust-review"
+               data-testid="system-update-trust-review">
+            <strong>Trust review required</strong>
+            <p>This prepared update expands the previously accepted trust boundary. Installation remains blocked until that exact transition is reviewed locally.</p>
+            ${changesHtml}
+            <p>Review the prepared transition in a local terminal:</p>
+            <code data-testid="system-update-trust-status-command">sudo open-mmi-trust-transition status</code>
+            <p>Authorize it only after reviewing the reported changes:</p>
+            <code data-testid="system-update-trust-ack-command">sudo open-mmi-trust-transition acknowledge</code>
+          </div>
+        `;
+      }
+
+      if (transition.state === "ready" && transition.allowed !== true) {
+        return `
+          <div class="openmmi-config-message warning openmmi-update-trust-review"
+               data-testid="system-update-trust-review">
+            <strong>Trust transition blocked</strong>
+            <p>This prepared update cannot proceed under the currently accepted trust boundary.</p>
+            ${changesHtml}
+            <p>Inspect the transition locally:</p>
+            <code data-testid="system-update-trust-status-command">sudo open-mmi-trust-transition status</code>
+          </div>
+        `;
+      }
+
+      return "";
+    }
+
     function updateControlState() {
       const transaction = updateCoordinatorSnapshot?.state || {};
       const transactionState = String(transaction.state || "unavailable");
@@ -185,6 +282,7 @@
       const coordinatorReady = updateCoordinatorSnapshot?.ok === true;
       const installationEnabled = coordinatorReady
         && updateCoordinatorSnapshot?.installation_enabled === true;
+      const trustInstallAllowed = trustTransitionInstallAllowed();
       return Object.freeze({
         transactionActive,
         transactionState,
@@ -204,6 +302,7 @@
           && readinessReady
           && managedSourceReady
           && installationEnabled
+          && trustInstallAllowed
           && transactionState === "prepared",
       });
     }
@@ -338,6 +437,7 @@
       const transactionErrorHtml = transactionError && transactionError !== visibleMessage
         ? `<p class="openmmi-update-status-note" data-testid="system-update-transaction-error">${escapeHtml(transactionError)}</p>`
         : "";
+      const trustTransitionHtml = trustTransitionGuidance();
       return `
         <div data-openmmi-system-settings-panel="true" data-openmmi-system-settings-ready="true">
           <div class="openmmi-settings-panel-head"><span>System</span><small>desktop shell and updates</small></div>
@@ -357,6 +457,7 @@
             ${packagingToolsHtml}
             ${updateError}
             ${transactionErrorHtml}
+            ${trustTransitionHtml}
             ${readinessIssueHtml}
             <div class="openmmi-config-actions openmmi-update-actions">
               <button type="button" class="openmmi-setting-pill" data-openmmi-update-check="true" data-testid="system-update-check" ${controls.canCheck ? "" : "disabled"}>${updateBusy === "checking" ? "Checking…" : "Check for updates"}</button>

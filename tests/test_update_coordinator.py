@@ -177,6 +177,127 @@ class UpdateCoordinatorTests(unittest.TestCase):
         ):
             self.assertFalse(update_coordinator.response_for_request(request, state_path)["ok"])
 
+    def test_status_reports_sanitized_prepared_trust_transition(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            state_path = root / "state.json"
+            staging_root = root / "staging"
+            transaction = "prepare-" + "a" * 32
+            candidate = "b" * 40
+            state = dict(
+                update_coordinator.initial_state(),
+                state="prepared",
+                stage="prepared",
+                transaction_id=transaction,
+                candidate_commit=candidate,
+            )
+            update_coordinator.write_state(state, state_path)
+
+            transition = SimpleNamespace(
+                relation="expansion",
+                changes=(
+                    {
+                        "capability": "network.external-egress",
+                        "kind": "purposes-added",
+                        "purposes": ["updates.release-fetch"],
+                    },
+                ),
+                allowed=False,
+                acknowledgement_required=True,
+                acknowledged=False,
+            )
+
+            with patch.object(
+                update_coordinator.update_policy,
+                "read_policy",
+                return_value=({"channel": "nightly"}, "configured"),
+            ), patch.object(
+                update_coordinator,
+                "trusted_prepared_stage",
+                return_value=root / "stage",
+            ), patch.object(
+                update_coordinator.transition_gate,
+                "evaluate_prepared_candidate",
+                return_value=transition,
+            ) as evaluate:
+                response = update_coordinator.response_for_request(
+                    {"api_version": 1, "action": "status"},
+                    state_path,
+                    root / "lock",
+                    staging_root,
+                )
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(
+            response["trust_transition"],
+            {
+                "state": "ready",
+                "relation": "expansion",
+                "changes": [
+                    {
+                        "capability": "network.external-egress",
+                        "kind": "purposes-added",
+                        "purposes": ["updates.release-fetch"],
+                    },
+                ],
+                "allowed": False,
+                "acknowledgement_required": True,
+                "acknowledged": False,
+            },
+        )
+        self.assertNotIn("candidate_commit", response["trust_transition"])
+        self.assertNotIn("transaction_id", response["trust_transition"])
+        self.assertNotIn("candidate_manifest_digest", response["trust_transition"])
+
+        evaluate.assert_called_once_with(
+            root / "stage",
+            transaction_id=transaction,
+            candidate_commit=candidate,
+            accepted_state_path=root / "trust" / "accepted-owner-trust.v1.json",
+            authorization_path=root / "trust" / "transition-authorization.v1.json",
+            lineage_path=root / "trust" / "transition-lineage.v1.d",
+        )
+
+    def test_status_does_not_leak_transition_evaluation_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            state_path = root / "state.json"
+            state = dict(
+                update_coordinator.initial_state(),
+                state="prepared",
+                stage="prepared",
+                transaction_id="prepare-" + "a" * 32,
+                candidate_commit="b" * 40,
+            )
+            update_coordinator.write_state(state, state_path)
+
+            with patch.object(
+                update_coordinator.update_policy,
+                "read_policy",
+                return_value=({"channel": "nightly"}, "configured"),
+            ), patch.object(
+                update_coordinator,
+                "trusted_prepared_stage",
+                return_value=root / "stage",
+            ), patch.object(
+                update_coordinator.transition_gate,
+                "evaluate_prepared_candidate",
+                side_effect=update_coordinator.transition_gate.TransitionGateError(
+                    "/private/path must not escape"
+                ),
+            ):
+                response = update_coordinator.response_for_request(
+                    {"api_version": 1, "action": "status"},
+                    state_path,
+                    root / "lock",
+                    root / "staging",
+                )
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["trust_transition"]["state"], "unavailable")
+        self.assertFalse(response["trust_transition"]["allowed"])
+        self.assertNotIn("/private/path", repr(response["trust_transition"]))
+
     def test_install_preflight_blocks_before_installer_service_when_trust_gate_blocks(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -73,6 +73,14 @@ function fixture(options = {}) {
     preparation_enabled: true,
     execution_enabled: true,
     installation_enabled: true,
+    trust_transition: options.trustTransition || {
+      state: "not-applicable",
+      relation: null,
+      changes: [],
+      allowed: false,
+      acknowledgement_required: false,
+      acknowledged: false,
+    },
     state: {
       state: "idle", stage: "idle", target_version: "", candidate_commit: "",
       transaction_id: null, error: "",
@@ -127,6 +135,14 @@ function fixture(options = {}) {
       if (path === "/api/system/update-prepare") {
         coordinatorPayload = {
           ...coordinatorPayload,
+          trust_transition: options.preparedTrustTransition || {
+            state: "ready",
+            relation: "equal",
+            changes: [],
+            allowed: true,
+            acknowledgement_required: false,
+            acknowledged: false,
+          },
           state: {
             ...coordinatorPayload.state,
             state: "prepared",
@@ -336,6 +352,128 @@ test("completed and failed coordinator states are labelled as transaction histor
     assert.match(html, /data-testid="system-update-target-label">Last update version/);
     assert.match(html, /v1-runtime-41-gold1234/);
   }
+});
+
+test("prepared trust expansion gives local review guidance without dashboard authority", async () => {
+  const coordinatorState = {
+    state: "prepared",
+    stage: "prepared",
+    target_version: "v1-runtime-43-gdef5678",
+    candidate_commit: "def5678abc901234567890123456789012345678",
+    transaction_id: "prepare-0123456789abcdef0123456789abcdef",
+  };
+  const transition = {
+    state: "ready",
+    relation: "expansion",
+    changes: [
+      {
+        capability: "network.external-egress",
+        kind: "purposes-added",
+        purposes: ["updates.release-fetch"],
+      },
+    ],
+    allowed: false,
+    acknowledgement_required: true,
+    acknowledged: false,
+  };
+
+  const state = fixture({
+    coordinatorState,
+    trustTransition: transition,
+  });
+  const controller = settings.createController(state);
+  await controller.refresh();
+
+  const html = controller.systemTemplate();
+  assert.match(html, /Trust review required/);
+  assert.match(html, /previously accepted trust boundary/);
+  assert.match(html, /network\.external-egress/);
+  assert.match(html, /updates\.release-fetch/);
+  assert.match(
+    html,
+    /sudo open-mmi-trust-transition status/,
+  );
+  assert.match(
+    html,
+    /sudo open-mmi-trust-transition acknowledge/,
+  );
+  assert.equal(controller.updateControlState().canInstall, false);
+  assert.doesNotMatch(
+    html,
+    /class="openmmi-setting-pill is-selected" data-openmmi-update-install="true"/,
+  );
+  assert.equal(
+    state.calls.filter(
+      (call) => call[0] === "POST" && String(call[1]).includes("trust"),
+    ).length,
+    0,
+  );
+
+  const unavailableState = fixture({
+    coordinatorState,
+    trustTransition: {
+      state: "unavailable",
+      relation: null,
+      changes: [],
+      allowed: false,
+      acknowledgement_required: false,
+      acknowledged: false,
+    },
+  });
+  const unavailableController = settings.createController(unavailableState);
+  await unavailableController.refresh();
+
+  const unavailableHtml = unavailableController.systemTemplate();
+  assert.equal(unavailableController.updateControlState().canInstall, false);
+  assert.match(unavailableHtml, /Trust review unavailable/);
+  assert.doesNotMatch(
+    unavailableHtml,
+    /data-testid="system-update-trust-ack-command"/,
+  );
+
+  const regressionState = fixture({
+    coordinatorState,
+    trustTransition: {
+      state: "ready",
+      relation: "generation-regression",
+      changes: [{
+        kind: "generation-regression",
+        accepted: 6,
+        candidate: 5,
+      }],
+      allowed: false,
+      acknowledgement_required: false,
+      acknowledged: false,
+    },
+  });
+  const regressionController = settings.createController(regressionState);
+  await regressionController.refresh();
+
+  const regressionHtml = regressionController.systemTemplate();
+  assert.equal(regressionController.updateControlState().canInstall, false);
+  assert.match(regressionHtml, /Trust transition blocked/);
+  assert.match(regressionHtml, /Trust policy generation: 6 → 5/);
+  assert.doesNotMatch(
+    regressionHtml,
+    /data-testid="system-update-trust-ack-command"/,
+  );
+
+  const acknowledgedState = fixture({
+    coordinatorState,
+    trustTransition: {
+      ...transition,
+      allowed: true,
+      acknowledged: true,
+    },
+  });
+  const acknowledgedController = settings.createController(acknowledgedState);
+  await acknowledgedController.refresh();
+
+  assert.equal(acknowledgedController.updateControlState().canInstall, true);
+  assert.doesNotMatch(
+    acknowledgedController.systemTemplate(),
+    /Trust review required/,
+  );
 });
 
 test("managed prepare and install require confirmation and send no caller-selected target", async () => {
