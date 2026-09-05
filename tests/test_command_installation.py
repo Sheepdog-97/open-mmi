@@ -16,6 +16,13 @@ COMMANDS = (
     "open-mmi-launcher",
     "open-mmi-powerd",
     "open-mmi-status",
+    "open-mmi-telemetry",
+    "open-mmi-trust-inspect",
+    "open-mmi-trust-integrity",
+    "open-mmi-trust-lineage",
+    "open-mmi-trust-provenance",
+    "open-mmi-trust-state",
+    "open-mmi-trust-transition",
     "open-mmi-update-coordinator",
     "open-mmi-update-installer",
     "open-mmi-vehicle-config-coordinator",
@@ -32,6 +39,20 @@ class CommandInstallationTests(unittest.TestCase):
             stderr=subprocess.PIPE,
             check=False,
         )
+
+    def test_manage_script_exposes_all_packaged_owner_commands(self) -> None:
+        shell = textwrap.dedent(
+            f"""\
+            set -euo pipefail
+            source {str(MANAGE_SCRIPT)!r}
+            printf '%s\n' "${{OPEN_MMI_COMMANDS[@]}}"
+            """
+        )
+
+        result = self._run_shell(shell)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(tuple(result.stdout.splitlines()), COMMANDS)
 
     def test_package_install_verifies_wrappers_and_manages_links(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -132,7 +153,10 @@ class CommandInstallationTests(unittest.TestCase):
 
                 test -f \"$COMMAND_LINK_DIR/open-mmi-launcher\"
                 test ! -L \"$COMMAND_LINK_DIR/open-mmi-launcher\"
-                for command in open-mmi-canbusd open-mmi-config open-mmi-dashboard open-mmi-powerd open-mmi-status open-mmi-update-coordinator open-mmi-update-installer open-mmi-vehicle-config-coordinator; do
+                for command in \"${{OPEN_MMI_COMMANDS[@]}}\"; do
+                    if [[ \"$command\" == \"open-mmi-launcher\" ]]; then
+                        continue
+                    fi
                     test ! -e \"$COMMAND_LINK_DIR/$command\"
                     test ! -L \"$COMMAND_LINK_DIR/$command\"
                 done

@@ -33,7 +33,7 @@ class PowerdIntegrationTests(unittest.TestCase):
         self.assertIn('cp -r "$REPO_ROOT/powerd" "$INSTALL_DIR/"', self.manage)
         self.assertNotIn('sudo cp -r "$REPO_ROOT/powerd" "$INSTALL_DIR/"', self.manage)
         self.assertIn(
-            "for item in canbusd vehicles bindings actions powerd ui scripts packaging systemd; do",
+            "for item in canbusd vehicles bindings actions powerd open_mmi_telemetry open_mmi_trust ui scripts packaging systemd; do",
             self.manage,
         )
         self.assertGreaterEqual(self.manage.count("install_power_manager"), 3)
@@ -110,7 +110,7 @@ class PowerdIntegrationTests(unittest.TestCase):
             self.manage,
         )
         self.assertIn(
-            "for item in canbusd vehicles bindings actions powerd ui scripts packaging systemd; do",
+            "for item in canbusd vehicles bindings actions powerd open_mmi_telemetry open_mmi_trust ui scripts packaging systemd; do",
             self.manage,
         )
         self.assertIn(

@@ -62,6 +62,12 @@ def current_manifest() -> dict:
 
 
 UNIT_TEXTS = {
+    "system/open-mmi-trust-status.service": (
+        "RestrictAddressFamilies=AF_UNIX\n"
+        "ProtectSystem=strict\n"
+        "ReadWritePaths=/run/open-mmi\n"
+        "IPAddressDeny=any\n"
+    ),
     "system/open-mmi-media-egress.service": (
         "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6\n"
         "ProtectSystem=strict\n"

@@ -1,0 +1,30 @@
+[Unit]
+Description=Open MMI Privileged Trust Status
+Documentation=https://github.com/open-mmi/open-mmi
+After=local-fs.target
+
+[Service]
+Type=simple
+User=root
+Group=open-mmi-update
+ExecStart=/opt/open-mmi/venv/bin/python -I -m ui.trust_status_coordinator serve
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=open-mmi
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+UMask=0027
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+ReadWritePaths=/run/open-mmi
+
+[Install]
+WantedBy=multi-user.target

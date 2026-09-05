@@ -15,6 +15,7 @@ UPDATE_POLICY_FILE="/etc/open-mmi/update-policy.json"
 UPDATE_COORDINATOR_GROUP="open-mmi-update"
 UPDATE_COORDINATOR_UNIT="open-mmi-update-coordinator.service"
 UPDATE_INSTALLER_UNIT="open-mmi-update-installer.service"
+TRUST_STATUS_UNIT="open-mmi-trust-status.service"
 MEDIA_EGRESS_UNIT="open-mmi-media-egress.service"
 MEDIA_EGRESS_GROUP="open-mmi"
 MEDIA_EGRESS_CONFIG_DIR="/var/lib/open-mmi/network-egress"
@@ -71,6 +72,13 @@ OPEN_MMI_COMMANDS=(
     open-mmi-launcher
     open-mmi-powerd
     open-mmi-status
+    open-mmi-telemetry
+    open-mmi-trust-inspect
+    open-mmi-trust-integrity
+    open-mmi-trust-lineage
+    open-mmi-trust-provenance
+    open-mmi-trust-state
+    open-mmi-trust-transition
     open-mmi-update-coordinator
     open-mmi-update-installer
     open-mmi-vehicle-config-coordinator
@@ -519,10 +527,10 @@ install_open_mmi_package() {
     fi
 
     verify_console_commands
-    env -u PYTHONPATH "$python" -I -c 'import canbusd.core, ui.config_cli, ui.web_dashboard.server'
+    env -u PYTHONPATH "$python" -I -c 'import canbusd.core, open_mmi_telemetry.guard, open_mmi_trust.inspector, ui.config_cli, ui.web_dashboard.server'
     if [[ $EUID -eq 0 && "$REAL_USER" != root ]]; then
         sudo -u "$REAL_USER" env -u PYTHONPATH "$python" -I \
-            -c 'import canbusd.core, ui.config_cli, ui.web_dashboard.server'
+            -c 'import canbusd.core, open_mmi_telemetry.guard, open_mmi_trust.inspector, ui.config_cli, ui.web_dashboard.server'
     fi
 }
 
@@ -821,11 +829,14 @@ install_update_coordinator() {
     install -m 0644 -o root -g root \
         "$REPO_ROOT/systemd/system/$UPDATE_INSTALLER_UNIT" \
         "/etc/systemd/system/$UPDATE_INSTALLER_UNIT"
+    install -m 0644 -o root -g root \
+        "$REPO_ROOT/systemd/system/$TRUST_STATUS_UNIT" \
+        "/etc/systemd/system/$TRUST_STATUS_UNIT"
     install -d -m 0755 -o root -g root "$UPDATE_COORDINATOR_STATE_DIR"
     systemctl daemon-reload
-    systemctl enable "$UPDATE_COORDINATOR_UNIT"
+    systemctl enable "$UPDATE_COORDINATOR_UNIT" "$TRUST_STATUS_UNIT"
     if [ "${OPEN_MMI_PREPARED_DEPLOYMENT:-0}" != 1 ]; then
-        systemctl restart "$UPDATE_COORDINATOR_UNIT"
+        systemctl restart "$UPDATE_COORDINATOR_UNIT" "$TRUST_STATUS_UNIT"
     fi
     if [ "$authorization_added" = true ]; then
         log_warn "Log out and back in before using update actions without sudo."
@@ -1667,6 +1678,8 @@ cmd_install() {
     cp -r "$REPO_ROOT/bindings" "$INSTALL_DIR/"
     cp -r "$REPO_ROOT/actions" "$INSTALL_DIR/"
     cp -r "$REPO_ROOT/powerd" "$INSTALL_DIR/"
+    cp -r "$REPO_ROOT/open_mmi_telemetry" "$INSTALL_DIR/"
+    cp -r "$REPO_ROOT/open_mmi_trust" "$INSTALL_DIR/"
 
     if [ -d "$REPO_ROOT/ui" ]; then
         cp -r "$REPO_ROOT/ui" "$INSTALL_DIR/"
@@ -1752,8 +1765,8 @@ activate_prepared_system_services() {
     # helpers while a prepared transaction is still mutating system state.
     # Activate them only after installed files and provenance are committed,
     # while the prepared rollback trap is still armed.
-    systemctl restart "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"
-    systemctl is-active --quiet "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"
+    systemctl restart "$TRUST_STATUS_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"
+    systemctl is-active --quiet "$TRUST_STATUS_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"
 
     # A managed update is being synchronously awaited by the running update
     # coordinator, so its installer must not kill that coordinator mid-request.
@@ -1846,7 +1859,7 @@ cmd_deploy_prepared() {
         "$rollback_root/system-files" \
         "$rollback_root/user-units" \
         "$rollback_root/trusted-user-units"
-    for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT" "$POWERD_UNIT"; do
+    for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$TRUST_STATUS_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT" "$POWERD_UNIT"; do
         if [ -e "/etc/systemd/system/$unit" ]; then
             cp -a -- "/etc/systemd/system/$unit" "$rollback_root/system-units/$unit"
         else
@@ -1925,7 +1938,7 @@ cmd_deploy_prepared() {
            [ -d "${OPEN_MMI_MANAGED_REPOSITORY:-}/.git" ]; then
             sudo -u "$REAL_USER" git -C "$OPEN_MMI_MANAGED_REPOSITORY" reset --hard "$previous_commit" >/dev/null 2>&1 || true
         fi
-        for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT" "$POWERD_UNIT"; do
+        for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$TRUST_STATUS_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT" "$VEHICLE_CONFIG_COORDINATOR_UNIT" "$VEHICLE_CAN_PROVISION_UNIT" "$POWERD_UNIT"; do
             if [ -e "$rollback_root/system-units/$unit" ]; then
                 cp -a -- "$rollback_root/system-units/$unit" "/etc/systemd/system/$unit"
             elif [ -e "$rollback_root/system-units/$unit.absent" ]; then
@@ -1997,6 +2010,11 @@ cmd_deploy_prepared() {
             fi
         done
         systemctl daemon-reload >/dev/null 2>&1 || true
+        if [ -e "/etc/systemd/system/$TRUST_STATUS_UNIT" ]; then
+            systemctl restart "$TRUST_STATUS_UNIT" >/dev/null 2>&1 || true
+        else
+            systemctl stop "$TRUST_STATUS_UNIT" >/dev/null 2>&1 || true
+        fi
         if [ -e "/etc/systemd/system/$MEDIA_EGRESS_UNIT" ]; then
             systemctl restart "$MEDIA_EGRESS_UNIT" >/dev/null 2>&1 || true
         else
@@ -2048,7 +2066,7 @@ cmd_deploy_prepared() {
     find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 \
         \( -name venv -o -name .version -o -name .update-source.json \) -prune \
         -o -exec rm -rf -- {} +
-    for item in canbusd vehicles bindings actions powerd ui scripts packaging systemd; do
+    for item in canbusd vehicles bindings actions powerd open_mmi_telemetry open_mmi_trust ui scripts packaging systemd; do
         [ ! -e "$resolved_stage/$item" ] || cp -a -- "$resolved_stage/$item" "$INSTALL_DIR/"
     done
     for item in pyproject.toml README.md LICENSE; do
@@ -2154,6 +2172,7 @@ cmd_uninstall() {
         sudo -u "$REAL_USER" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" systemctl --user disable --now "$service" >/dev/null 2>&1 || true
     done
     systemctl disable --now "$UPDATE_COORDINATOR_UNIT" >/dev/null 2>&1 || true
+    systemctl disable --now "$TRUST_STATUS_UNIT" >/dev/null 2>&1 || true
     systemctl disable --now "$MEDIA_EGRESS_UNIT" >/dev/null 2>&1 || true
     systemctl disable --now "$VEHICLE_STORE_UNIT" >/dev/null 2>&1 || true
     systemctl disable --now "$VEHICLE_CONFIG_COORDINATOR_UNIT" >/dev/null 2>&1 || true
@@ -2163,6 +2182,7 @@ cmd_uninstall() {
     rm -f \
         "/etc/systemd/system/$UPDATE_COORDINATOR_UNIT" \
         "/etc/systemd/system/$UPDATE_INSTALLER_UNIT" \
+        "/etc/systemd/system/$TRUST_STATUS_UNIT" \
         "/etc/systemd/system/$MEDIA_EGRESS_UNIT" \
         "/etc/systemd/system/$VEHICLE_STORE_UNIT" \
         "$SYSTEMD_USER_UNIT_ROOT/canbusd.service" \

@@ -95,6 +95,7 @@ SOURCE_RELEASE_FILES = ("LICENSE", "README.md", "pyproject.toml")
 INVENTORY_ROOTS = (*PACKAGE_RUNTIME_ROOTS, "scripts", "packaging", "systemd")
 PACKAGE_SOURCE_ONLY_PATHS = {"ui/web_dashboard/README.md"}
 PRIVILEGED_SYSTEM_UNITS = (
+    "open-mmi-trust-status.service",
     "open-mmi-update-coordinator.service",
     "open-mmi-update-installer.service",
     "open-mmi-media-egress.service",
@@ -933,6 +934,12 @@ def verify_static_enforcement(
         unsupported.append("vehicle.can.transmit")
 
     contracts: dict[str, dict[str, str | None]] = {
+        "system/open-mmi-trust-status.service": {
+            "RestrictAddressFamilies": "AF_UNIX",
+            "ProtectSystem": "strict",
+            "ReadWritePaths": "/run/open-mmi",
+            "IPAddressDeny": "any",
+        },
         "system/open-mmi-media-egress.service": {
             "RestrictAddressFamilies": "AF_UNIX AF_INET AF_INET6",
             "ProtectSystem": "strict",

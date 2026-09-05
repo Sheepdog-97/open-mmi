@@ -48,6 +48,10 @@ class ReleaseIntegrityTests(unittest.TestCase):
         (repo / "packaging" / "tmpfiles" / "open-mmi.conf").write_text("d /run/open-mmi 0755 root root -\n", encoding="utf-8")
         (repo / "systemd" / "system").mkdir(parents=True)
         (repo / "systemd" / "system" / "open-mmi-test.service").write_text("[Service]\nExecStart=/bin/true\n", encoding="utf-8")
+        (repo / "systemd" / "system" / "open-mmi-trust-status.service").write_text(
+            "[Service]\nExecStart=/opt/open-mmi/venv/bin/python -I -m ui.trust_status_coordinator serve\n",
+            encoding="utf-8",
+        )
         (repo / "systemd" / "system" / "open-mmi-update-coordinator.service").write_text(
             "[Service]\nExecStart=/opt/open-mmi/venv/bin/python -I -m ui.update_coordinator serve\n",
             encoding="utf-8",

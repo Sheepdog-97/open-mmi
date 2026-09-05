@@ -1871,6 +1871,13 @@ def _inspect_dashboard_render(static_root: Path) -> list[dict[str, Any]]:
 
 def _network_egress_unit_contract(root: Path) -> tuple[list[str], dict[str, Any]]:
     contracts = {
+        "systemd/system/open-mmi-trust-status.service": (
+            "RestrictAddressFamilies=AF_UNIX",
+            "IPAddressDeny=any",
+            "ProtectSystem=strict",
+            "ReadWritePaths=/run/open-mmi",
+            "ExecStart=/opt/open-mmi/venv/bin/python -I -m ui.trust_status_coordinator serve",
+        ),
         "systemd/system/open-mmi-update-installer.service": (
             "IPAddressDeny=any",
             "IPAddressAllow=localhost",

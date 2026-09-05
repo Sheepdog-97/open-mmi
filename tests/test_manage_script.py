@@ -858,7 +858,7 @@ write_checkout_update_source_metadata
         self.assertIn("remove_desktop_icons", self.text)
         self.assertIn('cp -r "$REPO_ROOT/packaging" "$INSTALL_DIR/"', install_block)
         self.assertIn(
-            'for item in canbusd vehicles bindings actions powerd ui scripts packaging systemd; do',
+            'for item in canbusd vehicles bindings actions powerd open_mmi_telemetry open_mmi_trust ui scripts packaging systemd; do',
             deploy_block,
         )
         self.assertIn('cp -a -- "$resolved_stage/$item" "$INSTALL_DIR/"', deploy_block)
@@ -887,8 +887,11 @@ write_checkout_update_source_metadata
         self.assertIn('pip_arguments+=(--no-index --no-deps --no-cache-dir)', self.text)
         self.assertIn('PIP_CONFIG_FILE=/dev/null PIP_NO_INDEX=1 PIP_DISABLE_PIP_VERSION_CHECK=1', self.text)
         self.assertIn('sudo -u "$REAL_USER" env -u PYTHONPATH "$python" -I', self.text)
+        self.assertIn('cp -r "$REPO_ROOT/open_mmi_telemetry" "$INSTALL_DIR/"', install_block)
+        self.assertIn('cp -r "$REPO_ROOT/open_mmi_trust" "$INSTALL_DIR/"', install_block)
         self.assertIn('cp "$REPO_ROOT/README.md" "$INSTALL_DIR/"', install_block)
         self.assertIn('cp "$REPO_ROOT/LICENSE" "$INSTALL_DIR/"', install_block)
+        self.assertIn('import canbusd.core, open_mmi_telemetry.guard, open_mmi_trust.inspector, ui.config_cli, ui.web_dashboard.server', self.text)
         self.assertIn('for item in pyproject.toml README.md LICENSE; do', deploy_block)
         self.assertIn('cp -a -- "$resolved_stage/$item" "$INSTALL_DIR/"', deploy_block)
 
@@ -983,6 +986,31 @@ write_checkout_update_source_metadata
         )
 
 
+    def test_trust_status_service_is_managed_as_read_only_root_unit(self) -> None:
+        self.assertIn('TRUST_STATUS_UNIT="open-mmi-trust-status.service"', self.text)
+        self.assertIn('"$REPO_ROOT/systemd/system/$TRUST_STATUS_UNIT"', self.text)
+        self.assertIn('"/etc/systemd/system/$TRUST_STATUS_UNIT"', self.text)
+        self.assertIn('systemctl enable "$UPDATE_COORDINATOR_UNIT" "$TRUST_STATUS_UNIT"', self.text)
+        self.assertIn('systemctl restart "$UPDATE_COORDINATOR_UNIT" "$TRUST_STATUS_UNIT"', self.text)
+        self.assertIn('systemctl disable --now "$TRUST_STATUS_UNIT"', self.text)
+        self.assertIn(
+            'systemctl restart "$TRUST_STATUS_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"',
+            self.text,
+        )
+        self.assertIn(
+            'systemctl is-active --quiet "$TRUST_STATUS_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"',
+            self.text,
+        )
+        self.assertIn('systemctl restart "$TRUST_STATUS_UNIT" >/dev/null 2>&1 || true', self.text)
+        self.assertIn('systemctl stop "$TRUST_STATUS_UNIT" >/dev/null 2>&1 || true', self.text)
+
+        unit = (ROOT / "systemd/system/open-mmi-trust-status.service").read_text(encoding="utf-8")
+        self.assertIn("User=root", unit)
+        self.assertIn("Group=open-mmi-update", unit)
+        self.assertIn("RestrictAddressFamilies=AF_UNIX", unit)
+        self.assertIn("IPAddressDeny=any", unit)
+        self.assertNotIn("AF_INET", unit)
+
     def test_media_egress_service_is_managed_as_root_owned_system_unit(self) -> None:
         self.assertIn('MEDIA_EGRESS_UNIT="open-mmi-media-egress.service"', self.text)
         self.assertIn('MEDIA_EGRESS_GROUP="open-mmi"', self.text)
@@ -992,7 +1020,7 @@ write_checkout_update_source_metadata
         self.assertIn('systemctl enable "$MEDIA_EGRESS_UNIT"', self.text)
         self.assertIn('systemctl restart "$MEDIA_EGRESS_UNIT"', self.text)
         self.assertIn('systemctl disable --now "$MEDIA_EGRESS_UNIT"', self.text)
-        rollback_loop = 'for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$MEDIA_EGRESS_UNIT"'
+        rollback_loop = 'for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" "$TRUST_STATUS_UNIT" "$MEDIA_EGRESS_UNIT"'
         self.assertGreaterEqual(self.text.count(rollback_loop), 2)
 
     def test_vehicle_store_service_is_managed_as_root_owned_system_unit(self) -> None:
@@ -1008,7 +1036,7 @@ write_checkout_update_source_metadata
         self.assertGreaterEqual(self.text.count('install_vehicle_store_service'), 3)
         rollback_loop = (
             'for unit in "$UPDATE_COORDINATOR_UNIT" "$UPDATE_INSTALLER_UNIT" '
-            '"$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"'
+            '"$TRUST_STATUS_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"'
         )
         self.assertGreaterEqual(self.text.count(rollback_loop), 2)
 
@@ -1087,11 +1115,11 @@ prepared_scope
         )
 
         self.assertIn(
-            'systemctl restart "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"',
+            'systemctl restart "$TRUST_STATUS_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"',
             helper_compact,
         )
         self.assertIn(
-            'systemctl is-active --quiet "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"',
+            'systemctl is-active --quiet "$TRUST_STATUS_UNIT" "$MEDIA_EGRESS_UNIT" "$VEHICLE_STORE_UNIT"',
             helper_compact,
         )
         self.assertIn(
@@ -1165,7 +1193,7 @@ prepared_scope
         self.assertIn('OPEN_MMI_PREPARED_WHEEL', block)
         self.assertIn('deployment_stage="package-artifact"', block)
         self.assertIn('install_open_mmi_package "$candidate_wheel"', block)
-        self.assertIn("import canbusd.core, ui.config_cli, ui.web_dashboard.server", self.text)
+        self.assertIn("import canbusd.core, open_mmi_telemetry.guard, open_mmi_trust.inspector, ui.config_cli, ui.web_dashboard.server", self.text)
         self.assertIn('mv -- "$restored_install" "$INSTALL_DIR"', block)
         self.assertNotIn('pip install --upgrade --force-reinstall "$INSTALL_DIR"', block)
         self.assertIn('curl --fail --silent --max-time 2 http://127.0.0.1:8765/api/health', block)

@@ -63,6 +63,7 @@ DEFAULT_INSTALL_ROOT = Path("/opt/open-mmi")
 DEFAULT_SYSTEMD_UNIT_ROOT = Path("/etc/systemd/system")
 DEFAULT_SYSTEMD_USER_UNIT_ROOT = Path("/etc/systemd/user")
 PRIVILEGED_SYSTEM_UNITS = (
+    "open-mmi-trust-status.service",
     "open-mmi-update-coordinator.service",
     "open-mmi-update-installer.service",
     "open-mmi-media-egress.service",
